@@ -1,0 +1,176 @@
+# Prism
+
+**See the full spectrum of your model's thinking.**
+
+Prism is an all-in-one AI research platform built around local inference engines. It gives you deep visibility into model behavior — token probabilities, entropy, next-token prediction, step-through generation, and branch exploration — through a purpose-built research UI. Not just another chat wrapper.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## Why Prism?
+
+Most AI tools show you the final output. Prism shows you *how the model got there*.
+
+- **Token heatmaps** — every token colored by confidence. See exactly where the model is guessing.
+- **Next-token explorer** — step through generation one token at a time. Force alternative tokens. Explore branches. See how one word changes everything downstream.
+- **Probability distributions** — top-K alternatives at every position with entropy, perplexity, and surprise detection.
+- **Inference history & replay** — every call is recorded. Replay against different models, parameters, or prompt versions. Diff the results.
+- **Provider-agnostic** — works with vLLM, Ollama, LM Studio, or any OpenAI-compatible backend. Compare the same prompt across engines.
+
+## Features
+
+| Module | What It Does | Phase |
+|--------|-------------|-------|
+| **Playground** | Chat with streaming, logprobs heatmaps, entropy charts, surprise highlighting | 1 |
+| **Token Explorer** | Next-token prediction, step-through generation, branch exploration, sampling visualization | 1 |
+| **Tokenizer Explorer** | Visualize tokenization, compare tokenizers across models, cost estimation | 1 |
+| **Model Management** | Register providers, monitor health/metrics, hot-swap models, KV cache visualization | 1 |
+| **History & Replay** | Browse all inference history, tag, filter, replay with overrides, diff results | 1 |
+| **Prompt Lab** | Template editor with variables, version control, A/B testing, few-shot management | 2 |
+| **Experiments** | Track runs, compare metrics, visualize parameter sweeps, statistical analysis | 2 |
+| **Datasets** | Upload, browse, split, compute statistics, export in training formats | 3 |
+| **Evaluation** | Scoring methods (ROUGE, BLEU, LLM-as-Judge, perplexity), leaderboards, calibration analysis | 3 |
+| **Batch Inference** | Run prompts at scale with concurrency control and progress tracking | 3 |
+| **RAG Workbench** | Ingest documents, chunking strategies, vector search, end-to-end RAG pipeline debugging | 4 |
+| **Structured Output** | Guided decoding with JSON schema constraints, output validation | 4 |
+| **Agent Builder** | YAML-configured agents with ReAct/Plan-and-Execute patterns, execution traces | 5 |
+| **Notebooks** | Embedded JupyterLite with Python helper package for programmatic access | 5 |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | .NET 9 Minimal API |
+| Frontend | React + TypeScript + Vite + Tailwind + shadcn/ui |
+| Database | PostgreSQL 16 + pgvector |
+| ORM | Entity Framework Core (Npgsql) |
+| State | TanStack Query (server) + Zustand (client) |
+| Observability | Serilog + OpenTelemetry + Aspire ServiceDefaults |
+| Inference | vLLM, Ollama, LM Studio, OpenAI-compatible |
+| Streaming | Server-Sent Events (SSE) |
+
+## Architecture
+
+Prism uses **vertical slice architecture** with **clean architecture per slice**. Every feature is self-contained. Every external dependency is behind an abstraction. Errors are values, not exceptions.
+
+```
+backend/src/
+  Prism.Api/              # Startup, middleware, composition root
+  Prism.Common/           # Result<T>, provider interfaces, shared infrastructure
+  Prism.Features/         # Feature slices (Playground/, Models/, History/, ...)
+  Prism.Tests/            # Unit + integration tests
+
+frontend/src/
+  features/               # Feature modules (mirrors backend slices)
+  components/             # Shared UI (logprobs visualizations, charts, layout)
+  services/generated/     # Auto-generated API client via orval
+```
+
+Key abstractions — swap any backend without touching feature code:
+
+| Abstraction | Default | Alternatives |
+|-------------|---------|-------------|
+| `IInferenceProvider` | vLLM | Ollama, LM Studio, OpenAI-compatible |
+| `AppDbContext` (EF Core) | PostgreSQL | SQL Server, SQLite |
+| `IVectorStore` | pgvector | Qdrant, Pinecone |
+| `ICacheService` | In-Memory | Redis, None |
+| `IFileStorage` | Local filesystem | Azure Blob, S3 |
+| `IAuthProvider` | NoAuth (local) | Local JWT, Entra ID, OIDC |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are recorded as [ADRs](docs/ADR/).
+
+## Prerequisites
+
+- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [Node.js 20+](https://nodejs.org/) (LTS)
+- [Docker](https://www.docker.com/) (for PostgreSQL + vLLM)
+- A GPU with CUDA support (for vLLM) — or use Ollama/LM Studio for CPU inference
+
+## Getting Started
+
+```bash
+# Clone
+git clone https://github.com/your-org/prism.git
+cd prism
+
+# Start infrastructure (PostgreSQL + pgvector)
+docker compose up -d
+
+# Start vLLM (optional — configure your model)
+docker compose -f docker-compose.dev.yml up -d vllm
+
+# Backend
+cd backend
+dotnet restore
+dotnet run --project src/Prism.Api
+
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). Register your inference provider in the Models page, then start exploring in the Playground.
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```env
+# Database
+DATABASE__CONNECTIONSTRING=Host=localhost;Database=prism;Username=postgres;Password=postgres
+
+# Inference (default vLLM)
+INFERENCEPROVIDERS__0__NAME=Local vLLM
+INFERENCEPROVIDERS__0__TYPE=Vllm
+INFERENCEPROVIDERS__0__ENDPOINT=http://localhost:8000
+
+# Frontend
+VITE_API_URL=http://localhost:5000
+```
+
+## Development
+
+```bash
+# Run tests
+cd backend && dotnet test
+
+# Generate TypeScript API client (after backend API changes)
+cd frontend && npm run api:generate
+
+# Add a database migration
+dotnet ef migrations add MigrationName \
+  --project src/Prism.Common \
+  --startup-project src/Prism.Api
+
+# Format
+cd backend && dotnet format
+cd frontend && npm run lint
+```
+
+## Project Documentation
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Full architecture: structure, patterns, abstractions, interfaces |
+| [DESIGN.md](DESIGN.md) | Vision, features, wireframes, data models, API surface |
+| [PROJECT_PLAN.md](PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
+| [docs/ADR/](docs/ADR/) | Architecture Decision Records (10 ADRs) |
+| [CLAUDE.md](CLAUDE.md) | Development guidelines for AI-assisted coding |
+
+## Roadmap
+
+- **Phase 1 (Walk):** Playground, Token Explorer, Tokenizer, Model Management, History — *talk to a model, see logprobs, save results*
+- **Phase 2 (Jog):** Prompt Lab, Experiments, Multi-Pane Playground — *systematic prompt development and experiment tracking*
+- **Phase 3 (Run):** Datasets, Evaluation, Batch Inference, Analytics — *work with data at scale and evaluate systematically*
+- **Phase 4 (Sprint):** RAG Workbench, Structured Output — *retrieval-augmented generation and constrained decoding*
+- **Phase 5 (Fly):** Agent Builder, Notebooks, Fine-Tuning — *autonomous workflows and training integration*
+
+## Contributing
+
+Contributions are welcome. Please read [CLAUDE.md](CLAUDE.md) for architecture rules and coding conventions before submitting a PR. The project follows vertical slice architecture — see [SKILLS.md](SKILLS.md) for step-by-step guides on common tasks.
+
+## License
+
+[MIT](LICENSE)
