@@ -1,0 +1,36 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+*.DotSettings.user
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data
+data/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated
+frontend/src/services/generated/

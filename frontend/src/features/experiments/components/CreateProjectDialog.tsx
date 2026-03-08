@@ -1,0 +1,108 @@
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { useCreateProject } from '../api'
+
+const schema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  description: z.string().max(2000).optional(),
+})
+
+type FormValues = z.infer<typeof schema>
+
+export function CreateProjectDialog() {
+  const [open, setOpen] = useState(false)
+  const createMutation = useCreateProject()
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: '', description: '' },
+  })
+
+  function onSubmit(values: FormValues) {
+    createMutation.mutate(
+      { name: values.name, description: values.description || undefined },
+      {
+        onSuccess: () => {
+          toast.success('Project created')
+          setOpen(false)
+          reset()
+        },
+        onError: (error) => {
+          toast.error(`Failed to create project: ${error.message}`)
+        },
+      }
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 gap-2">
+        <Plus className="h-4 w-4" />
+        New Project
+      </DialogTrigger>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create Research Project</DialogTitle>
+          <DialogDescription>
+            Projects group related experiments together.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <div className="space-y-2">
+            <label htmlFor="name" className="text-sm font-medium text-zinc-300">
+              Name
+            </label>
+            <Input id="name" placeholder="Model comparison study" {...register('name')} />
+            {errors.name && (
+              <p className="text-xs text-red-500">{errors.name.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="description" className="text-sm font-medium text-zinc-300">
+              Description (optional)
+            </label>
+            <Textarea
+              id="description"
+              placeholder="What is this project about?"
+              rows={3}
+              {...register('description')}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setOpen(false); reset() }}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}

@@ -1,0 +1,59 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+.vs/
+*.rsuser
+*.sln.iml
+launchSettings.json
+
+## Rider
+.idea/
+*.sln.iml
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+
+## User secrets
+secrets.json
+
+## Application data
+data/
+logs/
+
+## OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml

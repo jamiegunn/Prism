@@ -10,6 +10,21 @@
 | [AGENTS.md](/AGENTS.md) | Claude Code agent modes (Feature Builder, Debugger, etc.) |
 | [SKILLS.md](/SKILLS.md) | Claude Code skills (create feature, add endpoint, write handler, etc.) |
 
+### Implementation Plans
+
+| Document | Description |
+|----------|-------------|
+| [Phase 1 Kickoff](./plans/PHASE1_KICKOFF.md) | Phase 1 (Walk) kickoff prompt — Playground, Token Explorer, Models, History |
+| [Phase 2 Plan](./plans/PHASE2_PLAN.md) | Phase 2 (Jog) detailed implementation plan — domain models, endpoints, execution order |
+| [Phase 2 Kickoff](./plans/PHASE2_KICKOFF.md) | Phase 2 (Jog) kickoff prompt — Prompt Lab, Experiments, Multi-Pane Playground |
+
+### Feature Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Playground](./features/playground.md) | Chat interface, SSE streaming, logprobs visualization, conversation management, export |
+| [Token Explorer](./features/token-explorer.md) | Next-token prediction, step-through, branching, tokenization, cross-model comparison |
+
 ### Platform Design Documents
 
 | Document | Description |
@@ -33,6 +48,8 @@ All significant architectural decisions are recorded in [`/docs/ADR/`](./ADR/).
 | [ADR-008](./ADR/008-database-abstraction.md) | Database Abstraction via EF Core | Accepted |
 | [ADR-009](./ADR/009-vector-store-abstraction.md) | Vector Store Abstraction for RAG | Accepted |
 | [ADR-010](./ADR/010-project-naming.md) | Project Name — Prism | Accepted |
+| [ADR-011](./ADR/011-contextual-help-panels.md) | Contextual Help Panels on Feature Views | Accepted |
+| [ADR-012](./ADR/012-parameter-tooltips.md) | Parameter Tooltips on All Configuration Controls | Accepted |
 
 ## Conventions
 

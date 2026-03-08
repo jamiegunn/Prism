@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker:*)",
+      "Bash(taskkill:*)",
+      "Bash(dotnet ef:*)",
+      "Bash(wmic process:*)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Bash(printf {\"\"instanceId\"\":\"\"2e851b8f-3ec5-41f7-a1cc-3dc2e57b6967\"\",\"\"text\"\":\"\"Hello, world!\"\"}:*)",
+      "Bash(printf {\"\"instanceId\"\":\"\"2e851b8f-3ec5-41f7-a1cc-3dc2e57b6967\"\",\"\"text\"\":\"\"Hello, world\"\"}:*)",
+      "Bash(npm run:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet restore:*)"
+    ]
+  }
+}

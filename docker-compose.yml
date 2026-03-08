@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: prism-postgres
+    environment:
+      POSTGRES_DB: prism
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5438:5432"
+    volumes:
+      - prism-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: prism-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - prism-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: prism-vllm
+    profiles: [gpu]
+    environment:
+      - MODEL_NAME=${VLLM_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+    command: >
+      --model ${VLLM_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      --host 0.0.0.0
+      --port 8000
+      --max-model-len 4096
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - prism-models:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  prism-pgdata:
+  prism-redis-data:
+  prism-models:

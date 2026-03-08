@@ -89,29 +89,56 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are record
 
 ## Getting Started
 
-```bash
-# Clone
-git clone https://github.com/your-org/prism.git
-cd prism
+### Quick Start (one command)
 
-# Start infrastructure (PostgreSQL + pgvector)
+**PowerShell:**
+```powershell
+.\dev.ps1              # Starts PostgreSQL + Backend API + Frontend
+```
+
+**Bash:**
+```bash
+./dev.sh               # Starts PostgreSQL + Backend API + Frontend
+```
+
+The script handles everything: starts Docker containers, waits for Postgres, builds and launches the API, installs npm packages, and starts the Vite dev server.
+
+### Quick Start Options
+
+| Command | What it does |
+|---------|-------------|
+| `.\dev.ps1` | Start everything (Postgres + API + Frontend) |
+| `.\dev.ps1 -Gpu` | Also start vLLM inference server (requires NVIDIA GPU) |
+| `.\dev.ps1 -BackendOnly` | Just Postgres + API (no frontend) |
+| `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
+| `.\dev.ps1 -Stop` | Stop all running services |
+
+### Manual Start (step by step)
+
+```bash
+# 1. Start PostgreSQL (port 5438)
 docker compose up -d
 
-# Start vLLM (optional — configure your model)
-docker compose -f docker-compose.dev.yml up -d vllm
-
-# Backend
+# 2. Start backend API (port 5000) — new terminal
 cd backend
-dotnet restore
-dotnet run --project src/Prism.Api
+dotnet run --project src/Prism.Api --urls http://localhost:5000
 
-# Frontend (new terminal)
+# 3. Start frontend dev server (port 5173) — new terminal
 cd frontend
-npm install
+npm install   # first time only
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Register your inference provider in the Models page, then start exploring in the Playground.
+### What's Running
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| **Frontend** | http://localhost:5173 | Vite dev server with hot reload |
+| **Backend API** | http://localhost:5000 | .NET Minimal API |
+| **Swagger UI** | http://localhost:5000/swagger | API documentation (dev only) |
+| **Health Check** | http://localhost:5000/health | Returns `Healthy` when API is up |
+| **PostgreSQL** | localhost:5438 | pgvector-enabled, data persisted in Docker volume |
+| **vLLM** | http://localhost:8000 | Only with `--gpu` flag |
 
 ### Environment Variables
 
@@ -119,7 +146,7 @@ Copy `.env.example` to `.env` and configure:
 
 ```env
 # Database
-DATABASE__CONNECTIONSTRING=Host=localhost;Database=prism;Username=postgres;Password=postgres
+DATABASE__CONNECTIONSTRING=Host=localhost;Port=5438;Database=prism;Username=postgres;Password=postgres
 
 # Inference (default vLLM)
 INFERENCEPROVIDERS__0__NAME=Local vLLM
