@@ -362,6 +362,95 @@ public static IServiceCollection AddCommon{Thing}(
 
 ---
 
+## Skill: Document a Feature
+
+**When:** A feature is complete or has reached a stable milestone and needs comprehensive documentation.
+
+### Steps
+
+1. **Research the feature thoroughly** — read all backend and frontend files in the feature slice:
+   - Backend: `Features/{Feature}/Api/` (endpoints, requests, responses), `Application/` (handlers, commands/queries), `Domain/` (entities)
+   - Frontend: `frontend/src/features/{feature}/` (page, components, hooks, store, types, api)
+
+2. **Create the doc file** at `docs/features/{feature-kebab-case}.md`
+
+3. **Follow this structure:**
+   ```markdown
+   # {Feature Name} — Feature Documentation
+
+   {One-paragraph overview of what the feature does.}
+
+   ---
+
+   ## Overview
+
+   | Aspect | Detail |
+   |--------|--------|
+   | Backend slice | `Features/{Feature}/` |
+   | Frontend slice | `frontend/src/features/{feature}/` |
+   | API prefix | `/api/v1/{feature}` |
+   | State management | {Zustand store name, persistence details} |
+   | {Other key aspects} | {Details} |
+
+   ---
+
+   ## Capabilities
+
+   ### 1. {Capability Name}
+   {What it does, which endpoint/handler powers it, how the frontend presents it.}
+
+   {Repeat for each major capability.}
+
+   ---
+
+   ## Frontend Components
+
+   | Component | File | Purpose |
+   |-----------|------|---------|
+   | ... | ... | ... |
+
+   ### Layout
+   {ASCII diagram of the page layout.}
+
+   ---
+
+   ## Backend Architecture
+
+   ### Domain
+   {Entities and their relationships.}
+
+   ### Application
+   | Use Case | Type | Description |
+   |----------|------|-------------|
+   | ... | ... | ... |
+
+   ### Key Technical Details
+   {Any non-obvious implementation patterns (e.g., SSE streaming, assistant prefill).}
+
+   ---
+
+   ## State Management
+   {What the store manages, what is persisted.}
+
+   ---
+
+   ## API Request/Response Types
+   {Key TypeScript interfaces for the API surface.}
+   ```
+
+4. **Update `docs/README.md`** — add a row to the Feature Documentation table
+
+5. **Verify accuracy** — cross-check endpoint paths, parameter names, and component names against actual source code
+
+### Rules
+- Document what exists, not aspirational features
+- Include ASCII layout diagrams for complex UIs
+- List all API endpoints with their HTTP methods and paths
+- Document non-obvious technical patterns (e.g., SSE, assistant prefill, portal-based rendering)
+- Keep descriptions concise — this is a reference, not a tutorial
+
+---
+
 ## Skill: Review Code for Architecture Compliance
 
 **When:** Reviewing a PR or checking your own work.
