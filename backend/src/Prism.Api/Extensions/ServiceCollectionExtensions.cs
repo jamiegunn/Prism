@@ -21,6 +21,9 @@ using Prism.Features.BatchInference;
 using Prism.Features.Datasets;
 using Prism.Features.Evaluation;
 using Prism.Features.Rag;
+using Prism.Features.Agents;
+using Prism.Features.FineTuning;
+using Prism.Features.Notebooks;
 using Prism.Features.StructuredOutput;
 using Prism.Features.TokenExplorer;
 
@@ -102,6 +105,9 @@ public static class ServiceCollectionExtensions
         services.AddAnalyticsFeature();
         services.AddRagFeature();
         services.AddStructuredOutputFeature();
+        services.AddAgentsFeature();
+        services.AddFineTuningFeature();
+        services.AddNotebooksFeature();
         return services;
     }
 
