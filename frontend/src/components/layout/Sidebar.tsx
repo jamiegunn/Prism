@@ -15,6 +15,7 @@ import {
   Bot,
   NotebookPen,
   Diamond,
+  Wand2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -41,8 +42,9 @@ const navItems: NavItem[] = [
   { label: 'Analytics', icon: BarChart3, path: '/analytics', active: true },
   { label: 'RAG Workbench', icon: BookOpen, path: '/rag', active: true },
   { label: 'Structured Output', icon: Braces, path: '/structured-output', active: true },
-  { label: 'Agents', icon: Bot, path: '/coming-soon/5', active: false, phase: 5 },
-  { label: 'Notebooks', icon: NotebookPen, path: '/coming-soon/5', active: false, phase: 5 },
+  { label: 'Agents', icon: Bot, path: '/agents', active: true },
+  { label: 'Fine-Tuning', icon: Wand2, path: '/fine-tuning', active: true },
+  { label: 'Notebooks', icon: NotebookPen, path: '/notebooks', active: true },
 ]
 
 export function Sidebar() {

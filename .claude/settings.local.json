@@ -14,7 +14,11 @@
       "Bash(npm run:*)",
       "Bash(dotnet test:*)",
       "Bash(dotnet add:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(xargs cat:*)",
+      "WebSearch",
+      "WebFetch(domain:jupyterlite.readthedocs.io)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

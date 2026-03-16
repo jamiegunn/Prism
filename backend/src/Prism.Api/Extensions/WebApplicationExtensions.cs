@@ -8,6 +8,9 @@ using Prism.Features.BatchInference.Api;
 using Prism.Features.Datasets.Api;
 using Prism.Features.Evaluation.Api;
 using Prism.Features.Rag.Api;
+using Prism.Features.Agents.Api;
+using Prism.Features.FineTuning.Api;
+using Prism.Features.Notebooks.Api;
 using Prism.Features.StructuredOutput.Api;
 using Prism.Features.TokenExplorer.Api;
 
@@ -39,6 +42,9 @@ public static class WebApplicationExtensions
         app.MapAnalyticsEndpoints();
         app.MapRagEndpoints();
         app.MapStructuredOutputEndpoints();
+        app.MapAgentEndpoints();
+        app.MapFineTuningEndpoints();
+        app.MapNotebookEndpoints();
         return app;
     }
 }
