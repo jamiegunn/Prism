@@ -1,4 +1,4 @@
-import { BarChart3, Zap, Clock } from 'lucide-react'
+import { BarChart3, Zap, Clock, DollarSign } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
@@ -48,6 +48,7 @@ export function AnalyticsPage() {
         <TabsList>
           <TabsTrigger value="usage">Usage</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="cost">Cost</TabsTrigger>
         </TabsList>
 
         <TabsContent value="usage" className="mt-4 space-y-6">
@@ -154,6 +155,66 @@ export function AnalyticsPage() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="cost" className="mt-4 space-y-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-emerald-500" />
+                Cost Tracking
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-zinc-500">
+                Cost tracking aggregates estimated costs from inference records.
+                Costs are computed using per-model pricing when available (commercial APIs)
+                and are $0 for local models (vLLM, Ollama).
+              </p>
+
+              {usage && usage.byModel.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-2">Token Usage by Model</h4>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-2 text-left font-medium">Model</th>
+                          <th className="px-4 py-2 text-right font-medium">Requests</th>
+                          <th className="px-4 py-2 text-right font-medium">Tokens</th>
+                          <th className="px-4 py-2 text-right font-medium">Avg Tokens/Req</th>
+                          <th className="px-4 py-2 text-right font-medium">Est. Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usage.byModel.map((m) => {
+                          const avgTokens = m.requestCount > 0 ? Math.round(m.totalTokens / m.requestCount) : 0
+                          const isLocal = m.model.includes('llama') || m.model.includes('mistral') || m.model.includes('qwen')
+                          return (
+                            <tr key={m.model} className="border-b">
+                              <td className="px-4 py-2 font-medium">{m.model}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{m.requestCount.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{m.totalTokens.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">{avgTokens.toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right tabular-nums text-emerald-400">
+                                {isLocal ? '$0.00' : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded bg-zinc-900 border border-zinc-800 p-3 text-xs text-zinc-500">
+                Local models (vLLM, Ollama) have zero API cost. For commercial APIs (GPT-4, Claude),
+                costs are estimated from token counts using published pricing. Configure custom pricing
+                in the Tokenizer Explorer cost estimator.
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

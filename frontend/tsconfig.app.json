@@ -30,5 +30,5 @@
     "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
-  "exclude": ["src/test/playwright"]
+  "exclude": ["src/test/playwright", "src/**/*.stories.tsx", "src/**/*.stories.ts"]
 }
