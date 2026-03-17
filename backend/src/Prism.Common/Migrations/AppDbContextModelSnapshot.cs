@@ -718,11 +718,16 @@ namespace Prism.Common.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("IsArchived");
+
+                    b.HasIndex("WorkspaceId");
 
                     b.ToTable("experiments_projects", (string)null);
                 });
@@ -915,11 +920,21 @@ namespace Prism.Common.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<decimal?>("EstimatedCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<Guid?>("ExperimentId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsSuccess")
                         .HasColumnType("boolean");
 
                     b.Property<long>("LatencyMs")
                         .HasColumnType("bigint");
+
+                    b.Property<double?>("MeanEntropy")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -929,8 +944,14 @@ namespace Prism.Common.Migrations
                     b.Property<double?>("Perplexity")
                         .HasColumnType("double precision");
 
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("PromptTokens")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("PromptVersionId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("ProviderEndpoint")
                         .IsRequired()
@@ -962,9 +983,15 @@ namespace Prism.Common.Migrations
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("SurpriseTokenCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Tags")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<double?>("TokensPerSecond")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("TotalTokens")
                         .HasColumnType("integer");
@@ -977,15 +1004,168 @@ namespace Prism.Common.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExperimentId");
+
                     b.HasIndex("IsSuccess");
 
                     b.HasIndex("Model");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("SourceModule");
 
                     b.HasIndex("StartedAt");
 
                     b.ToTable("history_records", (string)null);
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.InferenceTrace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("AverageLogprob")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("InferenceRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("MeanEntropy")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Perplexity")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("1.0.0");
+
+                    b.Property<double>("SurpriseThreshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("SurpriseTokenCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TokenEventCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InferenceRecordId")
+                        .IsUnique();
+
+                    b.ToTable("history_traces", (string)null);
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.ReplayRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("OriginalRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OverrideInstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("OverrideMaxTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OverrideModel")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("OverrideTemperature")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("OverrideTopP")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("ReplayRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OriginalRecordId");
+
+                    b.HasIndex("ReplayRecordId")
+                        .IsUnique();
+
+                    b.ToTable("history_replay_runs", (string)null);
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.TokenEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ByteOffset")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<double>("Entropy")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("InferenceTraceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsSurprise")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("Logprob")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Probability")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TopAlternativesJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InferenceTraceId", "Position");
+
+                    b.ToTable("history_token_events", (string)null);
                 });
 
             modelBuilder.Entity("Prism.Features.Models.Domain.InferenceInstance", b =>
@@ -1585,6 +1765,46 @@ namespace Prism.Common.Migrations
                     b.ToTable("structured_output_schemas", (string)null);
                 });
 
+            modelBuilder.Entity("Prism.Features.Workspaces.Domain.Workspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("IconColor")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDefault");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("workspaces", (string)null);
+                });
+
             modelBuilder.Entity("Prism.Features.Agents.Domain.AgentRun", b =>
                 {
                     b.HasOne("Prism.Features.Agents.Domain.AgentWorkflow", null)
@@ -1650,6 +1870,47 @@ namespace Prism.Common.Migrations
                         .IsRequired();
 
                     b.Navigation("Experiment");
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.InferenceTrace", b =>
+                {
+                    b.HasOne("Prism.Features.History.Domain.InferenceRecord", "InferenceRecord")
+                        .WithOne("Trace")
+                        .HasForeignKey("Prism.Features.History.Domain.InferenceTrace", "InferenceRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InferenceRecord");
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.ReplayRun", b =>
+                {
+                    b.HasOne("Prism.Features.History.Domain.InferenceRecord", "OriginalRecord")
+                        .WithMany()
+                        .HasForeignKey("OriginalRecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prism.Features.History.Domain.InferenceRecord", "ReplayRecord")
+                        .WithMany()
+                        .HasForeignKey("ReplayRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OriginalRecord");
+
+                    b.Navigation("ReplayRecord");
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.TokenEvent", b =>
+                {
+                    b.HasOne("Prism.Features.History.Domain.InferenceTrace", "InferenceTrace")
+                        .WithMany("TokenEvents")
+                        .HasForeignKey("InferenceTraceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InferenceTrace");
                 });
 
             modelBuilder.Entity("Prism.Features.Playground.Domain.Message", b =>
@@ -1722,6 +1983,16 @@ namespace Prism.Common.Migrations
             modelBuilder.Entity("Prism.Features.Experiments.Domain.Project", b =>
                 {
                     b.Navigation("Experiments");
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.InferenceRecord", b =>
+                {
+                    b.Navigation("Trace");
+                });
+
+            modelBuilder.Entity("Prism.Features.History.Domain.InferenceTrace", b =>
+                {
+                    b.Navigation("TokenEvents");
                 });
 
             modelBuilder.Entity("Prism.Features.Playground.Domain.Conversation", b =>

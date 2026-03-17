@@ -13,6 +13,7 @@ using Prism.Features.FineTuning.Api;
 using Prism.Features.Notebooks.Api;
 using Prism.Features.StructuredOutput.Api;
 using Prism.Features.TokenExplorer.Api;
+using Prism.Features.Workspaces.Api;
 
 namespace Prism.Api.Extensions;
 
@@ -30,6 +31,7 @@ public static class WebApplicationExtensions
     public static WebApplication MapFeatureEndpoints(this WebApplication app)
     {
         // Will be filled in as features are built
+        app.MapWorkspaceEndpoints();
         app.MapPlaygroundEndpoints();
         app.MapModelEndpoints();
         app.MapTokenExplorerEndpoints();

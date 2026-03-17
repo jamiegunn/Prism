@@ -1,10 +1,12 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Prism.Common.Inference;
+using Prism.Common.Inference.Runtime;
 using Prism.Features.History.Application.GetRecord;
 using Prism.Features.History.Application.ReplaySingle;
 using Prism.Features.History.Application.SearchHistory;
 using Prism.Features.History.Application.TagRecord;
+using Prism.Common.Database.Seeders;
 using Prism.Features.History.Infrastructure;
 
 namespace Prism.Features.History;
@@ -36,6 +38,12 @@ public static class HistoryModule
         services.AddScoped<GetRecordHandler>();
         services.AddScoped<TagRecordHandler>();
         services.AddScoped<ReplaySingleHandler>();
+
+        // Replay service (implements IReplayService from Common)
+        services.AddScoped<IReplayService, ReplayService>();
+
+        // Seeders
+        services.AddScoped<IDataSeeder, HistorySeeder>();
 
         return services;
     }

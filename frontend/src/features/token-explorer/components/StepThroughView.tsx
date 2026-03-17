@@ -14,8 +14,6 @@ export function StepThroughView() {
   const store = useTokenExplorerStore()
   const stepMutation = useStepThrough()
 
-  const currentText = store.prompt + store.stepHistory.map((s) => s.token).join('')
-
   function handleStep() {
     if (!store.instanceId || !store.currentPredictions) return
     const topPrediction = store.currentPredictions.predictions[0]

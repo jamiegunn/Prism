@@ -127,7 +127,13 @@ public static class HistoryEndpoints
         ReplaySingleHandler handler,
         CancellationToken ct)
     {
-        var command = new ReplaySingleCommand(id, request.InstanceId);
+        var command = new ReplaySingleCommand(
+            id,
+            request.InstanceId,
+            request.OverrideModel,
+            request.OverrideTemperature,
+            request.OverrideMaxTokens,
+            request.OverrideTopP);
         Result<ReplayResultDto> result = await handler.HandleAsync(command, ct);
 
         return result.Match(

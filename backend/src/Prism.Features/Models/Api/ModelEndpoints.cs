@@ -16,6 +16,9 @@ using Prism.Features.Models.Application.RegisterInstance;
 using Prism.Features.Models.Application.SwapModel;
 using Prism.Features.Models.Application.GetTokenizerInfo;
 using Prism.Features.Models.Application.UnregisterInstance;
+using Prism.Features.Models.Application.GetCapabilities;
+using Prism.Features.Models.Application.ProbeCapabilities;
+using Prism.Common.Inference.Capabilities;
 using Prism.Features.Models.Domain;
 
 namespace Prism.Features.Models.Api;
@@ -83,6 +86,23 @@ public static class ModelEndpoints
             .WithSummary("Gets tokenizer information for an inference instance including vocab size and special tokens")
             .Produces<TokenizerInfoDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}/capabilities", GetCapabilities)
+            .WithName("GetInstanceCapabilities")
+            .WithSummary("Gets cached capability snapshot for an inference instance")
+            .Produces<ProviderCapabilitySnapshot>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/probe", ProbeCapabilities)
+            .WithName("ProbeInstanceCapabilities")
+            .WithSummary("Probes an inference instance for its actual capabilities and updates the cached data")
+            .Produces<ProviderCapabilitySnapshot>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/capabilities", ListAllCapabilities)
+            .WithName("ListAllCapabilities")
+            .WithSummary("Gets capability snapshots for all registered provider instances")
+            .Produces<List<ProviderCapabilitySnapshot>>();
 
         return group;
     }
@@ -220,5 +240,37 @@ public static class ModelEndpoints
         return result.Match(
             dto => TypedResults.Ok(dto),
             error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> GetCapabilities(
+        Guid id,
+        GetCapabilitiesHandler handler,
+        CancellationToken ct)
+    {
+        Result<ProviderCapabilitySnapshot> result = await handler.HandleAsync(id, ct);
+
+        return result.Match(
+            snapshot => TypedResults.Ok(snapshot),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> ProbeCapabilities(
+        Guid id,
+        ProbeCapabilitiesHandler handler,
+        CancellationToken ct)
+    {
+        Result<ProviderCapabilitySnapshot> result = await handler.HandleAsync(id, ct);
+
+        return result.Match(
+            snapshot => TypedResults.Ok(snapshot),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> ListAllCapabilities(
+        GetCapabilitiesHandler handler,
+        CancellationToken ct)
+    {
+        IReadOnlyList<ProviderCapabilitySnapshot> snapshots = await handler.HandleAllAsync(ct);
+        return TypedResults.Ok(snapshots);
     }
 }

@@ -19,7 +19,7 @@ import {
 import { toast } from 'sonner'
 import { StatusIndicator } from './StatusIndicator'
 import { KvCacheGauge } from './KvCacheGauge'
-import { useInstanceMetrics, useTriggerHealthCheck, useUnregisterInstance, useSwapModel } from '../api'
+import { useInstanceMetrics, useTriggerHealthCheck, useUnregisterInstance, useSwapModel, useProbeCapabilities } from '../api'
 import type { InferenceInstance } from '../types'
 
 interface InstanceDetailPanelProps {
@@ -72,6 +72,7 @@ function GpuBar({ label, value, max }: { label: string; value: number; max: numb
 export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanelProps) {
   const { data: metrics } = useInstanceMetrics(instance.id)
   const healthCheckMutation = useTriggerHealthCheck(instance.id)
+  const probeMutation = useProbeCapabilities(instance.id)
   const unregisterMutation = useUnregisterInstance()
   const swapModelMutation = useSwapModel(instance.id)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -82,6 +83,13 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
     healthCheckMutation.mutate(undefined, {
       onSuccess: () => toast.success('Health check completed'),
       onError: (error) => toast.error(`Health check failed: ${error.message}`),
+    })
+  }
+
+  function handleProbe() {
+    probeMutation.mutate(undefined, {
+      onSuccess: (data) => toast.success(`Probe complete — ${data.tier} tier`),
+      onError: (error) => toast.error(`Probe failed: ${error.message}`),
     })
   }
 
@@ -275,6 +283,18 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
                 className={cn('mr-1.5 h-3.5 w-3.5', healthCheckMutation.isPending && 'animate-spin')}
               />
               Health Check
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleProbe}
+              disabled={probeMutation.isPending}
+            >
+              <Activity
+                className={cn('mr-1.5 h-3.5 w-3.5', probeMutation.isPending && 'animate-spin')}
+              />
+              Probe Capabilities
             </Button>
 
             {instance.supportsModelSwap && (

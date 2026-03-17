@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { getTokenBgColor, getTokenColor } from '@/lib/logprobs'
+import { getTokenColor } from '@/lib/logprobs'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { TokenPredictionEntry } from '../types'
 import { useTokenExplorerStore } from '../store'
@@ -33,9 +33,6 @@ export function ProbabilityDistribution({
   const topPCutoffIndex = predictions.findIndex(
     (p) => p.cumulativeProbability >= topP
   )
-
-  // top-k cutoff index
-  const topKCutoffIndex = topK - 1
 
   return (
     <div className={cn('space-y-1', className)}>

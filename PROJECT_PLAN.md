@@ -1,4 +1,4 @@
-# AI Research Workbench — Project Plan & Task Breakdown
+# Prism — Project Plan & Task Breakdown
 
 ## Research Feature Deep-Dive
 
@@ -92,9 +92,9 @@ This is aspirational — vLLM doesn't currently expose attention weights. But pl
 
 | # | Task | Details |
 |---|------|---------|
-| 1.1.1 | Create .NET 9 Web API project | `dotnet new webapi -n AiResearchWorkbench.Api` in `backend/src/Api/`. Use Minimal API style. Add global usings, configure for development. |
-| 1.1.2 | Create Core class library | `dotnet new classlib -n AiResearchWorkbench.Core` in `backend/src/Core/`. Domain models, interfaces, DTOs. No dependencies on Infrastructure. |
-| 1.1.3 | Create Infrastructure class library | `dotnet new classlib -n AiResearchWorkbench.Infrastructure` in `backend/src/Infrastructure/`. DB context, vLLM client, repositories. References Core. |
+| 1.1.1 | Create .NET 9 Web API project | `dotnet new webapi -n Prism.Api` in `backend/src/`. Use Minimal API style. Add global usings, configure for development. |
+| 1.1.2 | Create Common class library | `dotnet new classlib -n Prism.Common` in `backend/src/`. Shared kernel: Result pattern, abstractions, DB, cache, storage, inference interfaces. No feature dependencies. |
+| 1.1.3 | Create Features class library | `dotnet new classlib -n Prism.Features` in `backend/src/`. Vertical slices — one folder per feature. References Common. |
 | 1.1.4 | Create solution file | `dotnet new sln` in `backend/`. Add all three projects. Set up project references (Api -> Core, Infrastructure; Infrastructure -> Core). |
 | 1.1.5 | Create React + TypeScript frontend | `npm create vite@latest frontend -- --template react-ts` in project root. Add Tailwind CSS, shadcn/ui. |
 | 1.1.6 | Configure shadcn/ui | Init shadcn, add base components: Button, Input, Card, Tabs, Select, Slider, ScrollArea, Sheet, Dialog, Tooltip. |

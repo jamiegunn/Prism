@@ -16,6 +16,7 @@ using Prism.Features.PromptLab.Application.ListVersions;
 using Prism.Features.PromptLab.Application.AbTest;
 using Prism.Features.PromptLab.Application.TestPrompt;
 using Prism.Features.PromptLab.Application.UpdateTemplate;
+using Prism.Features.PromptLab.Application.ForkTemplate;
 
 namespace Prism.Features.PromptLab.Api;
 
@@ -101,6 +102,13 @@ public static class PromptLabEndpoints
             .WithName("StartAbTest")
             .WithSummary("Starts an A/B test across prompt variations, instances, and parameter sets")
             .Produces<AbTestResultDto>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // Fork
+        group.MapPost("/{id:guid}/fork", ForkTemplate)
+            .WithName("ForkTemplate")
+            .WithSummary("Forks a template version into a new template")
+            .Produces<PromptTemplateWithVersionDto>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return app;
@@ -284,6 +292,26 @@ public static class PromptLabEndpoints
 
         return result.Match(
             dto => TypedResults.Created($"/api/v1/experiments/{dto.ExperimentId}", dto),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> ForkTemplate(
+        Guid id,
+        [FromBody] ForkTemplateRequest request,
+        ForkTemplateHandler handler,
+        CancellationToken ct)
+    {
+        var command = new ForkTemplateCommand(
+            id,
+            request.SourceVersion,
+            request.NewName,
+            request.NewDescription,
+            request.ProjectId);
+
+        Result<PromptTemplateWithVersionDto> result = await handler.HandleAsync(command, ct);
+
+        return result.Match(
+            dto => TypedResults.Created($"/api/v1/prompts/{dto.Template.Id}", dto),
             error => error.ToHttpResult());
     }
 }

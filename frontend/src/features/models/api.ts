@@ -66,3 +66,40 @@ export function useTriggerHealthCheck(id: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: MODELS_KEY }),
   })
 }
+
+export interface CapabilitySnapshot {
+  instanceId: string
+  providerName: string
+  tier: 'Unknown' | 'Chat' | 'Inspect' | 'Research'
+  supportsLogprobs: boolean
+  maxLogprobs: number
+  supportsTokenize: boolean
+  supportsGuidedDecoding: boolean
+  supportsStreaming: boolean
+  supportsFunctionCalling: boolean
+  supportsMetrics: boolean
+  supportsModelSwap: boolean
+  supportsMultimodal: boolean
+  probedAt: string
+  probeSucceeded: boolean
+  probeError: string | null
+}
+
+export function useAllCapabilities() {
+  return useQuery({
+    queryKey: [...MODELS_KEY, 'capabilities'],
+    queryFn: () => apiClient<CapabilitySnapshot[]>('/models/instances/capabilities'),
+  })
+}
+
+export function useProbeCapabilities(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiClient<CapabilitySnapshot>(`/models/instances/${id}/probe`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: MODELS_KEY })
+      queryClient.invalidateQueries({ queryKey: [...MODELS_KEY, 'capabilities'] })
+    },
+  })
+}

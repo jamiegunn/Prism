@@ -1,4 +1,4 @@
-# Claude Code Skills — AI Research Workbench
+# Claude Code Skills — Prism
 
 Step-by-step procedures for common development tasks. Follow these exactly.
 
@@ -105,7 +105,7 @@ public static class {FeatureName}Module
 
 9. **Generate migration:**
    ```bash
-   dotnet ef migrations add Add{FeatureName}Tables --project src/AiResearch.Common --startup-project src/AiResearch.Api
+   dotnet ef migrations add Add{FeatureName}Tables --project src/Prism.Common --startup-project src/Prism.Api
    ```
 
 10. **Regenerate frontend API client:**
@@ -156,7 +156,7 @@ public static class {FeatureName}Module
    - Table name: `{feature}_{entities}` (feature prefix, snake_case, plural)
 3. **Generate migration:**
    ```bash
-   dotnet ef migrations add Add{Entity}To{Feature} --project src/AiResearch.Common --startup-project src/AiResearch.Api
+   dotnet ef migrations add Add{Entity}To{Feature} --project src/Prism.Common --startup-project src/Prism.Api
    ```
 4. **Review the generated migration** for data loss, missing indexes, correct nullability
 5. **Create DTO** in `Application/Dtos/{Entity}Dto.cs` if entity is exposed via API
@@ -191,7 +191,7 @@ public static class {FeatureName}Module
 1. **Make entity/configuration changes** first
 2. **Generate migration:**
    ```bash
-   dotnet ef migrations add {DescriptiveName} --project src/AiResearch.Common --startup-project src/AiResearch.Api
+   dotnet ef migrations add {DescriptiveName} --project src/Prism.Common --startup-project src/Prism.Api
    ```
 3. **Review the generated migration** — check for data loss, verify UP and DOWN
 4. **Test:** migration applies cleanly on empty DB and existing DB

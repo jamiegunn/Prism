@@ -1,4 +1,4 @@
-# AI Research Workbench — Architecture
+# Prism — Architecture
 
 **Target Framework:** .NET 9 | **API Style:** Minimal API | **Decisions Log:** See `/docs/ADR/`
 
@@ -80,7 +80,7 @@ var playground = app.MapGroup("/api/v1/playground")
 ```
 backend/
 ├── src/
-│   ├── AiResearch.Api/                        # Startup, middleware, DI composition root
+│   ├── Prism.Api/                        # Startup, middleware, DI composition root
 │   │   ├── Program.cs                         # Host builder, service registration, pipeline
 │   │   ├── Middleware/
 │   │   │   ├── CorrelationIdMiddleware.cs      # Attaches X-Correlation-Id to every request
@@ -92,7 +92,7 @@ backend/
 │   │   │   └── WebApplicationExtensions.cs     # Middleware pipeline builder
 │   │   └── appsettings*.json
 │   │
-│   ├── AiResearch.Common/                     # Shared kernel — no feature dependencies
+│   ├── Prism.Common/                     # Shared kernel — no feature dependencies
 │   │   ├── Results/
 │   │   │   ├── Result.cs                       # Result<T> and Result (non-generic)
 │   │   │   ├── Error.cs                        # Error value type (code, message, type)
@@ -206,7 +206,7 @@ backend/
 │   │       ├── JsonExtensions.cs                # Serialize/deserialize helpers
 │   │       └── StringExtensions.cs              # Common string utilities
 │   │
-│   ├── AiResearch.Features/                   # ALL feature slices live here
+│   ├── Prism.Features/                   # ALL feature slices live here
 │   │   │
 │   │   ├── Playground/                         # Feature: Inference Playground
 │   │   │   ├── Domain/
@@ -432,7 +432,7 @@ backend/
 │   │           ├── AnalyticsSkills.cs
 │   │           └── UtilitySkills.cs
 │   │
-│   └── AiResearch.Tests/
+│   └── Prism.Tests/
 │       ├── Unit/
 │       │   ├── Common/
 │       │   │   ├── ResultTests.cs
@@ -1752,7 +1752,7 @@ builder.AddServiceDefaults();
 /// </summary>
 public static class InferenceTracing
 {
-    public static readonly ActivitySource Source = new("AiResearch.Inference");
+    public static readonly ActivitySource Source = new("Prism.Inference");
 
     public static Activity? StartInference(string provider, string model)
         => Source.StartActivity("inference.chat")
@@ -1894,7 +1894,7 @@ Backend (.NET 9 native OpenAPI) → openapi.json → orval → typed TypeScript 
 // orval.config.ts
 {
   "ai-research": {
-    "input": { "target": "../backend/src/AiResearch.Api/openapi.json" },
+    "input": { "target": "../backend/src/Prism.Api/openapi.json" },
     "output": {
       "target": "./src/services/generated/api.ts",
       "client": "react-query",
@@ -1911,7 +1911,7 @@ Backend (.NET 9 native OpenAPI) → openapi.json → orval → typed TypeScript 
 npm run api:generate   # runs: orval --config orval.config.ts
 
 # In backend/ — export OpenAPI spec
-dotnet run --project src/AiResearch.Api -- --export-openapi openapi.json
+dotnet run --project src/Prism.Api -- --export-openapi openapi.json
 ```
 
 - `orval` generates typed hooks (TanStack Query) and client functions per API tag

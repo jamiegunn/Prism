@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getTokenBgColor, getTokenColor } from '@/lib/logprobs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ChatMessage } from './ChatMessage'
 import type { Message } from '../types'
 import type { TokenLogprob } from '@/services/types/logprobs'
@@ -26,18 +24,20 @@ function cleanStreamingContent(raw: string): string {
 interface ChatPaneProps {
   messages: Message[]
   streamingContent: string
-  streamingTokens: TokenLogprob[]
+  streamingTokens: TokenLogprob[] // kept for future use
   isStreaming: boolean
   onSelectMessageForLogprobs?: (message: Message) => void
+  onTokenClick?: (message: Message, tokenIndex: number) => void
   className?: string
 }
 
 export function ChatPane({
   messages,
   streamingContent,
-  streamingTokens,
+  streamingTokens: _streamingTokens,
   isStreaming,
   onSelectMessageForLogprobs,
+  onTokenClick,
   className,
 }: ChatPaneProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -68,6 +68,7 @@ export function ChatPane({
             key={message.id}
             message={message}
             onSelectForLogprobs={onSelectMessageForLogprobs}
+            onTokenClick={onTokenClick}
           />
         ))}
 

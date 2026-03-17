@@ -1,20 +1,29 @@
 const BASE_URL = '/api/v1'
 
-interface RequestConfig {
-  method?: string
-  body?: unknown
-  headers?: Record<string, string>
-  signal?: AbortSignal
+/**
+ * Request configuration accepted by the API client.
+ * Extends RequestInit to accept plain objects as body (auto-serialized to JSON).
+ * Compatible with both hand-written feature API calls and Orval-generated calls.
+ */
+export interface RequestConfig extends Omit<RequestInit, 'body'> {
+  body?: BodyInit | object | null
 }
 
 export async function apiClient<T>(url: string, config?: RequestConfig): Promise<T> {
+  const rawBody = config?.body
+  const body: BodyInit | null | undefined = rawBody !== undefined && rawBody !== null
+    ? (typeof rawBody === 'string' || rawBody instanceof FormData || rawBody instanceof Blob || rawBody instanceof ArrayBuffer || rawBody instanceof URLSearchParams || rawBody instanceof ReadableStream
+      ? rawBody as BodyInit
+      : JSON.stringify(rawBody))
+    : undefined
+
   const response = await fetch(`${BASE_URL}${url}`, {
     method: config?.method ?? 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...config?.headers,
+      ...(config?.headers as Record<string, string> | undefined),
     },
-    body: config?.body ? JSON.stringify(config.body) : undefined,
+    body,
     signal: config?.signal,
   })
 
@@ -42,5 +51,8 @@ export class ApiError extends Error {
   }
 }
 
-// For orval custom instance
-export const customInstance = apiClient
+// For orval custom instance — accepts RequestInit from generated code
+export const customInstance = apiClient as <T>(url: string, config?: RequestInit) => Promise<T>
+
+// Type helper for orval SecondParameter
+export type SecondParameter<T extends (...args: never[]) => unknown> = Parameters<T>[1]

@@ -42,7 +42,7 @@ export function RecordsTable({ datasetId, schema }: RecordsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {data.items.map((record, i) => (
+            {data.items.map((record, _i) => (
               <tr key={record.id} className="border-b hover:bg-muted/30">
                 <td className="px-3 py-2 text-muted-foreground">{record.orderIndex + 1}</td>
                 {splitFilter === null && (

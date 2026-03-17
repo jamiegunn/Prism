@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import { Layers, Pause, Play, XCircle, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function BatchInferencePage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>()
-  const navigate = useNavigate()
+
   const { data: jobs, isLoading } = useBatchJobs(statusFilter)
   const pause = usePauseBatchJob()
   const resume = useResumeBatchJob()

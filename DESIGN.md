@@ -1,4 +1,4 @@
-# AI Research Workbench — Design Document
+# Prism — Design Document
 
 ## Vision
 
@@ -56,10 +56,10 @@ However, all data models include an optional nullable `user_id` field so multi-u
 AI_Research/
 ├── backend/
 │   ├── src/
-│   │   ├── AiResearch.Api/               # Startup, middleware, DI composition root
-│   │   ├── AiResearch.Common/            # Shared kernel: Result<T>, abstractions, DB, cache,
+│   │   ├── Prism.Api/               # Startup, middleware, DI composition root
+│   │   ├── Prism.Common/            # Shared kernel: Result<T>, abstractions, DB, cache,
 │   │   │                                 #   inference provider abstraction, logging, jobs
-│   │   ├── AiResearch.Features/          # Vertical slices — one folder per feature
+│   │   ├── Prism.Features/          # Vertical slices — one folder per feature
 │   │   │   ├── Playground/               #   Each slice: Domain/ Application/ Infrastructure/ Api/
 │   │   │   ├── TokenExplorer/
 │   │   │   ├── Prompts/
@@ -75,7 +75,7 @@ AI_Research/
 │   │   │   ├── FineTuning/
 │   │   │   ├── StructuredOutput/
 │   │   │   └── Skills/                   # Skill system (thin wrappers over feature handlers)
-│   │   └── AiResearch.Tests/
+│   │   └── Prism.Tests/
 │   └── backend.sln
 ├── frontend/                              # React + TypeScript + Vite
 │   └── src/
@@ -138,7 +138,7 @@ The core interactive workspace for talking to models.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  AI Research Workbench          [Playground] [Experiments] [Prompts] ...   │
+│  Prism                          [Playground] [Experiments] [Prompts] ...   │
 ├──────────────┬──────────────────────────────────────────────────────────────┤
 │              │  ┌─ Model A: llama-3.1-70b ──┐  ┌─ Model B: mixtral-8x7b ─┐│
 │  PARAMETERS  │  │                           │  │                          ││
@@ -891,7 +891,7 @@ Tools for working with structured (JSON/XML) LLM outputs.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  AI Research Workbench                                   [alerts] [config] │
+│  Prism                                                   [alerts] [config] │
 ├────┬────────────────────────────────────────────────────────────────────────┤
 │    │                                                                       │
 │ PG │   (Active Module Content Area)                                        │

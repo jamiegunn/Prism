@@ -27,8 +27,8 @@ export function MultiPanePlayground() {
       const instance = instances?.find((i) => i.id === instanceId)
       if (!instance) return
 
-      if (panes.some((p) => p.instanceId === instanceId)) {
-        toast.error('Instance already added')
+      if (panes.length >= 4) {
+        toast.error('Maximum 4 panes allowed')
         return
       }
 
@@ -118,7 +118,8 @@ export function MultiPanePlayground() {
           <div
             className="grid gap-4 h-full"
             style={{
-              gridTemplateColumns: `repeat(${Math.min(panes.length, 3)}, 1fr)`,
+              gridTemplateColumns: `repeat(${Math.min(panes.length, panes.length <= 2 ? panes.length : 2)}, 1fr)`,
+              gridTemplateRows: panes.length > 2 ? 'repeat(2, 1fr)' : '1fr',
             }}
           >
             {panes.map((pane) => (

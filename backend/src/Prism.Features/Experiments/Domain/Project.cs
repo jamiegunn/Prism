@@ -8,6 +8,11 @@ namespace Prism.Features.Experiments.Domain;
 public sealed class Project : BaseEntity
 {
     /// <summary>
+    /// Gets or sets the workspace this project belongs to.
+    /// </summary>
+    public Guid? WorkspaceId { get; set; }
+
+    /// <summary>
     /// Gets or sets the name of the project.
     /// </summary>
     public string Name { get; set; } = "";

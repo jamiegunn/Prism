@@ -26,6 +26,8 @@ using Prism.Features.FineTuning;
 using Prism.Features.Notebooks;
 using Prism.Features.StructuredOutput;
 using Prism.Features.TokenExplorer;
+using Prism.Features.Workspaces;
+using Prism.Common.Inference.Runtime;
 
 namespace Prism.Api.Extensions;
 
@@ -93,6 +95,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddFeatureServices(this IServiceCollection services, IConfiguration config)
     {
         // Will be filled in as features are built
+        services.AddWorkspacesFeature();
         services.AddPlaygroundFeature();
         services.AddModelsFeature();
         services.AddTokenExplorerFeature();
@@ -108,6 +111,10 @@ public static class ServiceCollectionExtensions
         services.AddAgentsFeature();
         services.AddFineTuningFeature();
         services.AddNotebooksFeature();
+
+        // Inference runtime — must be registered after History (channel) and Models (factory)
+        services.AddInferenceRuntime();
+
         return services;
     }
 

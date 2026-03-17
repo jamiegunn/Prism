@@ -8,6 +8,11 @@ using Prism.Features.Models.Application.RegisterInstance;
 using Prism.Features.Models.Application.SwapModel;
 using Prism.Features.Models.Application.GetTokenizerInfo;
 using Prism.Features.Models.Application.UnregisterInstance;
+using Prism.Features.Models.Application.GetCapabilities;
+using Prism.Features.Models.Application.ProbeCapabilities;
+using Prism.Common.Database.Seeders;
+using Prism.Common.Inference.Capabilities;
+using Prism.Common.Inference.Runtime;
 using Prism.Features.Models.Infrastructure;
 
 namespace Prism.Features.Models;
@@ -36,12 +41,23 @@ public static class ModelsModule
         services.AddScoped<SwapModelHandler>();
         services.AddScoped<CheckHealthHandler>();
         services.AddScoped<GetTokenizerInfoHandler>();
+        services.AddScoped<ProbeCapabilitiesHandler>();
+        services.AddScoped<GetCapabilitiesHandler>();
+
+        // Capability registry
+        services.AddScoped<IProviderCapabilityRegistry, ProviderCapabilityRegistry>();
 
         // Validators
         services.AddScoped<IValidator<RegisterInstanceCommand>, RegisterInstanceValidator>();
 
+        // Runtime provider resolver
+        services.AddScoped<IRuntimeProviderResolver, RuntimeProviderResolver>();
+
         // Background services
         services.AddHostedService<HealthCheckBackgroundService>();
+
+        // Seeders
+        services.AddScoped<IDataSeeder, ModelsSeeder>();
 
         return services;
     }

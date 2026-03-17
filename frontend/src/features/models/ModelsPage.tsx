@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Server } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInstances } from './api'
 import { InstanceCard } from './components/InstanceCard'
 import { InstanceDetailPanel } from './components/InstanceDetailPanel'
 import { RegisterInstanceDialog } from './components/RegisterInstanceDialog'
+import { CapabilityMatrix } from './components/CapabilityMatrix'
 import type { InferenceInstance } from './types'
 
 function InstanceCardSkeleton() {
@@ -65,6 +65,9 @@ export function ModelsPage() {
         </div>
         {instances && instances.length > 0 && <RegisterInstanceDialog />}
       </div>
+
+      {/* Capability Matrix (shown when instances exist) */}
+      {instances && instances.length > 0 && <CapabilityMatrix />}
 
       <div className="flex gap-6">
         {/* Left: Instance Grid */}

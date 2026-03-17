@@ -163,6 +163,27 @@ export function useTestPrompt() {
   })
 }
 
+export function useForkTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      templateId,
+      ...data
+    }: {
+      templateId: string
+      sourceVersion: number
+      newName?: string
+      newDescription?: string
+      projectId?: string
+    }) =>
+      apiClient<PromptTemplateWithVersion>(`/prompts/${templateId}/fork`, {
+        method: 'POST',
+        body: data,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: TEMPLATES_KEY }),
+  })
+}
+
 export function useAbTest() {
   return useMutation({
     mutationFn: (data: {

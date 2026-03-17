@@ -1,20 +1,40 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Editor from '@monaco-editor/react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useTemplate, useVersions } from '../api'
+import { GitCompare, GitFork } from 'lucide-react'
+import { toast } from 'sonner'
+import { useTemplate, useVersions, useForkTemplate } from '../api'
 import { usePromptLabStore } from '../store'
 import { VersionSelector } from './VersionSelector'
+import { VersionDiffViewer } from './VersionDiffViewer'
 import { VariablePanel } from './VariablePanel'
 import { TestPanel } from './TestPanel'
 
 export function TemplateEditor() {
-  const { selectedTemplateId, selectedVersionNumber, setSelectedVersionNumber } =
+  const { selectedTemplateId, selectedVersionNumber, setSelectedVersionNumber, setSelectedTemplateId } =
     usePromptLabStore()
   const { data: templateData, isLoading } = useTemplate(selectedTemplateId)
   const { data: versions } = useVersions(selectedTemplateId ?? '')
+  const forkMutation = useForkTemplate()
+  const [showDiff, setShowDiff] = useState(false)
+
+  function handleFork() {
+    if (!selectedTemplateId || !selectedVersionNumber) return
+    forkMutation.mutate(
+      { templateId: selectedTemplateId, sourceVersion: selectedVersionNumber },
+      {
+        onSuccess: (data) => {
+          toast.success(`Forked as "${data.template.name}"`)
+          setSelectedTemplateId(data.template.id)
+        },
+        onError: (err) => toast.error(`Fork failed: ${err.message}`),
+      }
+    )
+  }
 
   // Select latest version when template loads
   useEffect(() => {
@@ -73,12 +93,35 @@ export function TemplateEditor() {
           </div>
         </div>
 
-        <VersionSelector
-          versions={versions ?? []}
-          currentVersion={selectedVersionNumber ?? template.latestVersion}
-          onSelect={setSelectedVersionNumber}
-          templateId={template.id}
-        />
+        <div className="flex items-center gap-2">
+          {(versions?.length ?? 0) > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDiff(!showDiff)}
+              className="h-8 gap-1.5 text-xs text-zinc-400"
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+              {showDiff ? 'Hide Diff' : 'Diff'}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleFork}
+            disabled={forkMutation.isPending}
+            className="h-8 gap-1.5 text-xs text-zinc-400"
+          >
+            <GitFork className="h-3.5 w-3.5" />
+            Fork
+          </Button>
+          <VersionSelector
+            versions={versions ?? []}
+            currentVersion={selectedVersionNumber ?? template.latestVersion}
+            onSelect={setSelectedVersionNumber}
+            templateId={template.id}
+          />
+        </div>
       </div>
 
       {/* Content */}
@@ -178,6 +221,17 @@ export function TemplateEditor() {
             </>
           )}
         </div>
+
+        {/* Diff panel */}
+        {showDiff && currentVersion && (
+          <div className="w-96 shrink-0">
+            <VersionDiffViewer
+              templateId={template.id}
+              currentVersion={currentVersion.version}
+              onClose={() => setShowDiff(false)}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

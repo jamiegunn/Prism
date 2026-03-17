@@ -1,4 +1,4 @@
-# AI Research Workbench — Skills Registry
+# Prism — Skills Registry
 
 ## Overview
 
@@ -17,7 +17,7 @@ Skills are grouped into categories by what they operate on.
 
 Every skill implements this interface. Skills follow the project's Result pattern (see `ARCHITECTURE.md`) — they never throw exceptions for expected failures.
 
-Skills are thin wrappers over feature application-layer handlers. They live in `AiResearch.Features/Skills/Implementations/` and delegate to the same use case handlers the API endpoints call. This avoids duplicating logic.
+Skills are thin wrappers over feature application-layer handlers. They live in `Prism.Features/Skills/Implementations/` and delegate to the same use case handlers the API endpoints call. This avoids duplicating logic.
 
 ```csharp
 /// <summary>
