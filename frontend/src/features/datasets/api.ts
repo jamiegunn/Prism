@@ -128,6 +128,21 @@ export function useSplitDataset() {
   })
 }
 
+export interface ValidationReport {
+  datasetId: string
+  totalRecords: number
+  issues: { column: string; severity: string; message: string }[]
+  isValid: boolean
+}
+
+export function useValidateDataset(datasetId: string | null) {
+  return useQuery({
+    queryKey: ['datasets', datasetId, 'validate'],
+    queryFn: () => apiClient<ValidationReport>(`/datasets/${datasetId}/validate`),
+    enabled: !!datasetId,
+  })
+}
+
 export function useExportDataset() {
   return useMutation({
     mutationFn: async ({ id, format, splitLabel }: { id: string; format: string; splitLabel?: string }) => {

@@ -18,7 +18,15 @@
       "Bash(xargs cat:*)",
       "WebSearch",
       "WebFetch(domain:jupyterlite.readthedocs.io)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(for dir:*)",
+      "Bash(find:*)",
+      "Bash(do echo:*)",
+      "Read(//c/dev/AI_Research/backend/src/Prism.Common/**)",
+      "Bash(done)",
+      "Bash(for feature:*)",
+      "Read(//c/dev/AI_Research/backend/src/Prism.Features/$feature/**)",
+      "Bash(wc:*)"
     ]
   }
 }
