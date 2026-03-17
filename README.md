@@ -85,7 +85,74 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are record
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - [Node.js 20+](https://nodejs.org/) (LTS)
 - [Docker](https://www.docker.com/) (for PostgreSQL + vLLM)
-- A GPU with CUDA support (for vLLM) — or use Ollama/LM Studio for CPU inference
+- **An LLM inference server** — Prism needs at least one running model to work. See below for options.
+
+### Setting Up an LLM
+
+Prism connects to LLMs via their OpenAI-compatible API. You need at least one running before you can use the platform.
+
+**Option 1: vLLM (recommended for GPU users)**
+
+```bash
+# Start vLLM with Llama 3.1 8B (requires NVIDIA GPU with ~16GB VRAM)
+docker run --gpus all \
+  -p 8000:8000 \
+  --name prism-vllm \
+  vllm/vllm-openai:latest \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --max-model-len 4096
+
+# Or use docker compose (starts vLLM alongside PostgreSQL)
+docker compose --profile gpu up -d
+```
+
+Once running, register it in Prism at http://localhost:5173/models with:
+- **Name:** Local vLLM
+- **Endpoint:** `http://localhost:8000/v1`
+- **Provider Type:** vLLM
+
+vLLM gives you the best Prism experience — full logprobs, tokenization, guided decoding, and GPU metrics.
+
+**Option 2: Ollama (easiest, works on CPU)**
+
+```bash
+# Install Ollama: https://ollama.com/download
+ollama serve                          # Starts on port 11434
+ollama pull mistral:7b-instruct       # Download a model
+```
+
+Register in Prism with:
+- **Endpoint:** `http://localhost:11434`
+- **Provider Type:** Ollama
+
+Supports logprobs and streaming. No tokenization or guided decoding.
+
+**Option 3: LM Studio (GUI, works on CPU)**
+
+Download from https://lmstudio.ai, load a model, and start the local server (default port 1234).
+
+Register in Prism with:
+- **Endpoint:** `http://localhost:1234/v1`
+- **Provider Type:** LM Studio
+
+**Option 4: Any OpenAI-compatible API**
+
+Any server that implements the `/v1/chat/completions` endpoint works — including OpenAI itself, Together AI, Groq, etc.
+
+### Provider Capability Comparison
+
+| Feature | vLLM | Ollama | LM Studio | OpenAI API |
+|---------|------|--------|-----------|------------|
+| Chat + Streaming | Yes | Yes | Yes | Yes |
+| Logprobs (token heatmaps) | Yes (up to 20) | Yes (up to 5) | No | Yes |
+| Tokenization | Yes | No | No | No |
+| Guided Decoding | Yes | No | No | No |
+| GPU Metrics | Yes | No | No | No |
+| Model Hot-Swap | No | Yes | Yes | N/A |
+
+Prism automatically detects provider capabilities and disables unsupported UI controls.
 
 ## Getting Started
 
