@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { ParamLabel } from '@/components/ui/param-label'
 import { useInstances } from '../api'
 import { usePlaygroundStore } from '../store'
+import { useProviderCapabilities } from '@/hooks/useProviderCapabilities'
 
 interface ParameterSidebarProps {
   className?: string
@@ -19,6 +20,7 @@ interface ParameterSidebarProps {
 export function ParameterSidebar({ className }: ParameterSidebarProps) {
   const instances = useInstances()
   const store = usePlaygroundStore()
+  const { data: caps } = useProviderCapabilities(store.selectedInstanceId)
   const [stopInput, setStopInput] = useState('')
 
   const selectedInstance = instances.data?.find((i) => i.id === store.selectedInstanceId)
@@ -197,9 +199,11 @@ export function ParameterSidebar({ className }: ParameterSidebarProps) {
               tooltip="When enabled, the model returns the log-probability it assigned to each token it generated. This powers the logprobs heatmap and per-token confidence analysis in the bottom panel."
             />
             <button
-              onClick={() => store.setLogprobs(!store.logprobs)}
+              onClick={() => caps?.supportsLogprobs !== false && store.setLogprobs(!store.logprobs)}
+              disabled={caps?.supportsLogprobs === false}
               className={cn(
                 'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                caps?.supportsLogprobs === false ? 'bg-zinc-800 cursor-not-allowed opacity-50' :
                 store.logprobs ? 'bg-violet-600' : 'bg-zinc-700'
               )}
             >
@@ -211,6 +215,11 @@ export function ParameterSidebar({ className }: ParameterSidebarProps) {
               />
             </button>
           </div>
+          {caps?.supportsLogprobs === false && (
+            <p className="text-[10px] text-amber-500">
+              This provider does not support logprobs. Select a vLLM or Ollama instance.
+            </p>
+          )}
           {store.logprobs && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
