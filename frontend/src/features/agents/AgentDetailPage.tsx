@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useWorkflow, useRuns } from './api'
 import type { AgentRun, AgentStep } from './types'
 
-type Tab = 'run' | 'history'
+import { AgentTraceView } from './components/AgentTraceView'
+
+type Tab = 'run' | 'history' | 'trace'
 
 export function AgentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -80,6 +82,7 @@ export function AgentDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'run', label: 'Run Agent' },
     { key: 'history', label: 'Run History' },
+    { key: 'trace', label: 'Trace View' },
   ]
 
   const stepsToShow = runResult?.steps ?? liveSteps
@@ -212,6 +215,25 @@ export function AgentDetailPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {activeTab === 'trace' && (
+        <div className="rounded border border-zinc-700 bg-zinc-800/30 h-[500px]">
+          {runResult?.steps && runResult.steps.length > 0 ? (
+            <AgentTraceView stepsJson={JSON.stringify(runResult.steps.map((s, i) => ({
+              step: i + 1,
+              type: s.isFinalAnswer ? 'response' : s.action ? 'tool_call' : s.error ? 'error' : 'thought',
+              content: s.thought || s.finalAnswer,
+              tool: s.action,
+              input: s.actionInput,
+              output: s.observation,
+            })))} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
+              Run an agent first, then select a run to view its trace.
+            </div>
+          )}
         </div>
       )}
     </div>

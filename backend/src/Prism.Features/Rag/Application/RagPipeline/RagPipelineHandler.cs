@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prism.Common.Database;
@@ -142,6 +143,31 @@ public sealed class RagPipelineHandler
 
         _logger.LogInformation("RAG pipeline completed for collection {CollectionId}: {ChunkCount} chunks, {LatencyMs}ms",
             command.CollectionId, chunks.Count, sw.ElapsedMilliseconds);
+
+        // Persist trace
+        var trace = new RagTrace
+        {
+            CollectionId = command.CollectionId,
+            Query = command.Query,
+            SearchType = command.SearchType.ToString(),
+            RetrievedChunkCount = chunks.Count,
+            RetrievedChunksJson = JsonSerializer.Serialize(chunks.Select(c => new
+            {
+                chunkId = c.ChunkId,
+                documentFilename = c.DocumentFilename,
+                score = c.Score,
+                contentPreview = c.Content.Length > 200 ? c.Content[..200] + "..." : c.Content
+            })),
+            AssembledContext = context,
+            GeneratedResponse = response.Content,
+            Model = command.Model,
+            LatencyMs = sw.ElapsedMilliseconds,
+            TotalTokens = (response.Usage?.TotalTokens) ?? 0,
+            IsSuccess = true
+        };
+
+        _db.Set<RagTrace>().Add(trace);
+        await _db.SaveChangesAsync(ct);
 
         return new RagPipelineResultDto(
             command.Query,
