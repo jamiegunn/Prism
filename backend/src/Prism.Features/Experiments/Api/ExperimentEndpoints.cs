@@ -22,6 +22,7 @@ using Prism.Features.Experiments.Application.ListProjects;
 using Prism.Features.Experiments.Application.ListRuns;
 using Prism.Features.Experiments.Application.UpdateExperiment;
 using Prism.Features.Experiments.Application.UpdateProject;
+using Prism.Features.Experiments.Application.RunSweep;
 using Prism.Features.Experiments.Domain;
 
 namespace Prism.Features.Experiments.Api;
@@ -138,6 +139,12 @@ public static class ExperimentEndpoints
         experiments.MapGet("/{id:guid}/runs/export", ExportRuns)
             .WithName("ExportRuns")
             .WithSummary("Exports runs from an experiment in CSV or JSON format")
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        experiments.MapPost("/{id:guid}/sweep", RunSweep)
+            .WithName("RunSweep")
+            .WithSummary("Runs a parameter sweep generating one run per parameter combination")
+            .Produces<SweepResultDto>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return app;
@@ -398,6 +405,31 @@ public static class ExperimentEndpoints
 
         return result.Match(
             export => TypedResults.File(export.Data, export.ContentType, export.FileName),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> RunSweep(
+        Guid id,
+        [FromBody] RunSweepRequest request,
+        RunSweepHandler handler,
+        CancellationToken ct)
+    {
+        var command = new RunSweepCommand(
+            ExperimentId: id,
+            InstanceId: request.InstanceId,
+            Input: request.Input,
+            SystemPrompt: request.SystemPrompt,
+            Model: request.Model,
+            PromptVersionId: request.PromptVersionId,
+            TemperatureValues: request.TemperatureValues,
+            TopPValues: request.TopPValues,
+            MaxTokensValues: request.MaxTokensValues,
+            CaptureLogprobs: request.CaptureLogprobs);
+
+        Result<SweepResultDto> result = await handler.HandleAsync(command, ct);
+
+        return result.Match(
+            dto => TypedResults.Created($"/api/v1/experiments/{id}", dto),
             error => error.ToHttpResult());
     }
 }

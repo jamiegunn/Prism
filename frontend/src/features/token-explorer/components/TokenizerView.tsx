@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Hash, Loader2, DollarSign, Undo2 } from 'lucide-react'
+import { Hash, Loader2, DollarSign, Undo2, Copy, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -41,6 +41,21 @@ function formatCost(tokenCount: number, pricePerMillion: number): string {
   return `$${cost.toFixed(4)}`
 }
 
+const SPECIAL_TOKEN_PATTERNS = [
+  /^<\|.*\|>$/, // <|begin_of_text|>, <|end_of_text|>, <|eot_id|>
+  /^<s>$/,      // BOS
+  /^<\/s>$/,    // EOS
+  /^\[CLS\]$/,  // BERT CLS
+  /^\[SEP\]$/,  // BERT SEP
+  /^\[PAD\]$/,  // PAD
+  /^\[UNK\]$/,  // Unknown
+  /^\[MASK\]$/, // MASK
+]
+
+function isSpecialToken(text: string): boolean {
+  return SPECIAL_TOKEN_PATTERNS.some((p) => p.test(text))
+}
+
 export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   const store = useTokenExplorerStore()
   const tokenizeMutation = useTokenize()
@@ -52,6 +67,8 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   const [outputPrice, setOutputPrice] = useState(0.60)
   const [tokenIdsInput, setTokenIdsInput] = useState('')
   const [detokenizeResult, setDetokenizeResult] = useState<DetokenizeResult | null>(null)
+  const [displayMode, setDisplayMode] = useState<'visual' | 'ids' | 'bytes'>('visual')
+  const [copied, setCopied] = useState(false)
 
   function handleTokenize() {
     if (!store.instanceId || !text.trim()) return
@@ -173,50 +190,104 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
 
             {/* Rendered tokens */}
             <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-400">
-                Tokenized output
-              </label>
-              <div className="flex flex-wrap gap-0.5 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-                {result.tokens.map((token, index) => (
-                  <Tooltip key={index}>
-                    <TooltipTrigger>
-                      <span
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-400">
+                  Tokenized output
+                </label>
+                <div className="flex items-center gap-2">
+                  {/* Display mode toggle */}
+                  <div className="flex rounded-md border border-zinc-700">
+                    {(['visual', 'ids', 'bytes'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setDisplayMode(mode)}
                         className={cn(
-                          'inline-block cursor-default rounded px-1 py-0.5 font-mono text-sm leading-relaxed',
-                          TOKEN_COLORS[index % 2]
+                          'px-2 py-0.5 text-[10px] transition-colors',
+                          displayMode === mode
+                            ? 'bg-zinc-700 text-zinc-200'
+                            : 'text-zinc-500 hover:text-zinc-300'
                         )}
                       >
-                        {token.displayText}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs">
-                      <div className="space-y-1 font-mono text-xs">
-                        <div>
-                          <span className="text-zinc-400">ID: </span>
-                          <span className="text-zinc-200">{token.id}</span>
+                        {mode === 'visual' ? 'Text' : mode === 'ids' ? 'IDs' : 'Bytes'}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Copy button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[10px] text-zinc-500"
+                    onClick={() => {
+                      const content = displayMode === 'ids'
+                        ? result.tokens.map((t) => t.id).join(' ')
+                        : displayMode === 'bytes'
+                          ? result.tokens.map((t) => t.hexBytes).join(' ')
+                          : result.tokens.map((t) => t.text).join('|')
+                      navigator.clipboard.writeText(content)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 1500)
+                    }}
+                  >
+                    {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-0.5 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+                {result.tokens.map((token, index) => {
+                  const special = isSpecialToken(token.text)
+                  const colorClass = special
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-700/50'
+                    : TOKEN_COLORS[index % 2]
+
+                  const displayText = displayMode === 'ids'
+                    ? String(token.id)
+                    : displayMode === 'bytes'
+                      ? token.hexBytes
+                      : token.displayText
+
+                  return (
+                    <Tooltip key={index}>
+                      <TooltipTrigger>
+                        <span
+                          className={cn(
+                            'inline-block cursor-default rounded px-1 py-0.5 font-mono text-sm leading-relaxed',
+                            colorClass
+                          )}
+                        >
+                          {displayText}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <div className="space-y-1 font-mono text-xs">
+                          <div>
+                            <span className="text-zinc-400">Text: </span>
+                            <span className="text-zinc-200">{JSON.stringify(token.text)}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400">ID: </span>
+                            <span className="text-zinc-200">{token.id}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400">Bytes: </span>
+                            <span className="text-zinc-200">{token.byteLength}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400">Hex: </span>
+                            <span className="text-zinc-200">{token.hexBytes}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400">Unicode: </span>
+                            <span className="text-zinc-200">{unicodeCodepoints(token.text)}</span>
+                          </div>
+                          {special && (
+                            <div className="text-amber-400 font-semibold">Special token</div>
+                          )}
                         </div>
-                        <div>
-                          <span className="text-zinc-400">Bytes: </span>
-                          <span className="text-zinc-200">
-                            {token.byteLength}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-400">Hex: </span>
-                          <span className="text-zinc-200">
-                            {token.hexBytes}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-zinc-400">Unicode: </span>
-                          <span className="text-zinc-200">
-                            {unicodeCodepoints(token.text)}
-                          </span>
-                        </div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                })}
               </div>
             </div>
 

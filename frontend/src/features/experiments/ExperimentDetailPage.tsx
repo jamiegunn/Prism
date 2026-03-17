@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, CheckCircle2, Archive } from 'lucide-react'
+import { ArrowLeft, Download, CheckCircle2, Archive, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { useExperiment, useChangeExperimentStatus } from './api'
 import { RunTable } from './components/RunTable'
 import { RunDetailPanel } from './components/RunDetailPanel'
 import { RunComparisonView } from './components/RunComparisonView'
+import { SweepDialog } from './components/SweepDialog'
 import type { Run, RunComparison, ExperimentStatus } from './types'
 
 export function ExperimentDetailPage() {
@@ -19,6 +20,7 @@ export function ExperimentDetailPage() {
 
   const [selectedRun, setSelectedRun] = useState<Run | null>(null)
   const [comparison, setComparison] = useState<RunComparison | null>(null)
+  const [showSweep, setShowSweep] = useState(false)
 
   function handleStatusChange(status: ExperimentStatus) {
     if (!experimentId) return
@@ -88,6 +90,17 @@ export function ExperimentDetailPage() {
             >
               <CheckCircle2 className="h-3 w-3" />
               Complete
+            </Button>
+          )}
+          {experiment.status === 'Active' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => setShowSweep(true)}
+            >
+              <Shuffle className="h-3 w-3" />
+              Sweep
             </Button>
           )}
           {experiment.status !== 'Archived' && (
@@ -160,6 +173,14 @@ export function ExperimentDetailPage() {
           )}
         </div>
       </div>
+
+      {experimentId && (
+        <SweepDialog
+          experimentId={experimentId}
+          open={showSweep}
+          onClose={() => setShowSweep(false)}
+        />
+      )}
     </div>
   )
 }

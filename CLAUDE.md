@@ -1,6 +1,6 @@
 # CLAUDE.md — Instructions for Claude Code
 
-This file guides Claude Code when working on the AI Research Workbench. Read this before every task.
+This file guides Claude Code when working on Prism. Read this before every task.
 
 ## Project Context
 

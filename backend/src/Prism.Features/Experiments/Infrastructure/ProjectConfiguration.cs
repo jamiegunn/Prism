@@ -29,5 +29,6 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 
         builder.HasIndex(e => e.IsArchived);
         builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(e => e.WorkspaceId);
     }
 }

@@ -184,3 +184,35 @@ export function useCompareRuns(experimentId: string) {
       }),
   })
 }
+
+export interface SweepResult {
+  experimentId: string
+  totalCombinations: number
+  completed: number
+  failed: number
+  runIds: string[]
+}
+
+export function useRunSweep(experimentId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      instanceId: string
+      input: string
+      systemPrompt?: string
+      model?: string
+      promptVersionId?: string
+      temperatureValues?: number[]
+      topPValues?: number[]
+      maxTokensValues?: number[]
+      captureLogprobs?: boolean
+    }) =>
+      apiClient<SweepResult>(`/experiments/${experimentId}/sweep`, {
+        method: 'POST',
+        body: data,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: EXPERIMENTS_KEY })
+    },
+  })
+}

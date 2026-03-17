@@ -1,4 +1,4 @@
-# AI Research Workbench — Agent Architecture
+# Prism — Agent Architecture
 
 ## Overview
 
@@ -15,7 +15,7 @@ Agents follow the same patterns as the rest of the platform (see `ARCHITECTURE.m
 
 - **Result pattern:** All agent operations return `Result<T>`. Agent execution returns `Result<AgentRunTrace>`. Skills return `SkillResult` (which wraps `Result<T>` with metrics). Errors propagate cleanly — a tool failure doesn't crash the agent, it becomes an observation the agent can reason about.
 - **Provider abstraction:** Agents call models via `IInferenceProvider`, not vLLM directly. An agent can use any registered provider (vLLM, Ollama, LM Studio). The agent config specifies a model identifier, and `IInferenceProviderFactory` resolves the right provider.
-- **Vertical slice:** The Agents feature lives in `AiResearch.Features/Agents/` with its own Domain, Application, Infrastructure, and Api layers. Agent patterns (ReAct, etc.) are strategy implementations in the Application layer.
+- **Vertical slice:** The Agents feature lives in `Prism.Features/Agents/` with its own Domain, Application, Infrastructure, and Api layers. Agent patterns (ReAct, etc.) are strategy implementations in the Application layer.
 - **Skills as tools:** Agents invoke skills (see `SKILLS.md`), which are thin wrappers over feature application-layer handlers. This means agents get the same validation, logging, and Result handling as direct API calls.
 - **XML documentation:** All public agent interfaces, pattern implementations, and executor methods carry full XML doc comments.
 - **Structured logging:** Every agent step is logged with Serilog structured properties (AgentRunId, StepNumber, ToolName, ToolSelectionConfidence, TokensUsed).
@@ -170,7 +170,7 @@ name: research-assistant
 pattern: react
 model: ${default_model}
 system_prompt: |
-  You are an AI research assistant working inside the AI Research Workbench.
+  You are an AI research assistant working inside Prism.
   You help the researcher analyze experiments, understand model behavior,
   and plan next steps. You have access to all platform data through tools.
 

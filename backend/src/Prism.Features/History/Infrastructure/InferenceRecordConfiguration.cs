@@ -66,9 +66,14 @@ public sealed class InferenceRecordConfiguration : IEntityTypeConfiguration<Infe
         builder.Property(e => e.EnvironmentJson)
             .HasColumnType("jsonb");
 
+        builder.Property(e => e.EstimatedCost)
+            .HasPrecision(18, 8);
+
         builder.HasIndex(e => e.SourceModule);
         builder.HasIndex(e => e.Model);
         builder.HasIndex(e => e.StartedAt);
         builder.HasIndex(e => e.IsSuccess);
+        builder.HasIndex(e => e.ProjectId);
+        builder.HasIndex(e => e.ExperimentId);
     }
 }

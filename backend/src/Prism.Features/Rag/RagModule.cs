@@ -11,6 +11,7 @@ using Prism.Features.Rag.Application.RagPipeline;
 using Prism.Features.Rag.Domain;
 using Prism.Features.Rag.Domain.Chunking;
 using Prism.Features.Rag.Domain.Parsing;
+using Prism.Common.Database.Seeders;
 using Prism.Features.Rag.Infrastructure;
 
 namespace Prism.Features.Rag;
@@ -49,6 +50,9 @@ public static class RagModule
 
         // Embedding provider
         services.AddSingleton<IEmbeddingProvider, OpenAiEmbeddingProvider>();
+
+        // Seeders
+        services.AddScoped<IDataSeeder, RagSeeder>();
 
         return services;
     }

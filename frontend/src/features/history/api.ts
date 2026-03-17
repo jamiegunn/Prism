@@ -55,13 +55,22 @@ export function useTagRecord() {
   })
 }
 
-/** Replay a history record against a given instance. */
+export interface ReplayRequest {
+  id: string
+  instanceId: string
+  overrideModel?: string
+  overrideTemperature?: number
+  overrideMaxTokens?: number
+  overrideTopP?: number
+}
+
+/** Replay a history record against a given instance with optional parameter overrides. */
 export function useReplayRecord() {
   return useMutation({
-    mutationFn: ({ id, instanceId }: { id: string; instanceId: string }) =>
+    mutationFn: ({ id, ...body }: ReplayRequest) =>
       apiClient<ReplayResult>(`/history/${id}/replay`, {
         method: 'POST',
-        body: { instanceId },
+        body,
       }),
   })
 }

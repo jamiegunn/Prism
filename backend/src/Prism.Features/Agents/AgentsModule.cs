@@ -9,7 +9,9 @@ using Prism.Features.Agents.Application.ListTools;
 using Prism.Features.Agents.Application.ListWorkflows;
 using Prism.Features.Agents.Application.RunAgent;
 using Prism.Features.Agents.Application.UpdateWorkflow;
+using Prism.Common.Database.Seeders;
 using Prism.Features.Agents.Domain.Tools;
+using Prism.Features.Agents.Infrastructure;
 
 namespace Prism.Features.Agents;
 
@@ -52,6 +54,9 @@ public static class AgentsModule
 
             return registry;
         });
+
+        // Seeders
+        services.AddScoped<IDataSeeder, AgentsSeeder>();
 
         return services;
     }

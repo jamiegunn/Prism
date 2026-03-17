@@ -11,7 +11,10 @@ using Prism.Features.PromptLab.Application.AbTest;
 using Prism.Features.PromptLab.Application.ListVersions;
 using Prism.Features.PromptLab.Application.Rendering;
 using Prism.Features.PromptLab.Application.TestPrompt;
+using Prism.Common.Database.Seeders;
 using Prism.Features.PromptLab.Application.UpdateTemplate;
+using Prism.Features.PromptLab.Application.ForkTemplate;
+using Prism.Features.PromptLab.Infrastructure;
 
 namespace Prism.Features.PromptLab;
 
@@ -41,6 +44,9 @@ public static class PromptLabModule
         services.AddScoped<GetVersionHandler>();
         services.AddScoped<DiffVersionsHandler>();
 
+        // Fork
+        services.AddScoped<ForkTemplateHandler>();
+
         // Engine
         services.AddScoped<TemplateRenderer>();
         services.AddScoped<TestPromptHandler>();
@@ -48,6 +54,9 @@ public static class PromptLabModule
 
         // Validators
         services.AddScoped<IValidator<CreateTemplateCommand>, CreateTemplateValidator>();
+
+        // Seeders
+        services.AddScoped<IDataSeeder, PromptLabSeeder>();
 
         return services;
     }

@@ -13,9 +13,12 @@ using Prism.Features.Experiments.Application.ExportRuns;
 using Prism.Features.Experiments.Application.GetRun;
 using Prism.Features.Experiments.Application.ListExperiments;
 using Prism.Features.Experiments.Application.ListProjects;
+using Prism.Common.Database.Seeders;
 using Prism.Features.Experiments.Application.ListRuns;
 using Prism.Features.Experiments.Application.UpdateExperiment;
 using Prism.Features.Experiments.Application.UpdateProject;
+using Prism.Features.Experiments.Application.RunSweep;
+using Prism.Features.Experiments.Infrastructure;
 
 namespace Prism.Features.Experiments;
 
@@ -53,10 +56,14 @@ public static class ExperimentsModule
         services.AddScoped<DeleteRunHandler>();
         services.AddScoped<CompareRunsHandler>();
         services.AddScoped<ExportRunsHandler>();
+        services.AddScoped<RunSweepHandler>();
 
         // Validators
         services.AddScoped<IValidator<CreateProjectCommand>, CreateProjectValidator>();
         services.AddScoped<IValidator<CreateExperimentCommand>, CreateExperimentValidator>();
+
+        // Seeders
+        services.AddScoped<IDataSeeder, ExperimentsSeeder>();
 
         return services;
     }

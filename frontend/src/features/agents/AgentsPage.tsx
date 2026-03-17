@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, Plus, Trash2, Play } from 'lucide-react'
+import { Bot, Plus, Trash2 } from 'lucide-react'
 import { useWorkflows, useCreateWorkflow, useDeleteWorkflow, useTools } from './api'
 import type { AgentWorkflow, AgentTool } from './types'
 
@@ -101,7 +101,7 @@ function CreateWorkflowDialog({ onClose }: { onClose: () => void }) {
   const [pattern, setPattern] = useState('ReAct')
   const [maxSteps, setMaxSteps] = useState(10)
   const [tokenBudget, setTokenBudget] = useState(8000)
-  const [temperature, setTemperature] = useState(0.7)
+  const [temperature, _setTemperature] = useState(0.7)
   const [selectedTools, setSelectedTools] = useState<string[]>([])
 
   const { data: tools } = useTools()

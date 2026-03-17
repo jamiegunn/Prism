@@ -78,11 +78,14 @@ public sealed class ReplaySingleHandler
             return Error.Internal($"Failed to deserialize the original request for record '{command.RecordId}'.");
         }
 
-        // Use the target instance's model if available, otherwise keep the original
-        string replayModel = instance.ModelId ?? originalRequest.Model;
+        // Apply overrides: command overrides > instance model > original request
+        string replayModel = command.OverrideModel ?? instance.ModelId ?? originalRequest.Model;
         ChatRequest replayRequest = originalRequest with
         {
             Model = replayModel,
+            Temperature = command.OverrideTemperature ?? originalRequest.Temperature,
+            MaxTokens = command.OverrideMaxTokens ?? originalRequest.MaxTokens,
+            TopP = command.OverrideTopP ?? originalRequest.TopP,
             Stream = false,
             SourceModule = "history-replay"
         };

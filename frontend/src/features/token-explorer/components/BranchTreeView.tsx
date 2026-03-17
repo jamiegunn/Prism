@@ -6,13 +6,14 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { GitBranch, Trash2, TreePine, List } from 'lucide-react'
+import { GitBranch, Trash2, TreePine, List, GitCompare } from 'lucide-react'
 import { useTokenExplorerStore } from '../store'
+import { BranchDiffView } from './BranchDiffView'
 import type { BranchExploration } from '../types'
 
 export function BranchTreeView() {
   const { branches, clearBranches, prompt, stepHistory } = useTokenExplorerStore()
-  const [viewMode, setViewMode] = useState<'tree' | 'list'>('tree')
+  const [viewMode, setViewMode] = useState<'tree' | 'list' | 'diff'>('tree')
 
   if (branches.length === 0) {
     return (
@@ -60,6 +61,20 @@ export function BranchTreeView() {
               <List className="h-3 w-3" />
               List
             </button>
+            {branches.length >= 2 && (
+              <button
+                onClick={() => setViewMode('diff')}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-xs transition-colors',
+                  viewMode === 'diff'
+                    ? 'bg-zinc-700 text-zinc-200'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                )}
+              >
+                <GitCompare className="h-3 w-3" />
+                Diff
+              </button>
+            )}
           </div>
           <Button
             variant="outline"
@@ -80,6 +95,8 @@ export function BranchTreeView() {
             greedyPath={greedyPath}
             branches={branches.map((b) => ({ token: b.token, exploration: b.exploration }))}
           />
+        ) : viewMode === 'diff' ? (
+          <BranchDiffView />
         ) : (
           <div className="space-y-3 pr-2">
             {branches.map((branch, index) => (

@@ -1,4 +1,4 @@
-# Claude Code Agents — AI Research Workbench
+# Claude Code Agents — Prism
 
 Specialized modes for different types of work. When a task matches an agent's description, adopt that agent's focus and constraints.
 

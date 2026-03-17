@@ -103,4 +103,44 @@ public sealed class InferenceRecord : BaseEntity
     /// Gets or sets the serialized <c>EnvironmentSnapshot</c> as JSON, or null if not captured.
     /// </summary>
     public string? EnvironmentJson { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mean entropy across all token positions, if computed.
+    /// </summary>
+    public double? MeanEntropy { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of tokens flagged as surprising.
+    /// </summary>
+    public int? SurpriseTokenCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tokens per second throughput.
+    /// </summary>
+    public double? TokensPerSecond { get; set; }
+
+    /// <summary>
+    /// Gets or sets the estimated cost of this run.
+    /// </summary>
+    public decimal? EstimatedCost { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional project ID this run belongs to.
+    /// </summary>
+    public Guid? ProjectId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional experiment ID this run is part of.
+    /// </summary>
+    public Guid? ExperimentId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional prompt version ID that generated this request.
+    /// </summary>
+    public Guid? PromptVersionId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the trace for this record, if token-level data was captured.
+    /// </summary>
+    public InferenceTrace? Trace { get; set; }
 }

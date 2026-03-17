@@ -24,6 +24,7 @@ import { SystemPromptEditor } from './components/SystemPromptEditor'
 import { ParameterSidebar } from './components/ParameterSidebar'
 import { MessageStatsPanel } from './components/MessageStatsPanel'
 import { LogprobsPanel } from './components/LogprobsPanel'
+import { TokenInspectorDrawer } from './components/TokenInspectorDrawer'
 import type { SendMessageRequest, Message } from './types'
 
 export function PlaygroundPage() {
@@ -38,6 +39,9 @@ export function PlaygroundPage() {
   const [showBottomPanel, setShowBottomPanel] = useState(false)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [logprobsMessage, setLogprobsMessage] = useState<Message | null>(null)
+  const [inspectorMessage, setInspectorMessage] = useState<Message | null>(null)
+  const [inspectorTokenIndex, setInspectorTokenIndex] = useState<number | null>(null)
+  const [showInspector, setShowInspector] = useState(false)
 
   const conversationQuery = useConversation(
     stream.completedConversation?.id ?? activeConversationId
@@ -91,6 +95,12 @@ export function PlaygroundPage() {
   const handleSelectMessageForLogprobs = useCallback((message: Message) => {
     setLogprobsMessage(message)
     setShowBottomPanel(true)
+  }, [])
+
+  const handleTokenClick = useCallback((message: Message, tokenIndex: number) => {
+    setInspectorMessage(message)
+    setInspectorTokenIndex(tokenIndex)
+    setShowInspector(true)
   }, [])
 
   const handleExport = useCallback(async () => {
@@ -234,6 +244,7 @@ export function PlaygroundPage() {
             streamingTokens={stream.streamingTokens}
             isStreaming={stream.isStreaming}
             onSelectMessageForLogprobs={handleSelectMessageForLogprobs}
+            onTokenClick={handleTokenClick}
             className="flex-1 min-h-0"
           />
 
@@ -279,8 +290,18 @@ export function PlaygroundPage() {
           <MessageStatsPanel messages={messages} className="w-56 shrink-0" />
         )}
 
+        {/* Token Inspector Drawer */}
+        {showInspector && inspectorMessage?.logprobsData && (
+          <TokenInspectorDrawer
+            logprobsData={inspectorMessage.logprobsData}
+            selectedIndex={inspectorTokenIndex}
+            onSelectIndex={setInspectorTokenIndex}
+            onClose={() => setShowInspector(false)}
+          />
+        )}
+
         {/* Right Panel: Parameters */}
-        {showRightPanel && (
+        {showRightPanel && !showInspector && (
           <div className="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/50">
             <ParameterSidebar />
           </div>

@@ -1,24 +1,23 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, ExternalLink, Save } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNotebook, useUpdateNotebook } from './api'
 
 export function NotebookDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [jupyterReady, setJupyterReady] = useState(false)
+  const [, setJupyterReady] = useState(false)
   const [showJsonEditor, setShowJsonEditor] = useState(false)
   const [editContent, setEditContent] = useState('')
+  const [contentInitialized, setContentInitialized] = useState(false)
 
   const { data: notebook } = useNotebook(id!)
   const updateNotebook = useUpdateNotebook(id!)
 
-  useEffect(() => {
-    if (notebook) {
-      setEditContent(notebook.content)
-    }
-  }, [notebook])
+  if (notebook && !contentInitialized) {
+    setEditContent(notebook.content)
+    setContentInitialized(true)
+  }
 
   // Listen for JupyterLite ready messages
   useEffect(() => {

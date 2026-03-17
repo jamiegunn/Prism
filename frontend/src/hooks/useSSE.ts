@@ -37,7 +37,15 @@ export function useSSE(url: string | null, options: UseSSEOptions = {}): UseSSER
 
   useEffect(() => {
     if (!url) {
-      close()
+      // Inline cleanup instead of calling close() to avoid setState in effect body
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
       return
     }
 

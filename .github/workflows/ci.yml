@@ -1,0 +1,282 @@
+name: Prism CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  NODE_VERSION: "20"
+
+jobs:
+  backend-build:
+    name: Backend Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore Prism.sln
+
+      - name: Build
+        run: dotnet build Prism.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test Prism.sln --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/**/TestResults/*.trx
+
+  backend-format:
+    name: Backend Format Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Check formatting
+        run: dotnet format Prism.sln --verify-no-changes --verbosity diagnostic
+
+  frontend-build:
+    name: Frontend Build & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b --noEmit
+
+      - name: Build
+        run: npm run build
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+  openapi-drift:
+    name: OpenAPI Drift Check
+    runs-on: ubuntu-latest
+    needs: [backend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore and build backend
+        working-directory: backend
+        run: dotnet build Prism.sln --configuration Release
+
+      - name: Generate OpenAPI spec
+        working-directory: backend
+        run: dotnet run --project src/Prism.Api --no-build --configuration Release -- --export-openapi > /tmp/openapi-current.json 2>/dev/null || echo "OpenAPI export not yet configured — skipping drift check"
+
+      - name: Check for drift
+        run: |
+          if [ -f /tmp/openapi-current.json ] && [ -f frontend/openapi.json ]; then
+            if ! diff -q /tmp/openapi-current.json frontend/openapi.json > /dev/null 2>&1; then
+              echo "::error::OpenAPI spec has drifted. Run 'dotnet run --project backend/src/Prism.Api -- --export-openapi > frontend/openapi.json' and commit the result."
+              diff /tmp/openapi-current.json frontend/openapi.json || true
+              exit 1
+            fi
+            echo "OpenAPI spec is up to date."
+          else
+            echo "::warning::OpenAPI drift check skipped — spec files not found. This check will activate once OpenAPI export is configured."
+          fi
+
+  orval-drift:
+    name: Orval Client Drift Check
+    runs-on: ubuntu-latest
+    needs: [frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Check for Orval drift
+        working-directory: frontend
+        run: |
+          # Snapshot current generated files
+          if [ -d src/services/generated ]; then
+            cp -r src/services/generated /tmp/orval-before
+            # Try to regenerate (requires running backend, so skip if unavailable)
+            npx orval 2>/dev/null && {
+              if ! diff -rq src/services/generated /tmp/orval-before > /dev/null 2>&1; then
+                echo "::error::Orval generated client has drifted. Run 'npm run api:generate' in frontend/ and commit the result."
+                diff -r src/services/generated /tmp/orval-before || true
+                exit 1
+              fi
+              echo "Orval client is up to date."
+            } || echo "::warning::Orval generation requires running backend. Drift check will be validated manually until OpenAPI spec file is committed."
+          else
+            echo "::warning::No generated client found. Orval drift check skipped."
+          fi
+
+  storybook-build:
+    name: Storybook Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Storybook
+        run: |
+          if npx storybook --version > /dev/null 2>&1; then
+            npx storybook build --output-dir storybook-static
+          else
+            echo "::warning::Storybook not yet installed. Run 'npx storybook@latest init' when ready. This check will activate automatically."
+          fi
+
+  playwright-smoke:
+    name: Playwright Smoke Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Playwright tests
+        run: |
+          if [ -f playwright.config.ts ]; then
+            npx playwright install --with-deps chromium
+            npx playwright test --project=chromium
+          else
+            echo "::warning::Playwright not yet configured. This check will activate once playwright.config.ts exists and tests are added."
+          fi
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          if-no-files-found: ignore
+
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - backend-build
+      - backend-format
+      - frontend-build
+      - frontend-lint
+      - openapi-drift
+      - orval-drift
+      - storybook-build
+      - playwright-smoke
+    steps:
+      - name: Check results
+        run: |
+          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Build & Test | ${{ needs.backend-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Format | ${{ needs.backend-format.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Build & Typecheck | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Lint | ${{ needs.frontend-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OpenAPI Drift | ${{ needs.openapi-drift.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Orval Drift | ${{ needs.orval-drift.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Storybook Build | ${{ needs.storybook-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Playwright Smoke | ${{ needs.playwright-smoke.result }} |" >> $GITHUB_STEP_SUMMARY
+
+          # Fail if any required job failed
+          if [[ "${{ needs.backend-build.result }}" == "failure" ]] || \
+             [[ "${{ needs.backend-format.result }}" == "failure" ]] || \
+             [[ "${{ needs.frontend-build.result }}" == "failure" ]] || \
+             [[ "${{ needs.frontend-lint.result }}" == "failure" ]]; then
+            echo ""
+            echo "::error::One or more required CI checks failed."
+            exit 1
+          fi

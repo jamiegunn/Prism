@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { WorkspaceSwitcher } from '@/features/workspaces/WorkspaceSwitcher'
 
 interface NavItem {
   label: string
@@ -54,6 +55,8 @@ export function Sidebar() {
         <Diamond className="h-6 w-6 text-violet-500" />
         <span className="text-lg font-bold tracking-tight text-zinc-50">Prism</span>
       </div>
+
+      <WorkspaceSwitcher />
 
       <ScrollArea className="flex-1 py-2">
         <nav className="flex flex-col gap-1 px-2">

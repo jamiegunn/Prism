@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GitCompareArrows, Loader2, Hash, AlertCircle } from 'lucide-react'
+import { GitCompareArrows, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'

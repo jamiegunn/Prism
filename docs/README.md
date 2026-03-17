@@ -1,4 +1,4 @@
-# AI Research Workbench — Documentation
+# Prism — Documentation
 
 ## Project Documentation
 
@@ -9,6 +9,8 @@
 | [PROJECT_PLAN.md](/PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
 | [AGENTS.md](/AGENTS.md) | Claude Code agent modes (Feature Builder, Debugger, etc.) |
 | [SKILLS.md](/SKILLS.md) | Claude Code skills (create feature, add endpoint, write handler, etc.) |
+| [Module Ownership Map](./module-ownership.md) | Module-to-slice mapping, entity ownership, dependency rules |
+| [Product Truth Matrix](./product-truth.yaml) | Machine-readable status of every module vs. README promises |
 
 ### Implementation Plans
 
@@ -50,6 +52,10 @@ All significant architectural decisions are recorded in [`/docs/ADR/`](./ADR/).
 | [ADR-010](./ADR/010-project-naming.md) | Project Name — Prism | Accepted |
 | [ADR-011](./ADR/011-contextual-help-panels.md) | Contextual Help Panels on Feature Views | Accepted |
 | [ADR-012](./ADR/012-parameter-tooltips.md) | Parameter Tooltips on All Configuration Controls | Accepted |
+| [ADR-013](./ADR/013-inference-runtime-layer.md) | Inference Runtime Layer | Accepted |
+| [ADR-014](./ADR/014-artifact-model.md) | Standardized Artifact Model | Accepted |
+| [ADR-015](./ADR/015-provider-capability-model.md) | Provider Capability Model | Accepted |
+| [ADR-016](./ADR/016-durable-job-model.md) | Durable Job Model | Accepted |
 
 ## Conventions
 

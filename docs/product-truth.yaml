@@ -1,0 +1,513 @@
+# Prism — Product Truth Matrix
+# Generated: 2026-03-16
+# Purpose: Machine-readable status of every README module against actual implementation
+# Update this file as tasks are completed. Never let claims outpace reality.
+
+meta:
+  last_updated: "2026-03-16"
+  assessed_by: "Code audit of backend/src and frontend/src"
+  notes: >
+    Code exists for most modules (handlers, endpoints, UI pages), but the delivery plan's
+    quality bar (runtime layer, capability probing, durable jobs, comprehensive tests,
+    polished UX with all states, accessibility, Storybook, Playwright) is not yet met.
+    "Code exists" != "Done". This matrix distinguishes between the two.
+
+modules:
+
+  - id: playground
+    name: Playground
+    phase: 1
+    promise: "Chat with streaming, per-token heatmap, alternatives panel, entropy/perplexity/surprise, save/fork/replay/export, 2-4 pane compare mode"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      SSE streaming endpoint, conversation CRUD, message persistence, logprobs forwarding.
+      Missing: does not route through a shared IInferenceRuntime (ADR-013). Recording is
+      via decorator, not centralized. Token analysis (entropy/perplexity/surprise) is
+      computed ad hoc, not via ITokenAnalysisService.
+    frontend_status: implemented
+    frontend_notes: >
+      Multi-panel layout, SSE streaming with token accumulation, parameter sidebar,
+      logprobs visualization (TokenHeatmap, AlternativeTokensPanel, EntropyChart,
+      SurpriseHighlighter, PerplexityBadge). Token inspector drawer opens on token
+      click with navigation, metrics grid, alternatives with bars, context view.
+      Response metrics strip (tokens, latency, TTFT, throughput, perplexity) on every
+      assistant message. Compare mode supports 2-4 panes in 2x2 grid, allows same
+      instance. No Storybook stories. No Playwright tests.
+    provider_limitations: >
+      Logprobs require provider support (vLLM full, Ollama partial, LM Studio none).
+      No capability-aware UI gating yet — controls show regardless of provider support.
+    tests_present: false
+    release_blockers:
+      - Inference calls must route through IInferenceRuntime (P1-01)
+      - Token analysis must use shared ITokenAnalysisService (P1-01)
+      - Capability-aware UI gating needed (P1-02)
+      - Compare mode needs polish (P1-04)
+      - Tests needed (P1-09)
+
+  - id: token-explorer
+    name: Token Explorer
+    phase: 1
+    promise: "Step one token at a time, force from top-K, branch from any step, inspect distributions, view generation tree, diff branches"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Tokenize, detokenize, next-token prediction, branch exploration endpoints exist.
+      No persisted entities (stateless). Missing: does not use shared runtime or trace
+      schemas. Branch tree is computed client-side.
+    frontend_status: implemented
+    frontend_notes: >
+      5-tab layout (predictions, step-through, branches, tokenizer, compare).
+      Probability distribution display, sampling visualization, branch tree view.
+      Branch diff view added — side-by-side token comparison with divergence detection,
+      position-indexed rows, probability display, forced token markers. Three view
+      modes: tree, list, diff. No Storybook or Playwright coverage.
+    provider_limitations: >
+      Requires logprobs and tokenize support. Only vLLM provides full experience.
+      Ollama supports logprobs but not tokenize. No capability gating in UI.
+    tests_present: false
+    release_blockers:
+      - Capability gating needed (P1-02)
+      - Tests needed (P1-09)
+
+  - id: tokenizer-explorer
+    name: Tokenizer Explorer
+    phase: 1
+    promise: "Paste text, inspect tokens/spans/IDs/bytes, compare across models, see token counts and cost estimate"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Tokenize endpoint exists via Token Explorer backend. No separate feature slice
+      needed — uses inference provider tokenize capability directly.
+    frontend_status: partial
+    frontend_notes: >
+      Tokenizer tab within Token Explorer page. Three display modes (Text/IDs/Bytes),
+      special token highlighting (amber for BOS/EOS/PAD/CLS/SEP/UNK/MASK patterns),
+      clipboard copy, tooltip with text/ID/bytes/hex/Unicode per token, cost estimator
+      with configurable pricing, detokenize, multi-model comparison via Compare tab.
+    provider_limitations: >
+      Tokenize endpoint not available on all providers. No fallback or capability message.
+    tests_present: false
+    release_blockers:
+      - Capability messaging when tokenize unavailable (P1-02)
+
+  - id: models
+    name: Model Management
+    phase: 1
+    promise: "Register providers, probe capabilities, health/metrics dashboard, capability matrix, model snapshot history"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Instance CRUD, health check endpoint, model listing, basic metrics.
+      Missing: no IProviderCapabilityRegistry (ADR-015). Capabilities are not probed
+      or persisted. No model snapshot history entity.
+    frontend_status: implemented
+    frontend_notes: >
+      Instance cards with status indicators, detail panel, KV cache gauge,
+      capability badges. Register instance dialog. Capability matrix view shows
+      all instances vs all capabilities (logprobs, tokenize, guided, stream,
+      metrics, swap, multimodal, tools) with tier badges. Probe button in detail
+      panel triggers live capability detection. Probe errors shown in matrix
+      with tooltips. Model snapshot history not yet implemented.
+    provider_limitations: >
+      Health check and model listing vary by provider. No explicit capability display.
+    tests_present: false
+    release_blockers:
+      - IProviderCapabilityRegistry implementation (P1-02)
+      - ModelSnapshot entity and history (P1-07)
+      - Capability matrix view (P1-07)
+      - Tests needed (P1-09)
+
+  - id: history
+    name: History & Replay
+    phase: 1
+    promise: "Every run recorded, filter/search/tag, replay with overrides, side-by-side diff, trace diff"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Inference record persistence, list/detail/tag endpoints, replay endpoint.
+      Missing: does not use standardized InferenceRun/InferenceTrace/TokenEvent
+      schemas (P1-03). Replay does not produce a linked ReplayRun entity.
+      No trace-level diff support.
+    frontend_status: implemented
+    frontend_notes: >
+      Record list with filtering (search, source, model, date range, success, tags),
+      pagination, detail panel, tagging, replay button. Missing: side-by-side diff
+      view, trace diff summary, replay with parameter override UI.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - Tests needed (P1-09)
+
+  - id: prompt-lab
+    name: Prompt Lab
+    phase: 2
+    promise: "Versioned prompts, variables, few-shot examples, A/B testing, links to experiments and evaluations"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Prompt templates, versions, variants, multimodal support. Handlers for CRUD.
+      Missing: few-shot block support, A/B test harness, experiment/evaluation linking.
+    frontend_status: implemented
+    frontend_notes: >
+      Template list, version management, variable editor, test panel.
+      Missing: few-shot block editor, A/B comparison UI, experiment linking.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - Workspace/Project organization (P2-01)
+      - Few-shot blocks (P2-02)
+      - Test harness with multi-provider (P2-03)
+      - Tests (P2-07)
+
+  - id: experiments
+    name: Experiments
+    phase: 2
+    promise: "Group related runs, parameter sweeps, aggregate metrics, statistical summaries, comparisons"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Project/experiment/run entities, CRUD handlers, comparison endpoint.
+      Missing: parameter sweep runner, aggregate metric computation,
+      statistical summary generation.
+    frontend_status: implemented
+    frontend_notes: >
+      Project management, experiment list, run views, comparison layout.
+      Missing: sweep configuration UI, metric charts, pairwise compare,
+      significance indicators.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - Workspace/Project organization (P2-01)
+      - Sweep runner (P2-04)
+      - Dashboards (P2-05)
+      - Tests (P2-07)
+
+  - id: datasets
+    name: Datasets
+    phase: 3
+    promise: "Import/export, versioning, splits, schema/stats, annotations, filtering"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Dataset/record entities, import endpoint, split management, JSONB schema.
+      Missing: CSV/JSONL export, dataset versioning entity, schema inference,
+      validation reports, annotation workflow.
+    frontend_status: implemented
+    frontend_notes: >
+      Dataset list, upload dialog, record table, split dialog, stats panel.
+      Missing: export UI, version history, annotation UI, advanced filtering.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - Export pipeline (P3-01)
+      - Versioning (P3-01)
+      - Annotation workflow (P3-02)
+      - Tests (P3-07)
+
+  - id: evaluation
+    name: Evaluation
+    phase: 3
+    promise: "Define suites, deterministic + judge metrics, row-level inspection, leaderboards, calibration, human review"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Evaluation suite/run entities, metric/criteria definitions, scoring handler.
+      Missing: actual metric implementations (ROUGE, BLEU, exact match),
+      LLM-as-judge integration, calibration computation, human review workflow.
+    frontend_status: partial
+    frontend_notes: >
+      Evaluation list and detail views. Missing: leaderboard, row-level
+      inspection, calibration plots, cost-vs-quality chart, human review mode.
+    provider_limitations: >
+      Judge-based metrics require inference provider. Cost varies.
+    tests_present: false
+    release_blockers:
+      - Metric implementations (P3-04)
+      - Judge provider integration (P3-04)
+      - Dashboards (P3-05)
+      - Tests (P3-07)
+
+  - id: batch-inference
+    name: Batch Inference
+    phase: 3
+    promise: "Durable jobs, progress/retries visible, streaming results, failed record retry, cost/throughput reporting"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Batch job entity, queue, status tracking, result persistence.
+      Missing: jobs are not durable across restarts (ADR-016 not implemented).
+      No retry policy. No partial result streaming. No cost/throughput metrics.
+    frontend_status: implemented
+    frontend_notes: >
+      Job list with status filtering, job cards with progress bars,
+      pause/resume/cancel/retry buttons. Missing: cost/throughput display,
+      failed record drill-down.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - Durable job model (ADR-016, P3-03)
+      - Retry policy (P3-03)
+      - Cost/throughput reporting (P3-06)
+      - Tests (P3-07)
+
+  - id: analytics
+    name: Analytics
+    phase: 3
+    promise: "Usage over time, cost by project, latency distributions, throughput, provider reliability"
+    current_status: partial
+    backend_status: partial
+    backend_notes: >
+      Basic performance metrics and usage aggregation handlers.
+      Missing: cost tracking (no cost model), latency distribution computation,
+      provider reliability tracking. Reads from other entities but aggregation
+      queries are basic.
+    frontend_status: partial
+    frontend_notes: >
+      Usage charts (Recharts), performance table, model breakdown.
+      Missing: cost-by-project view, latency histogram, provider reliability
+      dashboard, time range selection.
+    provider_limitations: >
+      Cost data requires per-model pricing configuration (not yet implemented).
+    tests_present: false
+    release_blockers:
+      - Cost model (P3-06)
+      - Latency/reliability tracking (P3-06)
+      - Tests (P3-07)
+
+  - id: rag
+    name: RAG Workbench
+    phase: 4
+    promise: "Ingest documents, inspect chunking, trace retrieval, grounded citations, compare vector/BM25/hybrid"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Collection/document/chunk entities with pgvector embeddings, search endpoint.
+      Missing: chunking strategy preview, retrieval trace entity, citation mapping,
+      BM25/hybrid search, query rewrite visibility.
+    frontend_status: partial
+    frontend_notes: >
+      Collection list, document upload, search panel. Missing: chunking inspector,
+      retrieval debugger, citation view, search strategy comparison.
+    provider_limitations: >
+      Requires pgvector extension. Embedding model must be available via provider.
+    tests_present: false
+    release_blockers:
+      - Chunking preview (P4-02)
+      - Retrieval debugger (P4-03)
+      - Citation mapping (P4-04)
+      - Tests (P4-07)
+
+  - id: structured-output
+    name: Structured Output
+    phase: 4
+    promise: "JSON schema definitions stored/validated, guided decoding with provider-native support, fallback validation, failure inspector"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Schema definition entity, JSON validation, guided decoding handler.
+      Missing: provider-native guidance detection (needs capability registry),
+      explicit fallback mode, validation failure persistence.
+    frontend_status: partial
+    frontend_notes: >
+      Schema management, JSON validation panel, test panel.
+      Missing: capability-aware guidance mode display, failure inspector,
+      export of invalid outputs.
+    provider_limitations: >
+      Guided decoding is vLLM-only. Other providers need fallback validation.
+      No capability detection yet.
+    tests_present: false
+    release_blockers:
+      - Capability-aware guidance (P4-06)
+      - Failure inspector (P4-06)
+      - Tests (P4-07)
+
+  - id: agents
+    name: Agent Builder
+    phase: 5
+    promise: "YAML-defined agents, step-by-step traces, tool call visibility, reproducible retries, replay"
+    current_status: partial
+    backend_status: implemented
+    backend_notes: >
+      Workflow/run/step entities, tool registry, pattern config (ReAct etc.).
+      Missing: YAML spec parser, durable step traces, state snapshots,
+      replay from step, budget limits.
+    frontend_status: partial
+    frontend_notes: >
+      Workflow creation dialog, tool selection, pattern/parameter config.
+      Missing: execution timeline, step inspector, tool I/O viewer,
+      rerun-from-step UI.
+    provider_limitations: >
+      Function calling required for tool use. Not all providers support it.
+    tests_present: false
+    release_blockers:
+      - YAML agent spec (P5-01)
+      - Durable traces (P5-02)
+      - Trace UI (P5-03)
+      - Tests (P5-06)
+
+  - id: notebooks
+    name: Notebooks
+    phase: 5
+    promise: "JupyterLite embedded, generated SDK for runs/prompts/datasets, artifact attachment"
+    current_status: minimal
+    backend_status: implemented
+    backend_notes: >
+      Notebook asset entity, CRUD handlers, download endpoint.
+      Missing: JupyterLite integration, generated SDK, artifact attachment.
+    frontend_status: partial
+    frontend_notes: >
+      Notebook list page with create/download/delete. Missing: embedded
+      JupyterLite editor, SDK documentation, artifact linking.
+    provider_limitations: none
+    tests_present: false
+    release_blockers:
+      - JupyterLite embedding (P5-04)
+      - Generated SDK (P5-04)
+      - Tests (P5-06)
+
+  - id: fine-tuning
+    name: Fine-Tuning
+    phase: 5
+    promise: "Dataset prep, external job launch, status tracking, result registration, pre/post evaluation compare"
+    current_status: minimal
+    backend_status: implemented
+    backend_notes: >
+      LoRA adapter entity, training job entity, export handler.
+      Missing: dataset packaging pipeline, external job launch adapters,
+      status polling, model registration after tune, evaluation linkage.
+    frontend_status: partial
+    frontend_notes: >
+      Adapter list, export dialog with format selection. Missing: dataset
+      prep wizard, job launch UI, status tracking, evaluation comparison.
+    provider_limitations: >
+      Fine-tuning support varies dramatically by provider. Integration-only.
+    tests_present: false
+    release_blockers:
+      - Dataset packaging (P5-05)
+      - Job launch adapters (P5-05)
+      - Evaluation compare (P5-05)
+      - Tests (P5-06)
+
+# Cross-cutting concerns
+
+cross_cutting:
+
+  - id: inference-runtime
+    name: Shared Inference Runtime
+    status: implemented
+    notes: >
+      IInferenceRuntime (non-streaming + streaming), IInferenceRecorder (channel-backed),
+      ITokenAnalysisService (perplexity, entropy, surprise), IReplayService (load + re-execute
+      with overrides), IRuntimeProviderResolver (DB lookup + factory). All registered in DI.
+      Features can now call runtime instead of wiring providers directly. Existing features
+      not yet migrated to use runtime (migration is per-feature work in P1-04+).
+
+  - id: capability-registry
+    name: Provider Capability Registry
+    status: implemented
+    notes: >
+      IProviderCapabilityRegistry implemented with ProbeAsync (live probe via health/tokenize/metrics),
+      GetCachedAsync (read from DB), ListAllAsync. CapabilityTier enum (Unknown/Chat/Inspect/Research).
+      ProviderCapabilitySnapshot record with all capability flags + probe timestamp + error.
+      API endpoints: GET /capabilities (list all), GET /{id}/capabilities (cached),
+      POST /{id}/probe (live probe). Probed results persist to InferenceInstance entity.
+      Registration already probes on create. Frontend capability gating not yet implemented.
+
+  - id: artifact-store
+    name: Artifact Store
+    status: not_started
+    notes: >
+      ADR-014 accepted. IArtifactStore not yet implemented. Features write files
+      directly via IFileStorage without standardized metadata, hashing, or
+      schema versioning.
+
+  - id: job-model
+    name: Durable Job Model
+    status: not_started
+    notes: >
+      ADR-016 accepted. IJobQueue exists with InMemoryJobQueue and RedisJobQueue,
+      but jobs are not durable across restarts. No lease/heartbeat model. No
+      retry policy. This blocks P3-03.
+
+  - id: workspace-project
+    name: Workspace & Project Organization
+    status: implemented
+    notes: >
+      Workspace entity created (Prism.Features/Workspaces/) with CRUD endpoints
+      and default workspace seeded on first launch. Project entity has optional
+      WorkspaceId. 7 features already reference ProjectId. Frontend: workspace
+      switcher in sidebar, Zustand store for active workspace/project context.
+
+  - id: tests
+    name: Test Suite
+    status: partial
+    notes: >
+      32 backend unit tests passing: TokenAnalysisService (7), LogprobsCalculator (8),
+      InferenceRuntime (5), ChannelInferenceRecorder (3), CapabilityTier (9).
+      12 Playwright E2E specs defined (smoke + Phase 1 pages). No integration tests
+      with Testcontainers yet. No Storybook component tests yet.
+
+  - id: ci
+    name: CI Quality Gates
+    status: implemented
+    notes: >
+      GitHub Actions CI pipeline configured (.github/workflows/ci.yml).
+      Jobs: backend build+test, backend format, frontend build+typecheck,
+      frontend lint, OpenAPI drift check, Orval drift check, Storybook build,
+      Playwright smoke tests. All core gates (build, typecheck, lint) pass green.
+      Drift checks and Storybook/Playwright emit warnings until fully configured.
+
+  - id: storybook
+    name: Storybook Coverage
+    status: configured
+    notes: >
+      Storybook config exists (.storybook/main.ts, preview.ts). CI job will
+      build Storybook when dependencies are installed. No component stories yet.
+      Storybook packages need to be installed (npx storybook@latest init).
+
+  - id: playwright
+    name: Playwright E2E Tests
+    status: configured
+    notes: >
+      Playwright config exists (playwright.config.ts) with Chromium project.
+      3 smoke tests defined (app load, nav visible, playground renders).
+      CI job will run Playwright when @playwright/test is installed.
+      Packages need to be installed (npm i -D @playwright/test).
+
+  - id: openapi-orval
+    name: OpenAPI & Orval Client Generation
+    status: partial
+    notes: >
+      Generated API client exists (51 files) but may be stale relative to
+      current backend endpoints. CI drift checks configured but will emit
+      warnings until OpenAPI spec file is committed and backend export is wired.
+
+  - id: design-system
+    name: Design System
+    status: partial
+    notes: >
+      17 shadcn/ui components installed. Tailwind configured. Dark mode default.
+      Missing: semantic design tokens, color-blind-safe palette, comprehensive
+      component patterns (diff, inspector, timeline, stepper, tree, code editor).
+      No Storybook documentation.
+
+  - id: accessibility
+    name: Accessibility (WCAG 2.1 AA)
+    status: partial
+    notes: >
+      Some ARIA labels and tooltips present. Missing: systematic keyboard
+      navigation, visible focus rings everywhere, chart data table fallbacks,
+      screen reader testing.
+
+  - id: seed-data
+    name: Seed Data & Fixtures
+    status: implemented
+    notes: >
+      8 seeders registered and running on dev startup. Coverage:
+      ModelsSeeder (2 providers with well-known IDs), PlaygroundSeeder (3 templates,
+      logprobs demo, 2 use case guides), HistorySeeder (3 inference records),
+      ExperimentsSeeder (1 project, 1 experiment, 2 runs), PromptLabSeeder
+      (2 templates, 3 versions), DatasetsSeeder (1 dataset, 6 records, 3 splits),
+      RagSeeder (1 collection, 1 document, 3 chunks), AgentsSeeder (1 workflow,
+      1 completed run with 3-step trace). All idempotent.

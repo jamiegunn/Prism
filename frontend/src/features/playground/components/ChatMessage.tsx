@@ -7,10 +7,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import type { Message } from '../types'
 import type { TokenLogprob } from '@/services/types/logprobs'
 import { LogprobsPanel } from './LogprobsPanel'
+import { ResponseMetricsStrip } from './ResponseMetricsStrip'
 
 interface ChatMessageProps {
   message: Message
   onSelectForLogprobs?: (message: Message) => void
+  onTokenClick?: (message: Message, tokenIndex: number) => void
 }
 
 /** Strip <think>/<thinking> blocks and clean up excessive newlines */
@@ -27,7 +29,7 @@ function cleanContent(raw: string): string {
 
 type HeatmapMode = 'off' | 'heatmap' | 'entropy' | 'surprise'
 
-export function ChatMessage({ message, onSelectForLogprobs }: ChatMessageProps) {
+export function ChatMessage({ message, onSelectForLogprobs, onTokenClick }: ChatMessageProps) {
   const [showLogprobs, setShowLogprobs] = useState(false)
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>('off')
 
@@ -56,7 +58,11 @@ export function ChatMessage({ message, onSelectForLogprobs }: ChatMessageProps) 
       >
         {/* Message content: plain text or heatmap overlay */}
         {hasLogprobs && heatmapMode !== 'off' ? (
-          <TokenHeatmapContent tokens={message.logprobsData!.tokens} mode={heatmapMode} />
+          <TokenHeatmapContent
+            tokens={message.logprobsData!.tokens}
+            mode={heatmapMode}
+            onTokenClick={onTokenClick ? (index) => onTokenClick(message, index) : undefined}
+          />
         ) : (
           <p className="text-sm whitespace-pre-wrap break-words">{displayContent}</p>
         )}
@@ -122,6 +128,11 @@ export function ChatMessage({ message, onSelectForLogprobs }: ChatMessageProps) 
             />
           </div>
         )}
+
+        {/* Response metrics strip */}
+        {!isUser && (message.tokenCount || message.latencyMs) && (
+          <ResponseMetricsStrip message={message} />
+        )}
       </div>
     </div>
   )
@@ -130,6 +141,7 @@ export function ChatMessage({ message, onSelectForLogprobs }: ChatMessageProps) 
 interface TokenHeatmapContentProps {
   tokens: TokenLogprob[]
   mode: HeatmapMode
+  onTokenClick?: (index: number) => void
 }
 
 function getTokenEntropy(token: TokenLogprob): number {
@@ -159,7 +171,7 @@ function getEntropyBarHeight(entropy: number, maxEntropy: number): number {
   return Math.min(100, (entropy / maxEntropy) * 100)
 }
 
-function TokenHeatmapContent({ tokens, mode }: TokenHeatmapContentProps) {
+function TokenHeatmapContent({ tokens, mode, onTokenClick }: TokenHeatmapContentProps) {
   const maxEntropy = Math.max(...tokens.map(getTokenEntropy), 0.01)
 
   return (
@@ -188,7 +200,7 @@ function TokenHeatmapContent({ tokens, mode }: TokenHeatmapContentProps) {
           return (
             <Tooltip key={index}>
               <TooltipTrigger>
-                <span className="relative inline-block">
+                <span className="relative inline-block" onClick={() => onTokenClick?.(index)}>
                   <span
                     className={cn(
                       'rounded-sm px-0.5 py-0.5 font-mono text-sm cursor-pointer transition-all hover:opacity-80',

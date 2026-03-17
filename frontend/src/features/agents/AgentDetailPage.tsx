@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Clock } from 'lucide-react'
 import { useState } from 'react'
-import { useWorkflow, useRuns, useRunAgent } from './api'
+import { useWorkflow, useRuns } from './api'
 import type { AgentRun, AgentStep } from './types'
 
 type Tab = 'run' | 'history'
