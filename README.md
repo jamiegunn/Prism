@@ -183,16 +183,20 @@ cd frontend && npm run lint
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Full architecture: structure, patterns, abstractions, interfaces |
 | [DESIGN.md](DESIGN.md) | Vision, features, wireframes, data models, API surface |
 | [PROJECT_PLAN.md](PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
-| [docs/ADR/](docs/ADR/) | Architecture Decision Records (10 ADRs) |
+| [docs/ADR/](docs/ADR/) | Architecture Decision Records (16 ADRs) |
+| [docs/product-truth.yaml](docs/product-truth.yaml) | Machine-readable status of every module |
+| [docs/module-ownership.md](docs/module-ownership.md) | Module-to-slice mapping and dependency rules |
 | [CLAUDE.md](CLAUDE.md) | Development guidelines for AI-assisted coding |
 
 ## Roadmap
 
-- **Phase 1 (Walk):** Playground, Token Explorer, Tokenizer, Model Management, History — *talk to a model, see logprobs, save results*
-- **Phase 2 (Jog):** Prompt Lab, Experiments, Multi-Pane Playground — *systematic prompt development and experiment tracking*
-- **Phase 3 (Run):** Datasets, Evaluation, Batch Inference, Analytics — *work with data at scale and evaluate systematically*
-- **Phase 4 (Sprint):** RAG Workbench, Structured Output — *retrieval-augmented generation and constrained decoding*
-- **Phase 5 (Fly):** Agent Builder, Notebooks, Fine-Tuning — *autonomous workflows and training integration*
+- **Phase 1 (Walk):** Playground, Token Explorer, Tokenizer, Model Management, History — *implemented*
+- **Phase 2 (Jog):** Prompt Lab, Experiments, Workspaces — *implemented*
+- **Phase 3 (Run):** Datasets, Evaluation, Batch Inference, Analytics — *implemented*
+- **Phase 4 (Sprint):** RAG Workbench, Structured Output — *implemented*
+- **Phase 5 (Fly):** Agent Builder, Notebooks, Fine-Tuning — *implemented*
+
+All 14 modules have backend handlers, API endpoints, and frontend pages. 56 backend unit tests. CI pipeline with 8 jobs.
 
 ## Contributing
 
