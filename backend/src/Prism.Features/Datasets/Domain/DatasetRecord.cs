@@ -27,4 +27,24 @@ public sealed class DatasetRecord : BaseEntity
     /// Gets or sets the order index for maintaining record sequence.
     /// </summary>
     public int OrderIndex { get; set; }
+
+    /// <summary>
+    /// Gets or sets the annotation label (e.g., "correct", "incorrect", "needs-review").
+    /// </summary>
+    public string? AnnotationLabel { get; set; }
+
+    /// <summary>
+    /// Gets or sets annotation notes from the reviewer.
+    /// </summary>
+    public string? AnnotationNote { get; set; }
+
+    /// <summary>
+    /// Gets or sets the correctness flag: true = correct, false = incorrect, null = unreviewed.
+    /// </summary>
+    public bool? IsCorrect { get; set; }
+
+    /// <summary>
+    /// Gets or sets when this record was last annotated.
+    /// </summary>
+    public DateTime? AnnotatedAt { get; set; }
 }

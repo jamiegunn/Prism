@@ -36,9 +36,18 @@ public sealed class DatasetRecordConfiguration : IEntityTypeConfiguration<Datase
                     c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                     c => JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
+        // Annotation fields
+        builder.Property(e => e.AnnotationLabel)
+            .HasMaxLength(100);
+
+        builder.Property(e => e.AnnotationNote)
+            .HasMaxLength(2000);
+
         // Indexes
         builder.HasIndex(e => new { e.DatasetId, e.SplitLabel });
         builder.HasIndex(e => new { e.DatasetId, e.OrderIndex });
+        builder.HasIndex(e => new { e.DatasetId, e.AnnotationLabel });
+        builder.HasIndex(e => new { e.DatasetId, e.IsCorrect });
 
         // GIN index for jsonb data querying
         builder.HasIndex(e => e.Data)

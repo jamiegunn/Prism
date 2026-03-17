@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
-import { useExperiment, useChangeExperimentStatus } from './api'
+import { useExperiment, useRuns, useChangeExperimentStatus } from './api'
 import { RunTable } from './components/RunTable'
+import { RunStatsSummary } from './components/RunStatsSummary'
 import { RunDetailPanel } from './components/RunDetailPanel'
 import { RunComparisonView } from './components/RunComparisonView'
 import { SweepDialog } from './components/SweepDialog'
@@ -16,6 +17,7 @@ export function ExperimentDetailPage() {
   const { experimentId } = useParams<{ experimentId: string }>()
   const navigate = useNavigate()
   const { data: experiment, isLoading } = useExperiment(experimentId ?? null)
+  const { data: runsData } = useRuns(experimentId ?? '', { pageSize: 100 })
   const statusMutation = useChangeExperimentStatus()
 
   const [selectedRun, setSelectedRun] = useState<Run | null>(null)
@@ -134,6 +136,11 @@ export function ExperimentDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Stats summary */}
+      {runsData?.items && runsData.items.length > 0 && (
+        <RunStatsSummary runs={runsData.items} />
+      )}
 
       {/* Content */}
       <div className="flex gap-6">

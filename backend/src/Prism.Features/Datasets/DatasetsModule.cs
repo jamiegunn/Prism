@@ -10,6 +10,8 @@ using Prism.Features.Datasets.Application.UpdateDataset;
 using Prism.Features.Datasets.Application.UpdateRecord;
 using Prism.Common.Database.Seeders;
 using Prism.Features.Datasets.Application.UploadDataset;
+using Prism.Features.Datasets.Application.ValidateDataset;
+using Prism.Features.Datasets.Application.AnnotateRecord;
 using Prism.Features.Datasets.Infrastructure;
 
 namespace Prism.Features.Datasets;
@@ -37,6 +39,8 @@ public static class DatasetsModule
         services.AddScoped<SplitDatasetHandler>();
         services.AddScoped<GetDatasetStatsHandler>();
         services.AddScoped<ExportDatasetHandler>();
+        services.AddScoped<ValidateDatasetHandler>();
+        services.AddScoped<AnnotateRecordHandler>();
 
         // Seeders
         services.AddScoped<IDataSeeder, DatasetsSeeder>();

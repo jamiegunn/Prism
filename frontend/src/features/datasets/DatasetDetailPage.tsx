@@ -7,6 +7,7 @@ import { useDataset, useDeleteDataset, useExportDataset } from './api'
 import { useDatasetsStore } from './store'
 import { RecordsTable } from './components/RecordsTable'
 import { DatasetStatsPanel } from './components/DatasetStatsPanel'
+import { ValidationPanel } from './components/ValidationPanel'
 import { SplitDatasetDialog } from './components/SplitDatasetDialog'
 
 export function DatasetDetailPage() {
@@ -134,7 +135,8 @@ export function DatasetDetailPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="stats" className="mt-4">
+        <TabsContent value="stats" className="mt-4 space-y-4">
+          <ValidationPanel datasetId={dataset.id} />
           <DatasetStatsPanel datasetId={dataset.id} />
         </TabsContent>
       </Tabs>

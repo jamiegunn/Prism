@@ -13,6 +13,8 @@ using Prism.Features.Datasets.Application.GetDatasetStats;
 using Prism.Features.Datasets.Application.ListDatasets;
 using Prism.Features.Datasets.Application.ListRecords;
 using Prism.Features.Datasets.Application.SplitDataset;
+using Prism.Features.Datasets.Application.ValidateDataset;
+using Prism.Features.Datasets.Application.AnnotateRecord;
 using Prism.Features.Datasets.Application.UpdateDataset;
 using Prism.Features.Datasets.Application.UpdateRecord;
 using Prism.Features.Datasets.Application.UploadDataset;
@@ -91,6 +93,18 @@ public static class DatasetEndpoints
         datasets.MapPost("/{id:guid}/export", ExportDataset)
             .WithName("ExportDataset")
             .WithSummary("Exports dataset records in CSV, JSON, or JSONL format")
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        datasets.MapPut("/{id:guid}/records/{recordId:guid}/annotate", AnnotateRecordEndpoint)
+            .WithName("AnnotateRecord")
+            .WithSummary("Annotates a dataset record with label, notes, and correctness flag")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        datasets.MapGet("/{id:guid}/validate", ValidateDataset)
+            .WithName("ValidateDataset")
+            .WithSummary("Validates dataset quality: nulls, type consistency, schema coverage")
+            .Produces<DatasetValidationReportDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return app;
@@ -247,5 +261,29 @@ public static class DatasetEndpoints
         return result.Match(
             export => TypedResults.File(export.Data, export.ContentType, export.FileName),
             error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> ValidateDataset(
+        Guid id,
+        ValidateDatasetHandler handler,
+        CancellationToken ct)
+    {
+        Result<DatasetValidationReportDto> result = await handler.HandleAsync(id, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> AnnotateRecordEndpoint(
+        Guid id,
+        Guid recordId,
+        [FromBody] AnnotateRecordRequest request,
+        AnnotateRecordHandler handler,
+        CancellationToken ct)
+    {
+        var command = new AnnotateRecordCommand(id, recordId, request.Label, request.Note, request.IsCorrect);
+        Result result = await handler.HandleAsync(command, ct);
+        return result.ToHttpResult();
     }
 }
