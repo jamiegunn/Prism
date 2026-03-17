@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, ExternalLink, Save } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { ArrowLeft, Download, ExternalLink, Save, Maximize2, Minimize2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { useNotebook, useUpdateNotebook } from './api'
 
 export function NotebookDetailPage() {
@@ -8,6 +8,8 @@ export function NotebookDetailPage() {
   const navigate = useNavigate()
   const [, setJupyterReady] = useState(false)
   const [showJsonEditor, setShowJsonEditor] = useState(false)
+  const [showEmbed, setShowEmbed] = useState(false)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [editContent, setEditContent] = useState('')
   const [contentInitialized, setContentInitialized] = useState(false)
 
@@ -195,16 +197,46 @@ export function NotebookDetailPage() {
         </div>
       )}
 
-      {/* JupyterLite iframe embed — hidden by default, shown when JupyterLite assets are available */}
-      <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
-        <h3 className="text-sm font-medium text-zinc-50 mb-2">JupyterLite Integration</h3>
-        <p className="text-xs text-zinc-400 mb-3">
-          Click "Open in JupyterLite" to launch a full Python notebook environment in your browser.
-          The <code className="px-1 py-0.5 rounded bg-zinc-700 text-violet-400">workbench</code> module
-          is available for interacting with the Prism API from Python.
-        </p>
-        <div className="rounded bg-zinc-900 border border-zinc-700 p-3">
-          <pre className="text-xs text-zinc-300 font-mono">
+      {/* JupyterLite embedded frame */}
+      {showEmbed ? (
+        <div className="rounded-lg border border-zinc-700 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800 border-b border-zinc-700">
+            <span className="text-xs font-medium text-zinc-300">JupyterLite — Embedded</span>
+            <button
+              onClick={() => setShowEmbed(false)}
+              className="text-zinc-400 hover:text-zinc-50"
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <iframe
+            ref={iframeRef}
+            src="/jupyterlite/lab/index.html"
+            className="w-full border-0"
+            style={{ height: '600px' }}
+            title="JupyterLite"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-zinc-50">JupyterLite Integration</h3>
+            <button
+              onClick={() => setShowEmbed(true)}
+              className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300"
+            >
+              <Maximize2 className="h-3 w-3" />
+              Embed
+            </button>
+          </div>
+          <p className="text-xs text-zinc-400 mb-3">
+            Click "Open in JupyterLite" above to launch in a new tab, or "Embed" to run inline.
+            The <code className="px-1 py-0.5 rounded bg-zinc-700 text-violet-400">workbench</code> module
+            is available for interacting with the Prism API from Python.
+          </p>
+          <div className="rounded bg-zinc-900 border border-zinc-700 p-3">
+            <pre className="text-xs text-zinc-300 font-mono">
 {`import workbench
 
 # Chat with a model
@@ -217,9 +249,10 @@ results = await workbench.rag_query("collection-id", "search query")
 records = await workbench.get_dataset_records("dataset-id")
 
 # Type workbench.help() for all available functions`}
-          </pre>
+            </pre>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
