@@ -34,3 +34,8 @@ desktop.ini
 
 # Generated
 frontend/src/services/generated/
+
+# Local scratch: offline toolchain transfer, and files staged for deletion.
+# Both get large and neither belongs in history.
+_handoff/
+_to_delete/

@@ -263,7 +263,12 @@ cd frontend && npm run lint
 - **Phase 4 (Sprint):** RAG Workbench, Structured Output — *implemented*
 - **Phase 5 (Fly):** Agent Builder, Notebooks, Fine-Tuning — *implemented*
 
-All 14 modules have backend handlers, API endpoints, and frontend pages. 56 backend unit tests. CI pipeline with 8 jobs.
+All 15 modules have backend handlers, API endpoints, and frontend pages. 71 backend tests. CI pipeline with 9 jobs, all of which gate the build.
+
+> **Status honesty.** Several modules persist entities and expose endpoints but have no worker
+> executing them yet — see [docs/product-truth.yaml](docs/product-truth.yaml) for the per-module
+> position and [docs/REMEDIATION_PLAN.md](docs/REMEDIATION_PLAN.md) for the plan to close the gap.
+> Where this file and `product-truth.yaml` disagree, `product-truth.yaml` is correct.
 
 ## Contributing
 

@@ -271,12 +271,26 @@ jobs:
           echo "| Storybook Build | ${{ needs.storybook-build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Playwright Smoke | ${{ needs.playwright-smoke.result }} |" >> $GITHUB_STEP_SUMMARY
 
-          # Fail if any required job failed
-          if [[ "${{ needs.backend-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.backend-format.result }}" == "failure" ]] || \
-             [[ "${{ needs.frontend-build.result }}" == "failure" ]] || \
-             [[ "${{ needs.frontend-lint.result }}" == "failure" ]]; then
+          # Every job gates. A job that cannot fail the build is not a check, it is decoration -
+          # openapi-drift and orval-drift were permanent no-ops and storybook-build and
+          # playwright-smoke were permanently red, all four excluded from this condition.
+          FAILED=""
+          for job in "backend-build:${{ needs.backend-build.result }}" \
+                     "backend-format:${{ needs.backend-format.result }}" \
+                     "frontend-build:${{ needs.frontend-build.result }}" \
+                     "frontend-lint:${{ needs.frontend-lint.result }}" \
+                     "openapi-drift:${{ needs.openapi-drift.result }}" \
+                     "orval-drift:${{ needs.orval-drift.result }}" \
+                     "storybook-build:${{ needs.storybook-build.result }}" \
+                     "playwright-smoke:${{ needs.playwright-smoke.result }}"; do
+            name="${job%%:*}"; result="${job##*:}"
+            if [[ "$result" == "failure" ]] || [[ "$result" == "cancelled" ]]; then
+              FAILED="$FAILED $name"
+            fi
+          done
+
+          if [[ -n "$FAILED" ]]; then
             echo ""
-            echo "::error::One or more required CI checks failed."
+            echo "::error::CI checks failed:$FAILED"
             exit 1
           fi

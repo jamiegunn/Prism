@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+using Npgsql;
 using Prism.Api.Extensions;
 using Prism.Api.Middleware;
 using Prism.Common.Database;
@@ -73,9 +75,19 @@ try
             await seeder.SeedAsync(CancellationToken.None);
             Log.Information("Data seeding completed successfully");
         }
+        catch (Exception ex) when (ex is NpgsqlException or SocketException or TimeoutException)
+        {
+            // The database server is unreachable. Degraded startup is acceptable in development:
+            // the operator gets an actionable message and the API still serves non-database routes.
+            Log.Warning(ex, "Could not reach PostgreSQL. Start it with: docker compose up -d");
+        }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Could not apply database migrations. Is PostgreSQL running? Start it with: docker compose up -d");
+            // Anything else means the schema itself is wrong - a pending model change, a failed
+            // migration, a seeding bug. Serving traffic against a schema that does not match the
+            // model corrupts data silently, so this is fatal rather than a warning.
+            Log.Fatal(ex, "Database schema is invalid. Refusing to start. This is NOT a connectivity problem");
+            throw;
         }
     }
 
@@ -93,3 +105,10 @@ finally
 {
     await Log.CloseAndFlushAsync();
 }
+
+/// <summary>
+/// Entry point marker, made visible so integration tests can boot the real application
+/// through <c>WebApplicationFactory&lt;Program&gt;</c>. Without this the endpoint layer
+/// (61 files, 123 routes) cannot be tested at all.
+/// </summary>
+public partial class Program { }

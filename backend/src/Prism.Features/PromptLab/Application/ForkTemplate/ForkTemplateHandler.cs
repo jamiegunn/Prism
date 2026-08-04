@@ -57,7 +57,7 @@ public sealed class ForkTemplateHandler
             Name = command.NewName ?? $"{sourceTemplate.Name} (fork)",
             Category = sourceTemplate.Category,
             Description = command.NewDescription ?? sourceTemplate.Description,
-            Tags = [..sourceTemplate.Tags, "forked"],
+            Tags = [.. sourceTemplate.Tags, "forked"],
             ProjectId = command.ProjectId ?? sourceTemplate.ProjectId,
             LatestVersion = 1
         };

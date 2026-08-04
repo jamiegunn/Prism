@@ -6,57 +6,48 @@ namespace Prism.Common.Database;
 
 /// <summary>
 /// The single application database context for the Prism platform.
-/// Automatically discovers and applies entity configurations from the Common assembly
-/// and any additional assemblies registered via <see cref="RegisterAssembly"/>.
+/// Applies entity configurations from the Common assembly and from every assembly
+/// supplied via <see cref="ModelAssemblies"/>.
 /// </summary>
 public sealed class AppDbContext : DbContext
 {
-    private static readonly List<Assembly> _additionalAssemblies = new();
-
-    /// <summary>
-    /// Registers an additional assembly whose <see cref="IEntityTypeConfiguration{TEntity}"/> implementations
-    /// should be discovered and applied during model building.
-    /// Call this from feature module registration (e.g., in Program.cs) before the first DbContext is created.
-    /// </summary>
-    /// <param name="assembly">The assembly to scan for entity configurations.</param>
-    public static void RegisterAssembly(Assembly assembly)
-    {
-        if (!_additionalAssemblies.Contains(assembly))
-        {
-            _additionalAssemblies.Add(assembly);
-        }
-    }
-
-    /// <summary>
-    /// Clears all registered additional assemblies.
-    /// Primarily used for testing scenarios.
-    /// </summary>
-    public static void ClearRegisteredAssemblies()
-    {
-        _additionalAssemblies.Clear();
-    }
+    private readonly ModelAssemblies _modelAssemblies;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppDbContext"/> class.
     /// </summary>
     /// <param name="options">The database context options.</param>
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    /// <param name="modelAssemblies">
+    /// The assemblies whose entity type configurations form the model. Required: omitting the
+    /// feature assemblies produces a model with one entity instead of thirty-one, which Entity
+    /// Framework then diffs against the migrations snapshot as "drop every table".
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="modelAssemblies"/> is <see langword="null"/>.</exception>
+    public AppDbContext(DbContextOptions<AppDbContext> options, ModelAssemblies modelAssemblies)
+        : base(options)
     {
+        ArgumentNullException.ThrowIfNull(modelAssemblies);
+        _modelAssemblies = modelAssemblies;
     }
 
     /// <summary>
-    /// Configures the entity model by scanning for <see cref="IEntityTypeConfiguration{TEntity}"/>
-    /// implementations in the Common assembly and all registered additional assemblies.
+    /// Configures the entity model by scanning the Common assembly and every assembly
+    /// supplied through <see cref="ModelAssemblies"/>.
     /// </summary>
     /// <param name="modelBuilder">The model builder used to construct the entity model.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
         modelBuilder.HasPostgresExtension("vector");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
-        foreach (Assembly assembly in _additionalAssemblies)
+        foreach (Assembly assembly in _modelAssemblies.Assemblies)
         {
-            modelBuilder.ApplyConfigurationsFromAssembly(assembly);
+            if (assembly != typeof(AppDbContext).Assembly)
+            {
+                modelBuilder.ApplyConfigurationsFromAssembly(assembly);
+            }
         }
 
         base.OnModelCreating(modelBuilder);

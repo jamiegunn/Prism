@@ -52,6 +52,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AuditInterceptor>();
         services.AddSingleton<SoftDeleteInterceptor>();
 
+        // The assemblies defining the EF model, stated explicitly. AppDbContext cannot be
+        // constructed without this, so a partial model is unreachable by construction.
+        services.AddSingleton(new ModelAssemblies(typeof(Prism.Features.Marker).Assembly));
+
         services.AddDbContext<AppDbContext>((sp, options) =>
         {
             options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -60,9 +64,6 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<AuditInterceptor>(),
                 sp.GetRequiredService<SoftDeleteInterceptor>());
         });
-
-        // Register Features assembly for EF config scanning
-        AppDbContext.RegisterAssembly(typeof(Prism.Features.Marker).Assembly);
 
         // Cache (config-driven)
         services.AddCommonCache(config);
