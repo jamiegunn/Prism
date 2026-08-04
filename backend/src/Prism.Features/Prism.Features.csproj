@@ -13,4 +13,9 @@
     <ProjectReference Include="..\Prism.Common\Prism.Common.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Prism.Tests" />
+  </ItemGroup>
+
 </Project>

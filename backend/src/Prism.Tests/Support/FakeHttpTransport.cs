@@ -69,6 +69,18 @@ public sealed class FakeHttpTransport : IHttpClientFactory
         });
     }
 
+
+    /// <summary>
+    /// Creates a transport returning a fixed JSON body for every request.
+    /// </summary>
+    /// <param name="json">The response body.</param>
+    /// <returns>A configured transport.</returns>
+    public static FakeHttpTransport Json(string json)
+        => new(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        });
+
     /// <inheritdoc />
     public HttpClient CreateClient(string name)
         => new(new ScriptedHandler(this)) { Timeout = TimeSpan.FromSeconds(30) };

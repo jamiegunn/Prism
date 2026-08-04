@@ -1,3 +1,5 @@
+using Prism.Common.Inference.Metrics;
+using Prism.Features.Analytics.Domain;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
@@ -110,10 +112,47 @@ public sealed class InferenceRecordPersistenceService : BackgroundService
         }
 
         db.Set<InferenceRecord>().Add(record);
+
+        // Analytics aggregates UsageLog. Nothing in the codebase wrote a row to it, so every
+        // cost, latency and throughput figure the dashboard reported was structurally zero.
+        db.Set<UsageLog>().Add(BuildUsageLog(data, record));
+
         await db.SaveChangesAsync(ct);
 
         _logger.LogDebug("Persisted inference record {RecordId} for model {Model} (trace: {HasTrace})",
             data.Id, data.Request.Model, record.Trace is not null);
+    }
+
+
+    /// <summary>
+    /// Projects a completed inference call into the row Analytics aggregates.
+    /// </summary>
+    /// <param name="data">The recorded call.</param>
+    /// <param name="record">The persisted inference record, for derived metrics.</param>
+    /// <returns>A usage log row.</returns>
+    internal static UsageLog BuildUsageLog(InferenceRecordData data, InferenceRecord record)
+    {
+        int promptTokens = data.Response?.Usage?.PromptTokens ?? 0;
+        int completionTokens = data.Response?.Usage?.CompletionTokens ?? 0;
+        string model = data.Request.Model;
+
+        // Local models have no price. Null means "not priced", which is a different claim from
+        // zero and must stay distinguishable in cost reporting.
+        decimal? cost = CostCalculator.HasPricing(model)
+            ? CostCalculator.EstimateCost(model, promptTokens, completionTokens)
+            : null;
+
+        return new UsageLog
+        {
+            Model = model,
+            PromptTokens = promptTokens,
+            CompletionTokens = completionTokens,
+            LatencyMs = data.LatencyMs,
+            TtftMs = data.Response?.Timing?.TtftMs is long ttft ? (int)ttft : null,
+            TokensPerSecond = record.TokensPerSecond,
+            SourceModule = data.SourceModule ?? "unknown",
+            Cost = cost,
+        };
     }
 
     /// <summary>
