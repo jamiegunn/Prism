@@ -82,7 +82,6 @@ public sealed class QueryCollectionHandler
         // Use pgvector cosine distance ordering
         List<ChunkSearchResultDto> results = await _db.Set<RagChunk>()
             .AsNoTracking()
-            .Include("") // No include needed, we'll join manually
             .Where(c => _db.Set<RagDocument>()
                 .Where(d => d.CollectionId == collection.Id)
                 .Select(d => d.Id)

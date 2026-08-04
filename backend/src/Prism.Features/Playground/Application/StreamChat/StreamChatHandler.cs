@@ -212,8 +212,45 @@ public sealed class StreamChatHandler
 
         string? streamError = null;
 
-        await foreach (StreamChunk chunk in stream!.WithCancellation(ct))
+        // Enumerated manually rather than with `await foreach`: an iterator method cannot wrap
+        // `yield return` in a try/catch, so a provider fault mid-stream previously escaped this
+        // method, aborted the SSE response, and discarded the partial assistant message.
+        // Advancing the enumerator inside the try lets the fault be reported and the partial
+        // response persisted.
+        ConfiguredCancelableAsyncEnumerable<StreamChunk>.Enumerator enumerator =
+            stream!.WithCancellation(ct).GetAsyncEnumerator();
+
+        while (true)
         {
+            StreamChunk chunk;
+
+            try
+            {
+                if (!await enumerator.MoveNextAsync())
+                {
+                    break;
+                }
+
+                chunk = enumerator.Current;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The caller disconnected or cancelled. Keep what was generated; do not
+                // report it as a provider failure.
+                streamError = null;
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Stream from provider {ProviderName} faulted after {TokenCount} tokens",
+                    instance.Name,
+                    tokenCount);
+                streamError = $"Inference stream failed after {tokenCount} tokens: {ex.Message}";
+                break;
+            }
+
             if (chunk.IsFirst)
             {
                 ttftMs = stopwatch.ElapsedMilliseconds;
@@ -261,12 +298,16 @@ public sealed class StreamChatHandler
             }
         }
 
+        await enumerator.DisposeAsync();
+
         stopwatch.Stop();
 
         if (streamError is not null)
         {
+            // Report the failure, then continue to persistence: a partial response is
+            // evidence about model behaviour and is exactly what a researcher needs to
+            // inspect after a stream dies.
             yield return new ChatError(streamError);
-            yield break;
         }
 
         // Calculate metrics

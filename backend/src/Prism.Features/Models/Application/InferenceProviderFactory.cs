@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Prism.Common.Inference;
 using Prism.Common.Inference.Providers;
 
@@ -11,16 +12,22 @@ public sealed class InferenceProviderFactory
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly InferenceClientOptions _options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InferenceProviderFactory"/> class.
     /// </summary>
     /// <param name="httpClientFactory">The HTTP client factory for creating provider HTTP clients.</param>
     /// <param name="loggerFactory">The logger factory for creating provider-specific loggers.</param>
-    public InferenceProviderFactory(IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory)
+    /// <param name="options">HTTP timeout configuration. Defaults are used when omitted.</param>
+    public InferenceProviderFactory(
+        IHttpClientFactory httpClientFactory,
+        ILoggerFactory loggerFactory,
+        IOptions<InferenceClientOptions>? options = null)
     {
         _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
+        _options = options?.Value ?? new InferenceClientOptions();
     }
 
     /// <summary>
@@ -34,7 +41,9 @@ public sealed class InferenceProviderFactory
     {
         HttpClient httpClient = _httpClientFactory.CreateClient();
         httpClient.BaseAddress = new Uri(endpoint.TrimEnd('/') + "/");
-        httpClient.Timeout = TimeSpan.FromSeconds(10);
+        // The client covers generation, which on local models routinely runs for minutes.
+        // Short deadlines belong on individual probe calls, not on the shared client.
+        httpClient.Timeout = _options.Request;
 
         return providerType switch
         {
