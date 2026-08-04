@@ -227,6 +227,8 @@ public static class ServiceCollectionExtensions
 
         // Durable job store (always DB-backed regardless of queue provider)
         services.AddScoped<IJobStore, DbJobStore>();
+        services.AddScoped<IJobLeaseStore, DbJobLeaseStore>();
+        services.AddSingleton(TimeProvider.System);
 
         return services;
     }
