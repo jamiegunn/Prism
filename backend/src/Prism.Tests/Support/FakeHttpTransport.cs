@@ -81,6 +81,35 @@ public sealed class FakeHttpTransport : IHttpClientFactory
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
         });
 
+
+    /// <summary>
+    /// Creates a transport returning a chat completion whose assistant message is the given text.
+    /// </summary>
+    /// <param name="content">The assistant reply.</param>
+    /// <returns>A configured transport.</returns>
+    public static FakeHttpTransport ChatCompletion(string content)
+        => Json($$"""
+            {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "model": "test-model",
+              "choices": [
+                {"index": 0, "message": {"role": "assistant", "content": {{System.Text.Json.JsonSerializer.Serialize(content)}}}, "finish_reason": "stop"}
+              ],
+              "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+            }
+            """);
+
+    /// <summary>
+    /// Creates a transport that fails every request, for exercising error paths.
+    /// </summary>
+    /// <returns>A configured transport.</returns>
+    public static FakeHttpTransport ServerError()
+        => new(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("upstream exploded", Encoding.UTF8, "text/plain"),
+        });
+
     /// <inheritdoc />
     public HttpClient CreateClient(string name)
         => new(new ScriptedHandler(this)) { Timeout = TimeSpan.FromSeconds(30) };

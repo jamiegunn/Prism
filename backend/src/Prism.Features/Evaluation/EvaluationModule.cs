@@ -1,3 +1,5 @@
+using Prism.Features.Evaluation.Application.RunEvaluation;
+using Prism.Common.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Prism.Features.Evaluation.Application.CancelEvaluation;
 using Prism.Features.Evaluation.Application.ExportResults;
@@ -34,6 +36,10 @@ public static class EvaluationModule
         services.AddScoped<GetLeaderboardHandler>();
 
         // Scoring methods
+        // The worker resolves handlers through IJobHandler; without this registration the
+        // evaluation job type has no executor and its jobs are never claimed.
+        services.AddScoped<IJobHandler, EvaluationJobHandler>();
+
         services.AddSingleton<IScoringMethod, ExactMatchScorer>();
         services.AddSingleton<IScoringMethod, ContainsScorer>();
         services.AddSingleton<IScoringMethod, RougeLScorer>();

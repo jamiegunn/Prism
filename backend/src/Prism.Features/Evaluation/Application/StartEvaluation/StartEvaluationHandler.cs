@@ -1,3 +1,6 @@
+using Prism.Features.Evaluation.Application.RunEvaluation;
+using Prism.Common.Jobs;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prism.Features.Datasets.Domain;
 using Prism.Features.Evaluation.Application.Dtos;
@@ -94,6 +97,19 @@ public sealed class StartEvaluationHandler
         };
 
         _db.Set<EvaluationEntity>().Add(evaluation);
+
+        // Actually enqueue the work. This handler's summary has always claimed it did; until
+        // now it only inserted a Pending row that nothing consumed, which is why the results,
+        // leaderboard and export endpoints were permanently empty.
+        _db.Set<DurableJob>().Add(new DurableJob
+        {
+            JobType = EvaluationJobHandler.Type,
+            Status = JobStatus.Queued,
+            TotalItems = evaluation.TotalRecords,
+            ParametersJson = JsonSerializer.Serialize(new { evaluationId = evaluation.Id }),
+            ProjectId = evaluation.ProjectId,
+        });
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Created evaluation {EvaluationId} '{EvaluationName}' with {ModelCount} models against {RecordCount} records",
