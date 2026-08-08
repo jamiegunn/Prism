@@ -230,6 +230,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJobLeaseStore, DbJobLeaseStore>();
         services.AddSingleton(TimeProvider.System);
 
+        // The worker that actually executes queued jobs. Without it, everything that enqueues
+        // work (Evaluation, Batch, Fine-Tuning, RAG ingestion) creates rows nothing consumes.
+        JobWorkerOptions workerOptions = new();
+        config.GetSection(JobWorkerOptions.SectionName).Bind(workerOptions);
+        services.AddSingleton(workerOptions);
+        services.AddHostedService<JobWorkerService>();
+
         return services;
     }
 
