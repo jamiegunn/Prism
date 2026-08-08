@@ -1,3 +1,6 @@
+using Prism.Features.Models.Domain;
+using Prism.Common.Database;
+using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,7 +18,10 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAiEmbeddingProvider> _logger;
-    private readonly string _baseUrl;
+    private const string DefaultBaseUrl = "http://localhost:8000";
+
+    private readonly string? _configuredBaseUrl;
+    private readonly AppDbContext? _db;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OpenAiEmbeddingProvider"/> class.
@@ -23,14 +29,55 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
     /// <param name="httpClientFactory">The HTTP client factory.</param>
     /// <param name="config">The application configuration.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="db">
+    /// Optional context used to discover a registered inference endpoint when none is
+    /// configured explicitly.
+    /// </param>
     public OpenAiEmbeddingProvider(
         IHttpClientFactory httpClientFactory,
         IConfiguration config,
-        ILogger<OpenAiEmbeddingProvider> logger)
+        ILogger<OpenAiEmbeddingProvider> logger,
+        AppDbContext? db = null)
     {
         _httpClient = httpClientFactory.CreateClient();
         _logger = logger;
-        _baseUrl = config["Embedding:BaseUrl"] ?? config["Inference:DefaultEndpoint"] ?? "http://localhost:8000";
+        _db = db;
+
+        // Explicit configuration still wins, but it is no longer the only source. Neither
+        // Embedding:BaseUrl nor Inference:DefaultEndpoint exists in appsettings.json, so this
+        // silently defaulted to a vLLM address for everyone - an Ollama-only user got no
+        // embeddings and no explanation.
+        _configuredBaseUrl = config["Embedding:BaseUrl"] ?? config["Inference:DefaultEndpoint"];
+    }
+
+    /// <summary>
+    /// Resolves the endpoint to embed against: explicit configuration if present, otherwise a
+    /// registered inference instance, and only then the historical default.
+    /// </summary>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>The base URL to call.</returns>
+    private async Task<string> ResolveBaseUrlAsync(CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(_configuredBaseUrl))
+        {
+            return _configuredBaseUrl;
+        }
+
+        if (_db is not null)
+        {
+            string? endpoint = await _db.Set<InferenceInstance>()
+                .AsNoTracking()
+                .OrderBy(i => i.CreatedAt)
+                .Select(i => i.Endpoint)
+                .FirstOrDefaultAsync(ct);
+
+            if (!string.IsNullOrWhiteSpace(endpoint))
+            {
+                return endpoint;
+            }
+        }
+
+        return DefaultBaseUrl;
     }
 
     /// <inheritdoc />
@@ -46,11 +93,13 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<float[]>>> EmbedBatchAsync(IReadOnlyList<string> texts, string model, CancellationToken ct)
     {
+        string baseUrl = await ResolveBaseUrlAsync(ct);
+
         try
         {
             var request = new EmbeddingRequest(model, texts.ToList());
             HttpResponseMessage response = await _httpClient.PostAsJsonAsync(
-                $"{_baseUrl.TrimEnd('/')}/v1/embeddings", request, ct);
+                $"{baseUrl.TrimEnd('/')}/v1/embeddings", request, ct);
 
             if (!response.IsSuccessStatusCode)
             {

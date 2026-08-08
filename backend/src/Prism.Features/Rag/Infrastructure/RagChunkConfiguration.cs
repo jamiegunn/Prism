@@ -8,7 +8,7 @@ namespace Prism.Features.Rag.Infrastructure;
 
 /// <summary>
 /// EF Core entity configuration for <see cref="RagChunk"/>.
-/// Maps to the <c>rag_chunks</c> table with pgvector embedding column and HNSW index.
+/// Maps to the <c>rag_chunks</c> table with a pgvector embedding column.
 /// </summary>
 public sealed class RagChunkConfiguration : IEntityTypeConfiguration<RagChunk>
 {
@@ -25,6 +25,18 @@ public sealed class RagChunkConfiguration : IEntityTypeConfiguration<RagChunk>
         builder.Property(e => e.Content)
             .IsRequired();
 
+        // Dimensionless on purpose: each collection chooses its own embedding size, and one
+        // column cannot be typed for all of them.
+        //
+        // The consequence is worth stating plainly, because a comment here previously claimed an
+        // HNSW index that no migration ever created. pgvector can only build HNSW or IVFFlat on
+        // a column declared with a fixed dimension - vector(1536) and so on - so while this
+        // column stays dimensionless, similarity search is a sequential scan. That is fine for
+        // thousands of chunks and will not hold for millions.
+        //
+        // Closing it means choosing: pin a single dimension for the deployment and index it, or
+        // partition chunks into per-dimension tables. Both are schema changes with data
+        // implications, so neither is done silently here.
         builder.Property(e => e.Embedding)
             .HasColumnType("vector");
 
