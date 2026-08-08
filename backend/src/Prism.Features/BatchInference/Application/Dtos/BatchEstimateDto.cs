@@ -7,4 +7,5 @@ public sealed record BatchEstimateDto(
     int RecordCount,
     int EstimatedTokens,
     double EstimatedMinutes,
-    string Model);
+    string Model,
+    decimal? EstimatedCost);

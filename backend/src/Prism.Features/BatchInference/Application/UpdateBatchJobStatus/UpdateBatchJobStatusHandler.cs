@@ -42,9 +42,12 @@ public sealed class UpdateBatchJobStatusHandler
         switch (command.Action.ToLowerInvariant())
         {
             case "pause":
-                if (job.Status is not BatchJobStatus.Running)
+                // Queued counts as pausable. Requiring Running made this endpoint always fail:
+                // nothing could produce that state, and even now a job spends most of its life
+                // queued, which is exactly when a user wants to stop it before it costs anything.
+                if (job.Status is not (BatchJobStatus.Running or BatchJobStatus.Queued))
                 {
-                    return Error.Validation("Only running jobs can be paused.");
+                    return Error.Validation($"Cannot pause a job in {job.Status} status.");
                 }
                 job.Status = BatchJobStatus.Paused;
                 break;
@@ -54,7 +57,10 @@ public sealed class UpdateBatchJobStatusHandler
                 {
                     return Error.Validation("Only paused jobs can be resumed.");
                 }
-                job.Status = BatchJobStatus.Running;
+
+                // Back to Queued, not Running: a worker has to claim it again before it is
+                // genuinely running, and claiming is what sets that state.
+                job.Status = BatchJobStatus.Queued;
                 break;
 
             case "cancel":

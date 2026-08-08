@@ -1,3 +1,6 @@
+using Prism.Features.BatchInference.Application.RunBatch;
+using Prism.Common.Jobs;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prism.Features.BatchInference.Application.Dtos;
 using Prism.Features.BatchInference.Domain;
@@ -82,6 +85,18 @@ public sealed class CreateBatchJobHandler
         };
 
         _db.Set<BatchJob>().Add(job);
+
+        // Enqueue the work. Previously the row was created Queued and no consumer existed,
+        // so BatchResult was never written and the results endpoints were always empty.
+        _db.Set<DurableJob>().Add(new DurableJob
+        {
+            JobType = BatchJobHandler.Type,
+            Status = JobStatus.Queued,
+            TotalItems = job.TotalRecords,
+            MaxRetries = job.MaxRetries,
+            ParametersJson = JsonSerializer.Serialize(new { batchJobId = job.Id }),
+        });
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Created batch job {BatchJobId} for model {Model} with {RecordCount} records",

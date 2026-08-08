@@ -1,3 +1,5 @@
+using Prism.Features.BatchInference.Application.RunBatch;
+using Prism.Common.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Prism.Features.BatchInference.Application.CreateBatchJob;
 using Prism.Features.BatchInference.Application.DownloadBatchResults;
@@ -21,6 +23,8 @@ public static class BatchInferenceModule
     /// </summary>
     public static IServiceCollection AddBatchInferenceFeature(this IServiceCollection services)
     {
+        services.AddScoped<IJobHandler, BatchJobHandler>();
+
         services.AddScoped<CreateBatchJobHandler>();
         services.AddScoped<ListBatchJobsHandler>();
         services.AddScoped<GetBatchJobHandler>();
