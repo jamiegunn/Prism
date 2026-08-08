@@ -515,6 +515,12 @@ public sealed class OllamaProvider : IHotReloadableProvider
             ["stream"] = stream
         };
 
+        if (request.JsonSchema is not null)
+        {
+            // Ollama takes the schema directly as `format`, with no OpenAI-style wrapper.
+            body["format"] = JsonNode.Parse(request.JsonSchema);
+        }
+
         JsonObject options = new();
         bool hasOptions = false;
 

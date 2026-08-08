@@ -25,6 +25,15 @@ public sealed class FakeHttpTransport : IHttpClientFactory
     public List<HttpRequestMessage> Requests { get; } = [];
 
     /// <summary>
+    /// Gets the request bodies as sent, in order.
+    /// </summary>
+    /// <remarks>
+    /// Captured at send time rather than read from the request afterwards: some providers
+    /// dispose their request content once the call completes, so reading it later throws.
+    /// </remarks>
+    public List<string> RequestBodies { get; } = [];
+
+    /// <summary>
     /// Creates a transport that emits the given Server-Sent Events frames and then throws
     /// while the body is still being read.
     /// </summary>
@@ -124,6 +133,9 @@ public sealed class FakeHttpTransport : IHttpClientFactory
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             _owner.Requests.Add(request);
+            _owner.RequestBodies.Add(
+                request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult() ?? "");
+
             return Task.FromResult(_owner._responder(request));
         }
     }

@@ -280,6 +280,15 @@ public sealed class VllmProvider : OpenAiCompatibleProvider
             body["top_k"] = request.TopK.Value;
         }
 
+        if (request.JsonSchema is not null)
+        {
+            // vLLM constrains generation through guided_json, applied by its own grammar
+            // backend. The base class emitted an OpenAI-style response_format, which vLLM does
+            // not use for this, so guided decoding never actually constrained anything.
+            body.Remove("response_format");
+            body["guided_json"] = JsonNode.Parse(request.JsonSchema);
+        }
+
         if (!request.EnableThinking)
         {
             body["chat_template_kwargs"] = new JsonObject { ["enable_thinking"] = false };

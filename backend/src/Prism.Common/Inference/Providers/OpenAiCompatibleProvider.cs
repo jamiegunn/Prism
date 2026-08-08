@@ -407,9 +407,27 @@ public class OpenAiCompatibleProvider : IInferenceProvider
             }
         }
 
-        if (request.ResponseFormat is not null)
+        if (request.JsonSchema is not null)
         {
-            body["response_format"] = JsonNode.Parse(request.ResponseFormat) ?? new JsonObject { ["type"] = request.ResponseFormat };
+            // The OpenAI wire format wraps the schema; emitting the bare schema as
+            // response_format - as this did - is rejected or ignored by every implementation.
+            body["response_format"] = new JsonObject
+            {
+                ["type"] = "json_schema",
+                ["json_schema"] = new JsonObject
+                {
+                    ["name"] = "response",
+                    ["strict"] = true,
+                    ["schema"] = JsonNode.Parse(request.JsonSchema),
+                },
+            };
+        }
+        else if (request.ResponseFormat is not null)
+        {
+            // A mode selector such as {"type":"json_object"}, or the bare string "json_object".
+            body["response_format"] = request.ResponseFormat.TrimStart().StartsWith('{')
+                ? JsonNode.Parse(request.ResponseFormat)
+                : new JsonObject { ["type"] = request.ResponseFormat };
         }
 
         if (stream)

@@ -79,12 +79,31 @@ public sealed class StructuredInferenceHandler
             Messages = command.Messages,
             Temperature = command.Temperature ?? 0.1,
             MaxTokens = command.MaxTokens ?? 2048,
-            ResponseFormat = schema.SchemaJson,
             SourceModule = "structured-output"
         };
 
         IInferenceProvider provider = _providerFactory.CreateProvider(
             instance.Name, instance.Endpoint, instance.ProviderType);
+
+        // Only ask for native guidance where the provider actually has it. Sending a constraint
+        // to a provider that ignores it produces unconstrained output that looks guided, which
+        // is worse than knowing you are on the fallback path.
+        bool guided = provider.Capabilities.SupportsGuidedDecoding;
+
+        chatRequest = guided
+            ? chatRequest with { JsonSchema = schema.SchemaJson }
+            : chatRequest with
+            {
+                // Fallback: instruct rather than constrain, and let validation catch the misses.
+                Messages =
+                [
+                    ChatMessage.System(
+                        "Respond with a single JSON document and nothing else. No prose, no code "
+                        + "fences. It must conform to this JSON Schema:\n" + schema.SchemaJson),
+                    .. chatRequest.Messages,
+                ],
+                ResponseFormat = "json_object",
+            };
 
         Result<ChatResponse> chatResult = await provider.ChatAsync(chatRequest, ct);
         sw.Stop();
@@ -95,28 +114,37 @@ public sealed class StructuredInferenceHandler
         ChatResponse response = chatResult.Value;
         string rawOutput = response.Content;
 
-        // Attempt to parse JSON
+        SchemaValidationResult validation = JsonSchemaValidator.Validate(rawOutput, schema.SchemaJson);
+
         object? parsedJson = null;
-        bool isValid = false;
-        var validationErrors = new List<string>();
 
-        try
+        if (validation.SchemaError is null)
         {
-            JsonDocument doc = JsonDocument.Parse(rawOutput);
-            parsedJson = JsonSerializer.Deserialize<object>(rawOutput);
-            isValid = true;
-
-            validationErrors = ValidateAgainstSchema(doc, schema.SchemaJson);
-            if (validationErrors.Count > 0)
-                isValid = false;
-        }
-        catch (JsonException ex)
-        {
-            validationErrors.Add($"Invalid JSON: {ex.Message}");
+            try
+            {
+                parsedJson = JsonSerializer.Deserialize<object>(rawOutput);
+            }
+            catch (JsonException)
+            {
+                // Already reported by the validator; the raw output is still returned so the
+                // failure can be inspected.
+            }
         }
 
-        _logger.LogInformation("Structured inference completed for schema {SchemaName}: valid={IsValid}, {LatencyMs}ms",
-            schema.Name, isValid, sw.ElapsedMilliseconds);
+        bool isValid = validation.IsValid;
+        List<string> validationErrors = [.. validation.Errors];
+
+        if (!guided)
+        {
+            validationErrors.Insert(
+                0,
+                $"Note: {instance.Name} does not support guided decoding, so the schema was "
+                + "requested by instruction rather than enforced during generation.");
+        }
+
+        _logger.LogInformation(
+            "Structured inference for schema {SchemaName}: valid={IsValid}, guided={Guided}, {LatencyMs}ms",
+            schema.Name, isValid, guided, sw.ElapsedMilliseconds);
 
         return new StructuredInferenceResultDto(
             rawOutput,
@@ -126,63 +154,5 @@ public sealed class StructuredInferenceHandler
             response.Usage?.PromptTokens ?? 0,
             response.Usage?.CompletionTokens ?? 0,
             sw.Elapsed.TotalMilliseconds);
-    }
-
-    private static List<string> ValidateAgainstSchema(JsonDocument doc, string schemaJson)
-    {
-        var errors = new List<string>();
-
-        try
-        {
-            JsonDocument schema = JsonDocument.Parse(schemaJson);
-
-            if (schema.RootElement.TryGetProperty("required", out JsonElement required) &&
-                required.ValueKind == JsonValueKind.Array)
-            {
-                foreach (JsonElement requiredField in required.EnumerateArray())
-                {
-                    string fieldName = requiredField.GetString() ?? "";
-                    if (!doc.RootElement.TryGetProperty(fieldName, out _))
-                    {
-                        errors.Add($"Missing required field: {fieldName}");
-                    }
-                }
-            }
-
-            if (schema.RootElement.TryGetProperty("properties", out JsonElement properties) &&
-                properties.ValueKind == JsonValueKind.Object)
-            {
-                foreach (JsonProperty prop in properties.EnumerateObject())
-                {
-                    if (doc.RootElement.TryGetProperty(prop.Name, out JsonElement value) &&
-                        prop.Value.TryGetProperty("type", out JsonElement expectedType))
-                    {
-                        string expected = expectedType.GetString() ?? "";
-                        bool typeMatch = expected switch
-                        {
-                            "string" => value.ValueKind == JsonValueKind.String,
-                            "number" => value.ValueKind == JsonValueKind.Number,
-                            "integer" => value.ValueKind == JsonValueKind.Number,
-                            "boolean" => value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False,
-                            "array" => value.ValueKind == JsonValueKind.Array,
-                            "object" => value.ValueKind == JsonValueKind.Object,
-                            "null" => value.ValueKind == JsonValueKind.Null,
-                            _ => true
-                        };
-
-                        if (!typeMatch)
-                        {
-                            errors.Add($"Field '{prop.Name}' expected type '{expected}' but got '{value.ValueKind}'");
-                        }
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Schema parsing failed — skip validation
-        }
-
-        return errors;
     }
 }

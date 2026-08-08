@@ -78,6 +78,18 @@ public sealed record ChatRequest
     public string? ResponseFormat { get; init; }
 
     /// <summary>
+    /// Gets a JSON Schema the response must conform to, for provider-native guided decoding.
+    /// </summary>
+    /// <remarks>
+    /// Kept separate from <see cref="ResponseFormat"/> because the two are different requests:
+    /// response_format selects a mode (such as json_object), while this constrains generation
+    /// to a specific shape. Each provider expresses it differently — vLLM uses guided_json,
+    /// the OpenAI API uses a json_schema response format, Ollama uses format — so the schema
+    /// travels as data and each provider renders its own wire representation.
+    /// </remarks>
+    public string? JsonSchema { get; init; }
+
+    /// <summary>
     /// Gets or initializes a value indicating whether to enable thinking/reasoning mode.
     /// When false, models that support chain-of-thought (e.g., Qwen3) will skip the internal
     /// reasoning step and produce direct output. Default is true.
