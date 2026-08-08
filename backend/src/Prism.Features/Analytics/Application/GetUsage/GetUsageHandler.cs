@@ -48,42 +48,80 @@ public sealed class GetUsageHandler
             q = q.Where(l => l.ProjectId == query.ProjectId.Value);
         }
 
-        List<UsageLog> logs = await q.ToListAsync(ct);
+        // Aggregated in the database rather than by pulling every row into memory. The previous
+        // version materialised the entire filtered table before grouping, so a month of real
+        // traffic would have loaded millions of rows to produce a handful of numbers.
+        //
+        // Each group projects to an anonymous type and is shaped into its DTO afterwards: EF
+        // cannot translate a grouping projected straight into a record constructor, and the
+        // result sets here are one row per model, module or day.
+        List<UsageByModelDto> byModel = (await q
+                .GroupBy(l => l.Model)
+                .Select(g => new
+                {
+                    Model = g.Key,
+                    Requests = g.Count(),
+                    Tokens = g.Sum(l => (long)l.PromptTokens + l.CompletionTokens),
+                    Cost = g.Sum(l => l.Cost),
 
-        List<UsageByModelDto> byModel = logs
-            .GroupBy(l => l.Model)
-            .Select(g => new UsageByModelDto(
-                g.Key,
-                g.Count(),
-                g.Sum(l => (long)l.PromptTokens + l.CompletionTokens),
-                g.Sum(l => l.Cost)))
-            .OrderByDescending(m => m.RequestCount)
+                    // EF translates SUM over a nullable column as COALESCE(SUM(...), 0), so a
+                    // model with no pricing at all would report 0.00 — a claim that it was free
+                    // rather than that its cost is unknown. Counting the priced rows is what
+                    // lets that distinction survive the query.
+                    PricedRows = g.Count(l => l.Cost != null),
+                })
+                .OrderByDescending(m => m.Requests)
+                .ToListAsync(ct))
+            .Select(m => new UsageByModelDto(
+                m.Model, m.Requests, m.Tokens, m.PricedRows > 0 ? m.Cost : null))
             .ToList();
 
-        List<UsageByModuleDto> byModule = logs
-            .GroupBy(l => l.SourceModule)
-            .Select(g => new UsageByModuleDto(
-                g.Key,
-                g.Count(),
-                g.Sum(l => (long)l.PromptTokens + l.CompletionTokens)))
-            .OrderByDescending(m => m.RequestCount)
+        List<UsageByModuleDto> byModule = (await q
+                .GroupBy(l => l.SourceModule)
+                .Select(g => new
+                {
+                    Module = g.Key,
+                    Requests = g.Count(),
+                    Tokens = g.Sum(l => (long)l.PromptTokens + l.CompletionTokens),
+                })
+                .OrderByDescending(m => m.Requests)
+                .ToListAsync(ct))
+            .Select(m => new UsageByModuleDto(m.Module, m.Requests, m.Tokens))
             .ToList();
 
-        List<UsageTimeSeriesDto> timeSeries = logs
-            .GroupBy(l => l.CreatedAt.Date)
-            .Select(g => new UsageTimeSeriesDto(
-                g.Key,
-                g.Count(),
-                g.Sum(l => (long)l.PromptTokens + l.CompletionTokens)))
-            .OrderBy(t => t.Date)
+        List<UsageTimeSeriesDto> timeSeries = (await q
+                .GroupBy(l => l.CreatedAt.Date)
+                .Select(g => new
+                {
+                    Date = g.Key,
+                    Requests = g.Count(),
+                    Tokens = g.Sum(l => (long)l.PromptTokens + l.CompletionTokens),
+                })
+                .OrderBy(t => t.Date)
+                .ToListAsync(ct))
+            .Select(t => new UsageTimeSeriesDto(t.Date, t.Requests, t.Tokens))
             .ToList();
+
+        // Totals derived from the per-model aggregate rather than a fourth query. EF cannot
+        // translate GroupBy(_ => 1) into a whole-table aggregate, and ByModel already partitions
+        // every row exactly once, so summing it is both correct and free.
+        int totalRequests = byModel.Sum(m => m.RequestCount);
+        long totalTokens = byModel.Sum(m => m.TotalTokens);
+
+        long totalPromptTokens = await q.SumAsync(l => (long)l.PromptTokens, ct);
+        long totalCompletionTokens = totalTokens - totalPromptTokens;
+
+        // Null when nothing was priced, rather than a zero that reads as "this was free".
+        decimal? totalCost = byModel.Any(m => m.TotalCost.HasValue)
+            ? byModel.Sum(m => m.TotalCost ?? 0m)
+            : null;
 
         return new UsageSummaryDto(
-            logs.Count,
-            logs.Sum(l => (long)l.PromptTokens),
-            logs.Sum(l => (long)l.CompletionTokens),
-            logs.Sum(l => (long)l.PromptTokens + l.CompletionTokens),
-            logs.Sum(l => l.Cost),
+            totalRequests,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens,
+            totalCost,
             byModel,
             byModule,
             timeSeries);
