@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { useConversation } from './api'
 import { useStreamChat } from './hooks/useStreamChat'
 import { usePlaygroundStore } from './store'
+import { useDefaultInstance } from '@/features/models/useDefaultInstance'
 import { ConversationHistory } from './components/ConversationHistory'
 import { ChatPane } from './components/ChatPane'
 import { ChatInput } from './components/ChatInput'
@@ -31,6 +32,10 @@ export function PlaygroundPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const store = usePlaygroundStore()
+
+  // Open on a working model rather than "Select an instance...". Without this a user who has
+  // exactly one online provider still has to pick it before the composer will accept anything.
+  useDefaultInstance(store.selectedInstanceId, store.setSelectedInstanceId)
   const stream = useStreamChat()
 
   const [showLeftPanel, setShowLeftPanel] = useState(true)

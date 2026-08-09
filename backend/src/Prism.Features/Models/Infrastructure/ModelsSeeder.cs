@@ -42,7 +42,25 @@ public sealed class ModelsSeeder : IDataSeeder
             return;
         }
 
-        List<InferenceInstance> instances =
+        List<InferenceInstance> instances = SeedInstances();
+
+        context.Set<InferenceInstance>().AddRange(instances);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// The instances a fresh development database is seeded with.
+    /// </summary>
+    /// <returns>The seed instances.</returns>
+    /// <remarks>
+    /// Separated from <see cref="SeedAsync"/> so the capability flags can be asserted against
+    /// what each provider actually declares, without needing a database. Those flags are what
+    /// the UI trusts until someone presses Probe Capabilities, so a wrong one here is visible
+    /// to every new developer.
+    /// </remarks>
+    internal static List<InferenceInstance> SeedInstances()
+    {
+        return
         [
             new InferenceInstance
             {
@@ -73,8 +91,13 @@ public sealed class ModelsSeeder : IDataSeeder
                 Status = InstanceStatus.Unknown,
                 ModelId = "mistral:7b-instruct",
                 MaxContextLength = 8192,
-                SupportsLogprobs = true,
-                MaxTopLogprobs = 5,
+
+                // Ollama does not return per-token probabilities. Claiming otherwise made the
+                // Playground offer the heatmap, entropy and surprise views, and suppress the
+                // warning that explains why they are empty — so the product looked broken
+                // rather than the provider looking limited.
+                SupportsLogprobs = false,
+                MaxTopLogprobs = 0,
                 SupportsStreaming = true,
                 SupportsMetrics = false,
                 SupportsTokenize = false,
@@ -85,8 +108,5 @@ public sealed class ModelsSeeder : IDataSeeder
                 Tags = ["local", "ollama", "mistral"]
             }
         ];
-
-        context.Set<InferenceInstance>().AddRange(instances);
-        await context.SaveChangesAsync(ct);
     }
 }

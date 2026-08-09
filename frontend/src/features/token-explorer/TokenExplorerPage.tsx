@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useInstances } from '@/features/playground/api'
 import { useTokenExplorerStore } from './store'
+import { useDefaultInstance } from '@/features/models/useDefaultInstance'
 import { usePredictNextToken, useExploreBranch } from './api'
 import { ProbabilityDistribution } from './components/ProbabilityDistribution'
 import { StepThroughView } from './components/StepThroughView'
@@ -22,6 +23,9 @@ import { HelpPanel } from './components/HelpPanel'
 export function TokenExplorerPage() {
   const instances = useInstances()
   const store = useTokenExplorerStore()
+
+  // Same reason as the Playground: one online provider should not need selecting.
+  useDefaultInstance(store.instanceId, store.setInstanceId)
   const predictMutation = usePredictNextToken()
   const branchMutation = useExploreBranch()
 
