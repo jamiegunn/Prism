@@ -119,6 +119,9 @@ public sealed class OllamaProvider : IHotReloadableProvider
 
             if (!response.IsSuccessStatusCode)
             {
+                _logger.LogWarning(
+                    "Ollama version check at {Endpoint} returned {StatusCode}; assuming logprobs",
+                    Endpoint, (int)response.StatusCode);
                 return true;
             }
 
@@ -127,6 +130,8 @@ public sealed class OllamaProvider : IHotReloadableProvider
 
             if (string.IsNullOrWhiteSpace(reported))
             {
+                _logger.LogWarning(
+                    "Ollama at {Endpoint} reported no version field; assuming logprobs", Endpoint);
                 return true;
             }
 
@@ -141,12 +146,9 @@ public sealed class OllamaProvider : IHotReloadableProvider
 
             bool supported = version >= LogprobsFromVersion;
 
-            if (!supported)
-            {
-                _logger.LogInformation(
-                    "Ollama {Version} predates logprobs (added in {Required}); token-level views will be empty",
-                    reported, LogprobsFromVersion);
-            }
+            _logger.LogInformation(
+                "Ollama at {Endpoint} reports version {Version}; logprobs {Decision} (needs {Required})",
+                Endpoint, reported, supported ? "supported" : "NOT supported", LogprobsFromVersion);
 
             return supported;
         }
@@ -406,12 +408,21 @@ public sealed class OllamaProvider : IHotReloadableProvider
             Result<IReadOnlyList<AvailableModel>> modelsResult = await ListAvailableModelsAsync(ct);
             if (modelsResult.IsFailure)
             {
+                // Logged rather than returned quietly: the caller that matters here is the
+                // background health check, which skips the whole capability block when this
+                // fails. A silent failure there leaves a provider's advertised capabilities
+                // frozen at whatever they were, with nothing anywhere saying why.
+                _logger.LogWarning(
+                    "Could not list Ollama models at {Endpoint}: {Reason}",
+                    Endpoint, modelsResult.Error.Message);
+
                 return Error.Unavailable(modelsResult.Error.Message);
             }
 
             IReadOnlyList<AvailableModel> models = modelsResult.Value;
             if (models.Count == 0)
             {
+                _logger.LogWarning("Ollama at {Endpoint} reported no models", Endpoint);
                 return Error.NotFound("No models available on Ollama.");
             }
 
