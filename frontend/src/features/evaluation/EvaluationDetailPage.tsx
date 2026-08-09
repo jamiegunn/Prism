@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useEvaluation, useCancelEvaluation, useEvaluationResults } from './api'
 
-const COLORS = ['hsl(var(--primary))', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+const COLORS = ['var(--color-primary)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
 export function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -80,7 +80,7 @@ export function EvaluationDetailPage() {
             <div className="h-72 mb-6">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="method" tick={{ fontSize: 12 }} />
                   <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
                   <Tooltip />

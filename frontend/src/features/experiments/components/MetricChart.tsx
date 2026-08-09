@@ -24,11 +24,17 @@ interface MetricChartProps {
 }
 
 export function MetricChart({ metric, labels, values }: MetricChartProps) {
+  // Missing stays missing. Coercing it to 0 drew a zero-height bar that reads as a genuine
+  // measurement of zero — the fastest possible latency, the worst possible throughput — and
+  // dragged the axis down with it. Recharts simply omits an undefined point, and the run is
+  // named underneath so the gap is stated rather than left to be noticed.
   const data = labels.map((label, i) => ({
     name: label,
-    value: values[i] ?? 0,
+    value: values[i] ?? undefined,
     hasValue: values[i] != null,
   }))
+
+  const unmeasured = data.filter((point) => !point.hasValue).map((point) => point.name)
 
   const formatLabel = (key: string) =>
     key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
@@ -60,11 +66,17 @@ export function MetricChart({ metric, labels, values }: MetricChartProps) {
           />
           <Bar dataKey="value" radius={[4, 4, 0, 0]}>
             {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} opacity={data[i].hasValue ? 1 : 0.2} />
+              <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+
+      {unmeasured.length > 0 && (
+        <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+          Not measured for {unmeasured.join(', ')}.
+        </p>
+      )}
     </div>
   )
 }
