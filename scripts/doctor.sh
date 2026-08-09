@@ -142,8 +142,88 @@ if prism_ensure_database; then
   printf '    %s\n' "${DIM}you care about; a database named 'prism' is refused outright.${RESET}"
 else
   bad "no database available"
-  prism_env_explain
-  PROBLEMS=$((PROBLEMS + 1))
+  prism_database_options
+
+  # The options are printed either way. When someone is actually sitting here,
+  # offer to run the ones that are safe to run unattended — starting something
+  # already installed. Installing a database server is left to the human, and
+  # so is anything that needs credentials only they know.
+  if [ -t 0 ] && [ -t 1 ]; then
+    printf '\n'
+    printf '  %s' "Run one of these now? Enter its number, or press Enter to skip: "
+    read -r choice || choice=""
+
+    # Only a plain positive integer is a choice. Without this guard, sed treats
+    # arbitrary input as an address expression and returns something that looks
+    # like an answer.
+    case "$choice" in
+      ''|*[!0-9]*) picked="" ;;
+      *) picked="$(printf '%s\n' $PRISM_DB_OPTIONS | sed -n "${choice}p")" ;;
+    esac
+
+    if [ -n "$choice" ]; then
+
+      case "$picked" in
+        docker-start)
+          printf '\n'
+          if [ "$(uname -s)" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
+            printf '  %s' "starting Docker Desktop"
+            open -a Docker >/dev/null 2>&1
+            waited=0
+            while [ "$waited" -lt 120 ] && ! docker info >/dev/null 2>&1; do
+              printf '.'; sleep 3; waited=$((waited + 3))
+            done
+            printf '\n'
+          fi
+          if docker info >/dev/null 2>&1; then
+            docker compose up -d postgres && sleep 3
+          else
+            bad "Docker still is not responding — start it by hand and re-run"
+          fi
+          ;;
+        docker-compose)
+          printf '\n'
+          docker compose up -d postgres && sleep 3
+          ;;
+        brew-start)
+          formula="$(_prism_brew_postgres_formula)"
+          printf '\n'
+          brew services start "$formula"
+          printf '  %s\n' "pgvector is a separate formula; installing it if it is missing."
+          brew list --formula 2>/dev/null | grep -qx pgvector || brew install pgvector
+          sleep 3
+          ;;
+        brew-install|apt-install)
+          printf '\n  %s\n' "That one installs software, so it is left to you deliberately."
+          printf '  %s\n'   "Copy the commands above, then re-run this script."
+          ;;
+        use-existing)
+          printf '\n  %s\n' "That one needs credentials only you have, so it is yours to run."
+          printf '  %s\n'   "Put the export in your shell profile too, so editors and GUI git"
+          printf '  %s\n'   "clients see it and not only this terminal."
+          ;;
+        unit-only|no-verify)
+          printf '\n  %s\n' "That is a command to run when you need it, not a setup step."
+          printf '  %s\n'   "The database is still missing; this script will keep saying so."
+          ;;
+        *)
+          printf '\n  %s\n' "Not one of the numbers listed; nothing done."
+          ;;
+      esac
+
+      # Re-check, so the answer to "did that work" comes from the same run.
+      printf '\n'
+      if prism_ensure_database; then
+        pass "database is now reachable"
+        printf '    %s\n' "${DIM}PRISM_TEST_DB=$PRISM_TEST_DB${RESET}"
+        printf '\n    %s\n' "Add this to your shell profile:"
+        printf '      %s\n' "export PRISM_TEST_DB=\"$PRISM_TEST_DB\""
+        DB_FIXED=1
+      fi
+    fi
+  fi
+
+  [ "${DB_FIXED:-0}" = "1" ] || PROBLEMS=$((PROBLEMS + 1))
 fi
 
 # ---------------------------------------------------------------------------

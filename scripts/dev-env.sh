@@ -293,6 +293,135 @@ prism_env_prepare() {
   return $ok
 }
 
+# ---------------------------------------------------------------------------
+# Database options
+#
+# "No database available" is a diagnosis, not a decision. What a person can
+# actually do about it depends on what is already on their machine, so the list
+# below is assembled from what is there rather than printed from a template.
+#
+# Each option is numbered so scripts/doctor.sh can offer to run it, and each
+# carries the literal command, so it is useful even when nothing offers.
+#
+# PRISM_DB_OPTIONS is set to the space-separated ids of the options printed, in
+# the order they were printed.
+# ---------------------------------------------------------------------------
+
+# Names whatever holds a TCP port, when the tools to find out are present.
+_prism_port_owner() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1}'
+  fi
+}
+
+# The Homebrew postgresql formula installed on this machine, if any.
+_prism_brew_postgres_formula() {
+  command -v brew >/dev/null 2>&1 || return 1
+  brew list --formula 2>/dev/null | grep -E '^postgresql(@[0-9]+)?$' | tail -1
+}
+
+prism_database_options() {
+  local n=0 os owner brew_pg
+  os="$(uname -s)"
+  PRISM_DB_OPTIONS=""
+
+  _opt() {
+    n=$((n + 1))
+    PRISM_DB_OPTIONS="$PRISM_DB_OPTIONS $1"
+    printf '\n  %s) %s\n' "$n" "$2"
+  }
+  _cmd()  { printf '        %s\n' "$1"; }
+  _note() { printf '     %s\n' "$1"; }
+
+  printf '\n  %s\n' "The integration tests need a PostgreSQL with the pgvector extension."
+  printf '  %s\n'   "Here is what this machine can do about it."
+
+  # --- Something is squatting on the port -----------------------------------
+  owner="$(_prism_port_owner 5438)"
+  if [ -n "$owner" ]; then
+    printf '\n  %s\n' "! Port 5438 is already held by '$owner', which is not answering as"
+    printf '  %s\n'   "  PostgreSQL. That will block the container from binding. Check with:"
+    _cmd "lsof -nP -iTCP:5438 -sTCP:LISTEN"
+  fi
+
+  # --- Docker ---------------------------------------------------------------
+  if command -v docker >/dev/null 2>&1; then
+    if docker info >/dev/null 2>&1; then
+      _opt docker-compose "Start the bundled Postgres (Docker is already running)"
+      _cmd "docker compose up -d postgres"
+      _note "The compose file pins pgvector/pgvector:pg16, so the extension is there."
+      _note "If it fails, the reason is in:  docker compose logs postgres"
+    elif [ "$os" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
+      _opt docker-start "Start Docker Desktop, then the bundled Postgres  (recommended)"
+      _cmd "open -a Docker && docker compose up -d postgres"
+      _note "Takes about a minute the first time while Docker boots."
+    else
+      _opt docker-start "Start Docker, then the bundled Postgres  (recommended)"
+      _cmd "docker compose up -d postgres"
+      _note "Docker is installed but its daemon is not responding."
+    fi
+  fi
+
+  # --- Homebrew -------------------------------------------------------------
+  if [ "$os" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+    brew_pg="$(_prism_brew_postgres_formula)"
+
+    if [ -n "$brew_pg" ]; then
+      _opt brew-start "Start the Homebrew PostgreSQL you already have ($brew_pg)"
+      _cmd "brew services start $brew_pg"
+      _cmd "export PRISM_TEST_DB=\"Host=localhost;Port=5432;Database=prism_test;Username=\$USER;Password=\""
+      _note "Needs pgvector as well:  brew install pgvector"
+    else
+      _opt brew-install "Install PostgreSQL 16 and pgvector with Homebrew (no Docker needed)"
+      _cmd "brew install postgresql@16 pgvector && brew services start postgresql@16"
+      _cmd "export PRISM_TEST_DB=\"Host=localhost;Port=5432;Database=prism_test;Username=\$USER;Password=\""
+      _note "A permanent local install rather than a container. Roughly 300 MB."
+    fi
+  elif [ "$os" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
+    _opt apt-install "Install PostgreSQL 16 and pgvector with apt (no Docker needed)"
+    _cmd "sudo apt-get install -y postgresql-16 postgresql-16-pgvector"
+    _cmd "export PRISM_TEST_DB=\"Host=localhost;Port=5432;Database=prism_test;Username=postgres;Password=postgres\""
+  fi
+
+  # --- A server that is already running somewhere ---------------------------
+  local found=""
+  for candidate_port in 5432 5433 5438 54320; do
+    if _prism_port_open localhost "$candidate_port"; then
+      found="$found $candidate_port"
+    fi
+  done
+
+  if [ -n "$found" ]; then
+    _opt use-existing "Use a PostgreSQL already listening here — found on port(s):$found"
+    for candidate_port in $found; do
+      _cmd "export PRISM_TEST_DB=\"Host=localhost;Port=$candidate_port;Database=prism_test;Username=postgres;Password=postgres\""
+    done
+    _note "Adjust the username and password to match that server. The database"
+    _note "itself is created for you; pgvector must already be installed on it."
+  else
+    _opt use-existing "Point the tests at any PostgreSQL you have, anywhere"
+    _cmd "export PRISM_TEST_DB=\"Host=…;Port=…;Database=prism_test;Username=…;Password=…\""
+    _note "It needs the pgvector extension available. The database named in the"
+    _note "string is created for you if it does not exist."
+  fi
+
+  # --- Escape hatches -------------------------------------------------------
+  _opt unit-only "Skip the tests that need a database, just this once"
+  _cmd "cd backend && dotnet test Prism.sln --filter FullyQualifiedName~Unit"
+  _note "Around two thirds of the suite. Nothing covering job claiming, analytics"
+  _note "aggregation or vector search, which is where the interesting bugs live."
+
+  _opt no-verify "Commit without the gate"
+  _cmd "git commit --no-verify"
+  _note "CI will still run the full suite."
+
+  printf '\n  %s\n' "Whichever you pick, ./scripts/doctor.sh will confirm it worked."
+
+  unset -f _opt _cmd _note
+  export PRISM_DB_OPTIONS
+}
+
 # Prints what to do about whatever prism_env_prepare could not fix.
 prism_env_explain() {
   local item
@@ -313,16 +442,7 @@ prism_env_explain() {
         printf '  %s\n'   "Run it directly to see the error:  cd frontend && npm ci"
         ;;
       database)
-        printf '\n  %s\n' "The backend tests need PostgreSQL and none could be reached or started."
-        if ! docker info >/dev/null 2>&1; then
-          printf '  %s\n' "Docker is not running. Start Docker Desktop, then either commit again"
-          printf '  %s\n' "or run ./scripts/doctor.sh, which will bring Postgres up for you."
-        else
-          printf '  %s\n' "Docker is running but the postgres service would not start. Try:"
-          printf '  %s\n' "    docker compose up -d postgres && docker compose logs postgres"
-        fi
-        printf '  %s\n' "Alternatively point the tests at any Postgres you already have:"
-        printf '  %s\n' '    export PRISM_TEST_DB="Host=…;Port=…;Database=prism_test;Username=…;Password=…"'
+        prism_database_options
         ;;
     esac
   done
