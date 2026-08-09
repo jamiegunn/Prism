@@ -40,10 +40,14 @@ export function ChatPane({
   onTokenClick,
   className,
 }: ChatPaneProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  // Newest first, so the answer you are waiting for is the one you are looking
+  // at. In a normal chat the newest message being at the bottom is fine because
+  // you are reading a conversation; here you are usually re-reading one long
+  // response, and having it scroll away underneath you is the wrong default.
+  const topRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    topRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
 
   if (messages.length === 0 && !isStreaming) {
@@ -63,14 +67,8 @@ export function ChatPane({
   return (
     <ScrollArea className={cn('flex-1 px-4', className)}>
       <div className="mx-auto max-w-3xl py-4 space-y-1">
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            onSelectForLogprobs={onSelectMessageForLogprobs}
-            onTokenClick={onTokenClick}
-          />
-        ))}
+        {/* Anchor for the scroll-to-newest effect. */}
+        <div ref={topRef} />
 
         {/* Streaming ghost message */}
         {isStreaming && streamingContent && (() => {
@@ -101,7 +99,19 @@ export function ChatPane({
           </div>
         )}
 
-        <div ref={bottomRef} />
+        {/* toReversed() is not available in every runtime this targets, so copy
+            before reversing — reverse() mutates, and mutating props is a bug
+            that only shows up as messages shuffling on re-render. */}
+        {[...messages].reverse().map((message) => (
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onSelectForLogprobs={onSelectMessageForLogprobs}
+            onTokenClick={onTokenClick}
+          />
+        ))}
+
+
       </div>
     </ScrollArea>
   )

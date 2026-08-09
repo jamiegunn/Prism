@@ -30,6 +30,9 @@ page looks plainer than the screenshots, that is why.
 1. Pick an instance from the **Model / Instance** dropdown in the right-hand **Parameters**
    panel. Nothing sends until you do; the message box stays disabled.
 2. Type in the box at the bottom. **Enter** sends, **Shift+Enter** starts a new line.
+   Replies appear **newest first**, at the top — the opposite of a normal chat window, so the
+   response you just generated is the one you are looking at rather than something you have to
+   scroll down to find.
 3. Watch it stream in. The Send button turns into a red square while the model is generating —
    click it to stop early. Whatever arrived before you stopped is kept.
 
