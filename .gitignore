@@ -39,3 +39,6 @@ frontend/src/services/generated/
 # Both get large and neither belongs in history.
 _handoff/
 _to_delete/
+
+# Per-developer dev.sh answers, written by ./dev.sh
+.prism-dev.conf

@@ -2,12 +2,21 @@
 #
 # Prism development environment launcher.
 #
+# On the first run it asks a few questions, each with a recommended default, and
+# remembers the answers in .prism-dev.conf. After that it just starts.
+#
 # Usage:
-#   ./dev.sh              Start everything (Postgres + API + Frontend)
-#   ./dev.sh --gpu        Also start vLLM (requires NVIDIA GPU)
-#   ./dev.sh --stop       Stop all services
-#   ./dev.sh --backend    Only Postgres + API
-#   ./dev.sh --frontend   Only frontend dev server
+#   ./dev.sh                Start what you configured (asks on the first run)
+#   ./dev.sh --reconfigure  Ask the questions again
+#   ./dev.sh --yes          Take every default, ask nothing
+#   ./dev.sh --stop         Stop all services
+#
+#   ./dev.sh --backend      Only Postgres + API     ) explicit flags win over
+#   ./dev.sh --frontend     Only frontend dev server ) the saved answers
+#   ./dev.sh --gpu          Also start vLLM (needs an NVIDIA GPU)
+#
+# It never prompts when stdin is not a terminal, so CI and scripts get the
+# defaults rather than hanging on a question nobody is there to answer.
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -20,16 +29,23 @@ ok()   { echo -e "   ${GREEN}$1${NC}"; }
 warn() { echo -e "   ${YELLOW}$1${NC}"; }
 
 GPU=false; STOP=false; BACKEND_ONLY=false; FRONTEND_ONLY=false
+RECONFIGURE=false; ASSUME_YES=false
+SCOPE_FROM_FLAG=false
 
 for arg in "$@"; do
   case "$arg" in
-    --gpu)      GPU=true ;;
-    --stop)     STOP=true ;;
-    --backend)  BACKEND_ONLY=true ;;
-    --frontend) FRONTEND_ONLY=true ;;
-    *) echo "Unknown arg: $arg"; exit 1 ;;
+    --gpu)         GPU=true ;;
+    --stop)        STOP=true ;;
+    --backend)     BACKEND_ONLY=true;  SCOPE_FROM_FLAG=true ;;
+    --frontend)    FRONTEND_ONLY=true; SCOPE_FROM_FLAG=true ;;
+    --reconfigure) RECONFIGURE=true ;;
+    --yes|-y)      ASSUME_YES=true ;;
+    --help|-h)     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown arg: $arg"; echo "Try: $0 --help"; exit 1 ;;
   esac
 done
+
+CONFIG="$ROOT/.prism-dev.conf"
 
 # ── Stop ──────────────────────────────────────────────────────────────
 if $STOP; then
@@ -50,14 +66,151 @@ if $STOP; then
   exit 0
 fi
 
-# ── Preflight ─────────────────────────────────────────────────────────
-step "Checking prerequisites..."
+# ── Configuration ─────────────────────────────────────────────────────
+#
+# Asked once, remembered in .prism-dev.conf, and skipped entirely when there is
+# nobody to answer. Every question has a recommended default on the first
+# option, so holding Enter gets a working setup.
 
-# Same discovery the pre-commit hook and the doctor use, so a toolchain that is
-# installed but not on this shell's PATH is found rather than reported missing.
+# shellcheck disable=SC1090
+[ -f "$CONFIG" ] && . "$CONFIG"
+
+PRISM_SCOPE="${PRISM_SCOPE:-all}"
+PRISM_PROVIDER="${PRISM_PROVIDER:-later}"
+PRISM_API_PORT_PREF="${PRISM_API_PORT_PREF:-5000}"
+
+interactive() { [ -t 0 ] && [ -t 1 ] && ! $ASSUME_YES; }
+
+# ask <variable> <prompt> <default> <option>...
+#
+# Each option is "value:description". Prints them numbered, reads a number, and
+# assigns the chosen value. Anything unrecognised keeps the default rather than
+# re-prompting, because a launcher that will not let you past a question is
+# worse than one that guesses.
+ask() {
+  local __var="$1" prompt="$2" default="$3"; shift 3
+  local options=("$@") i=1 opt value desc answer
+
+  echo ""
+  echo -e "${CYAN}$prompt${NC}"
+  for opt in "${options[@]}"; do
+    value="${opt%%:*}"; desc="${opt#*:}"
+    if [ "$value" = "$default" ]; then
+      echo -e "   $i) $desc ${GREEN}[default]${NC}"
+    else
+      echo "   $i) $desc"
+    fi
+    i=$((i + 1))
+  done
+
+  printf '   > '
+  read -r answer || answer=""
+
+  if [ -n "$answer" ] && [ -z "${answer//[0-9]/}" ] \
+     && [ "$answer" -ge 1 ] 2>/dev/null && [ "$answer" -le "${#options[@]}" ]; then
+    opt="${options[$((answer - 1))]}"
+    printf -v "$__var" '%s' "${opt%%:*}"
+  else
+    printf -v "$__var" '%s' "$default"
+  fi
+}
+
+configure() {
+  echo ""
+  echo -e "${CYAN}Setting up. Press Enter to take the default in each case.${NC}"
+
+  ask PRISM_SCOPE "What should I start?" all \
+    "all:Everything — database, API and frontend" \
+    "backend:Backend only — database and API" \
+    "frontend:Frontend only — the Vite dev server"
+
+  # Only offer what this machine can actually do. Listing a vLLM option on a
+  # Mac with no NVIDIA GPU is an invitation to pick something that cannot work.
+  local provider_opts=() detected=""
+
+  if _prism_port_open localhost 11434; then
+    detected="ollama"
+    provider_opts+=("detected:Use the Ollama already running on port 11434")
+  elif command -v ollama >/dev/null 2>&1; then
+    provider_opts+=("start-ollama:Start Ollama for me (it is installed but not running)")
+  fi
+
+  if _prism_port_open localhost 8000; then
+    detected="${detected:-vllm}"
+    provider_opts+=("detected-vllm:Use the server already running on port 8000")
+  fi
+
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    provider_opts+=("vllm:Start vLLM in Docker — full token-level introspection")
+  fi
+
+  provider_opts+=("later:Nothing yet — I will connect one from the Models page")
+
+  if [ ${#provider_opts[@]} -gt 1 ]; then
+    ask PRISM_PROVIDER \
+      "Which model should Prism read? (this is what the heatmaps and Token Explorer need)" \
+      "${provider_opts[0]%%:*}" \
+      "${provider_opts[@]}"
+  else
+    PRISM_PROVIDER="later"
+    echo ""
+    warn "No inference server found on this machine."
+    warn "Install Ollama from https://ollama.com/download to get started quickly,"
+    warn "or run vLLM if you want the token-level views. Prism will start either way."
+  fi
+
+  # Only worth asking about when the usual port is unavailable; otherwise it is
+  # a question with one sensible answer.
+  if _prism_port_open localhost 5000; then
+    local holder
+    holder="$(command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:5000 -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1}')"
+    echo ""
+    warn "Port 5000 is taken${holder:+ by '$holder'}${holder:+.}"
+    [ "$(uname -s)" = "Darwin" ] && warn "On macOS that is usually AirPlay Receiver."
+    printf "   API port [5001]: "
+    read -r answer || answer=""
+    PRISM_API_PORT_PREF="${answer:-5001}"
+  fi
+
+  cat > "$CONFIG" <<EOF
+# Written by ./dev.sh. Delete this file or run ./dev.sh --reconfigure to change it.
+# Not tracked by git — these are your choices, not the project's.
+PRISM_SCOPE=$PRISM_SCOPE
+PRISM_PROVIDER=$PRISM_PROVIDER
+PRISM_API_PORT_PREF=$PRISM_API_PORT_PREF
+EOF
+
+  echo ""
+  ok "Saved to .prism-dev.conf — ./dev.sh --reconfigure to change it."
+}
+
+# Source dev-env early: configure() needs _prism_port_open.
 # shellcheck disable=SC1091
 . "$ROOT/scripts/dev-env.sh"
 
+if $RECONFIGURE || { [ ! -f "$CONFIG" ] && interactive; }; then
+  configure
+elif [ -f "$CONFIG" ]; then
+  echo -e "${CYAN}Using .prism-dev.conf${NC} (scope: $PRISM_SCOPE, provider: $PRISM_PROVIDER)"
+fi
+
+# Explicit flags always beat the saved answers.
+if ! $SCOPE_FROM_FLAG; then
+  case "$PRISM_SCOPE" in
+    backend)  BACKEND_ONLY=true ;;
+    frontend) FRONTEND_ONLY=true ;;
+  esac
+fi
+
+[ "$PRISM_PROVIDER" = "vllm" ] && GPU=true
+: "${PRISM_API_PORT:=$PRISM_API_PORT_PREF}"
+
+# ── Preflight ─────────────────────────────────────────────────────────
+step "Checking prerequisites..."
+
+# Discovery came from scripts/dev-env.sh, sourced above — the same code the
+# pre-commit hook and the doctor use, so a toolchain that is installed but not
+# on this shell's PATH is found rather than reported missing.
 prism_find_dotnet || {
   echo -e "${RED}No .NET SDK found.${NC}"
   echo "Run ./scripts/doctor.sh — it looks in the usual install locations and says what to do."
@@ -99,6 +252,38 @@ if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
     sleep 1
   done
   $ready || warn " Postgres did not report ready. Check:  docker compose logs postgres"
+fi
+
+# ── 1b. Inference provider ───────────────────────────────────────────
+#
+# Answering "start Ollama for me" and then being told there is no model
+# connected would make the question pointless.
+
+if [ "$PRISM_PROVIDER" = "start-ollama" ] && ! $FRONTEND_ONLY; then
+  if _prism_port_open localhost 11434; then
+    ok "Ollama is already running."
+  else
+    step "Starting Ollama..."
+    ollama serve > "$LOGS/ollama.log" 2>&1 &
+    echo $! > "$LOGS/ollama.pid"
+
+    for _ in $(seq 1 20); do
+      _prism_port_open localhost 11434 && break
+      sleep 1
+    done
+
+    if _prism_port_open localhost 11434; then
+      ok "Ollama is listening on 11434."
+      # A running Ollama with no model pulled still gives you nothing.
+      if ! ollama list 2>/dev/null | grep -qE '^[a-zA-Z]'; then
+        warn "No model is pulled yet. Fetch one with:  ollama pull mistral:7b-instruct"
+        warn "Note that Ollama returns no token probabilities, so the heatmap and"
+        warn "Token Explorer stay empty. Run vLLM if those are what you are here for."
+      fi
+    else
+      warn "Ollama did not come up — see $LOGS/ollama.log"
+    fi
+  fi
 fi
 
 # ── 2. Backend API ───────────────────────────────────────────────────

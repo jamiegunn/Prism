@@ -74,9 +74,24 @@ One script per platform — `dev.sh` is a shell script and will not run in Power
 `dev.ps1` will not run in bash or zsh. If your shell says `command not found: .dev.ps1`, you
 have the Windows one on a Mac.
 
-It starts the database container, waits for it to become healthy, builds and launches the API,
-installs frontend packages if they are missing, and starts the Vite dev server. Logs go to
-`logs/`; stop everything with `./dev.sh --stop`.
+**The first run asks a few questions**, each with a recommended default, so holding Enter gets
+a working setup:
+
+- what to start — everything, backend only, or just the frontend
+- which model to read — it offers whatever it finds running, offers to start Ollama if you have
+  it installed, and offers vLLM only on a machine with an NVIDIA GPU
+- which port the API should use, but only when the usual one is taken
+
+Answers are saved to `.prism-dev.conf`, which is not tracked, so it only asks once. Change them
+with `./dev.sh --reconfigure`. It never prompts when stdin is not a terminal, so CI and scripts
+get the defaults instead of hanging on a question nobody is there to answer; `--yes` does the
+same thing deliberately.
+
+After that it starts the database container and waits for it to be healthy, launches the API
+and **waits until it actually answers** rather than assuming, installs frontend packages if
+they are missing, and starts the Vite dev server. If the API fails to come up you get the
+reason from its log and a non-zero exit. Logs are in `logs/`; stop everything with
+`./dev.sh --stop`.
 
 #### Other ways to start it
 
@@ -87,6 +102,8 @@ installs frontend packages if they are missing, and starts the Vite dev server. 
 | `./dev.sh --backend` | `.\dev.ps1 -BackendOnly` | Just Postgres and the API |
 | `./dev.sh --frontend` | `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
 | `./dev.sh --stop` | `.\dev.ps1 -Stop` | Stop everything it started |
+| `./dev.sh --reconfigure` | — | Ask the setup questions again |
+| `./dev.sh --yes` | — | Take every default, ask nothing |
 
 #### Starting the pieces by hand
 
