@@ -35,8 +35,10 @@ services:
   #
   #   Linux + NVIDIA  the container reaches the GPU and is as fast as native
   #   macOS           it cannot. Docker runs a Linux VM and Metal is not passed
-  #                   through, so this is CPU-only and noticeably slower than
-  #                   installing Ollama natively. Convenient, not fast.
+  #                   through, so this is CPU-only. How much that costs is worth
+  #                   measuring: decode is memory-bandwidth-bound and Apple's CPU
+  #                   and GPU share the same bandwidth, so tok/s can be close.
+  #                   Prompt processing is compute-bound and is where Metal wins.
   #   Windows + WSL2  reaches the GPU through WSL
   #
   # dev.sh sizes and starts this; the limits below are what it passes in.

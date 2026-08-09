@@ -101,12 +101,28 @@ that a container cannot reach the GPU on every platform.
 
 | Your machine | Native Ollama | Ollama in a container | vLLM in a container |
 |---|---|---|---|
-| **macOS, Apple Silicon** | Uses the Apple GPU — **fastest here** | Works, but **CPU-only**: Docker runs a Linux VM and Metal is not passed through | Not possible — vLLM needs CUDA |
+| **macOS, Apple Silicon** | Uses the Apple GPU via Metal | Works, but **CPU-only**: Docker runs a Linux VM and Metal is not passed through | Not possible — vLLM needs CUDA |
 | **Linux / WSL2 + NVIDIA** | Uses the GPU | Uses the GPU | Uses the GPU — **the only option with token probabilities** |
 | **Anything else** | CPU | CPU | Not possible |
 
-The menu lists only the workable options and puts the fastest first, so on a Mac it recommends
-a native Ollama when you have one and the container when you do not. There is also a **point at
+The menu lists only the workable options and puts the likely-fastest first, so on a Mac it
+recommends a native Ollama when you have one and the container when you do not.
+
+> **How much Metal actually buys you on Apple Silicon is worth measuring rather than assuming.**
+> The CPU and GPU share the same unified memory and the same bandwidth, and generating tokens is
+> bandwidth-bound, so the decode rate — tokens per second — can come out close either way. Where
+> Metal reliably helps is prompt processing, which is compute-bound and shows up as
+> time-to-first-token, not as tok/s. On a long prompt the difference is obvious; on a short one
+> with a long answer it may not be.
+>
+> Prism records both per response. Send the same prompt to each and compare **TTFT** and
+> **tok/s** separately in the Statistics panel — that is a real measurement, and one this tool
+> is built to make easy.
+>
+> One trap first: **only one of them can hold port 11434.** If the container has it, a native
+> `ollama serve` cannot bind and every client keeps talking to the container — so you measure
+> the same thing twice. `dev.sh` now detects this and stops the container when you ask for the
+> native one, but check with `docker ps` if a comparison looks suspiciously flat. There is also a **point at
 a server somewhere else** option, which asks for a URL, checks it responds, and works out what
 kind of server it is.
 

@@ -204,7 +204,7 @@ configure() {
 
   if command -v ollama >/dev/null 2>&1 && ! _prism_port_open localhost 11434; then
     if [ "$os" = "Darwin" ]; then
-      provider_opts+=("start-ollama:Start the Ollama you have installed — uses the Apple GPU, fastest here")
+      provider_opts+=("start-ollama:Start the Ollama you have installed — uses the Apple GPU via Metal")
     else
       provider_opts+=("start-ollama:Start the Ollama you have installed")
     fi
@@ -214,7 +214,7 @@ configure() {
   # honestly rather than letting someone discover it as "the model is slow".
   if command -v docker >/dev/null 2>&1; then
     if [ "$os" = "Darwin" ]; then
-      provider_opts+=("container-ollama:Run Ollama in a container — nothing to install, but CPU-only on macOS")
+      provider_opts+=("container-ollama:Run Ollama in a container — nothing to install; CPU-only on macOS")
     elif command -v nvidia-smi >/dev/null 2>&1; then
       provider_opts+=("container-ollama:Run Ollama in a container — nothing to install, uses your GPU")
     else
@@ -386,8 +386,21 @@ if ! $FRONTEND_ONLY; then
       ;;
 
     start-ollama)
+      # "Something is on 11434" is not the same as "your native Ollama is on
+      # 11434". If the container from a previous run still holds the port, a
+      # native `ollama serve` cannot bind, every client keeps talking to the
+      # container, and you end up comparing the container against itself while
+      # believing you switched to Metal.
+      if docker ps --filter 'name=prism-ollama' --filter 'status=running' --format '{{.Names}}' 2>/dev/null \
+           | grep -q prism-ollama; then
+        warn "The Ollama container is holding port 11434, so a native Ollama cannot start."
+        step "Stopping the container so the native one can take the port..."
+        docker compose -f "$ROOT/docker-compose.yml" --profile ollama stop ollama >/dev/null 2>&1
+        for _ in $(seq 1 15); do _prism_port_open localhost 11434 || break; sleep 1; done
+      fi
+
       if _prism_port_open localhost 11434; then
-        ok "Ollama is already running."
+        ok "Ollama is already running natively."
       else
         step "Starting Ollama..."
         ollama serve > "$LOGS/ollama.log" 2>&1 &
@@ -405,6 +418,18 @@ if ! $FRONTEND_ONLY; then
       ;;
 
     container-ollama)
+      # The mirror image of the problem above: a native Ollama on 11434 stops
+      # the container publishing to it, and the container ends up unreachable
+      # while everything still appears to work.
+      if _prism_port_open localhost 11434 \
+         && ! docker ps --filter 'name=prism-ollama' --filter 'status=running' --format '{{.Names}}' 2>/dev/null \
+              | grep -q prism-ollama; then
+        warn "Something already holds port 11434 — most likely a native Ollama."
+        warn "Prism will use that instead of the container; they cannot both have the port."
+        warn "To use the container, stop the native one first:  pkill -f 'ollama serve'"
+        PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+      else
+
       step "Starting Ollama in a container..."
       export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
       export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
@@ -428,6 +453,7 @@ if ! $FRONTEND_ONLY; then
         fi
       else
         warn "Could not start the Ollama container. Check:  docker compose logs ollama"
+      fi
       fi
       ;;
 
