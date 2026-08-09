@@ -68,6 +68,39 @@ if $STOP; then
   exit 0
 fi
 
+# The local inference servers worth looking for, as port|id|type|endpoint|label.
+#
+# Probing a port beats checking PATH. A binary on PATH may not be running, a
+# running server may not be the binary you found, and on Windows the launcher
+# runs under Git Bash or WSL where a native install is not on PATH at all while
+# its port is perfectly reachable. Asking the port "who are you" answers the
+# question that actually matters on every platform.
+#
+# Kept in step with DiscoverProvidersHandler.Candidates; ProviderCandidateParity
+# tests fail if the two lists drift apart.
+PRISM_PROVIDER_CANDIDATES=(
+  "11434|detected-ollama|Ollama|http://localhost:11434|Ollama"
+  "8000|detected-vllm|Vllm|http://localhost:8000|vLLM"
+  "1234|detected-lmstudio|LmStudio|http://localhost:1234/v1|LM Studio"
+)
+
+# True when version $1 is at least $2. Compared field by field rather than with
+# sort -V, which BSD and GNU sort do not agree about.
+prism_version_at_least() {
+  local have="$1" want="$2"
+  local h1 h2 h3 w1 w2 w3
+
+  IFS=. read -r h1 h2 h3 <<< "$have"
+  IFS=. read -r w1 w2 w3 <<< "$want"
+
+  h1=${h1:-0}; h2=${h2:-0}; h3=${h3:-0}
+  w1=${w1:-0}; w2=${w2:-0}; w3=${w3:-0}
+
+  [ "$h1" -ne "$w1" ] && { [ "$h1" -gt "$w1" ]; return; }
+  [ "$h2" -ne "$w2" ] && { [ "$h2" -gt "$w2" ]; return; }
+  [ "$h3" -ge "$w3" ]
+}
+
 # Pulls a model when the server has none, because a running Ollama with an
 # empty model list produces exactly the same empty screens as no Ollama at all.
 # The prefix lets the same logic drive the host binary and the container.
@@ -88,8 +121,29 @@ ensure_ollama_model() {
     warn "Could not pull $model. Do it yourself with:  ${prefix}ollama pull $model"
   fi
 
-  warn "Ollama returns no per-token probabilities, so the heatmap, entropy view"
-  warn "and Token Explorer stay empty. vLLM is the local option that supports them."
+  # Ollama gained logprobs in 0.12.11. Before that Prism told everyone here that
+  # token-level views needed vLLM — which on an Apple Silicon Mac was advice to
+  # run something that cannot run there at all.
+  # `|| true` is load-bearing: with `set -o pipefail`, a grep that matches nothing
+  # fails the whole pipeline and would take the launcher down with it.
+  local version
+  version="$(${prefix}ollama --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+
+  if [ -n "$version" ] && ! prism_version_at_least "$version" 0.12.11; then
+    warn "This Ollama is $version, which predates per-token probabilities (added in 0.12.11),"
+    warn "so the heatmap, entropy view and Token Explorer stay empty. Updating turns them on."
+  fi
+}
+
+# Whether the Ollama container Prism starts is the thing on port 11434. This is
+# a different question from "is port 11434 open", and the difference is the whole
+# bug: a container and a native server answer identically there, only one of them
+# can hold the port, and mistaking one for the other means measuring the
+# container twice while believing you switched to Metal.
+_prism_ollama_container_running() {
+  command -v docker >/dev/null 2>&1 || return 1
+  docker ps --filter 'name=prism-ollama' --filter 'status=running' \
+            --format '{{.Names}}' 2>/dev/null | grep -q prism-ollama
 }
 
 # ── Configuration ─────────────────────────────────────────────────────
@@ -178,8 +232,15 @@ configure() {
   # Only offer what this machine can actually do, and put the fastest workable
   # option first. Listing vLLM on an Apple Silicon Mac would be an invitation to
   # pick something that cannot run at all.
-  local provider_opts=() os avail model_default
+  local provider_opts=() os arch metal avail model_default
   os="$(uname -s)"
+  arch="$(uname -m)"
+
+  # Metal is an Apple Silicon story, not a macOS one. Ollama on an Intel Mac is
+  # CPU-only like anywhere else, so promising "the Apple GPU" there would be the
+  # same kind of overclaim the container wording was corrected for.
+  metal=false
+  [ "$os" = "Darwin" ] && [ "$arch" = "arm64" ] && metal=true
 
   # Size from what the container runtime can hand out. On macOS and Windows that
   # is the VM's allocation, which is the real ceiling; fall back to the host's
@@ -196,19 +257,61 @@ configure() {
   local memory_default
   memory_default="${PRISM_OLLAMA_MEMORY_GIB:-$(prism_recommended_memory_gib "$avail")}"
 
-  # Already listening beats everything: it costs nothing and is running for a reason.
-  _prism_port_open localhost 11434 && \
-    provider_opts+=("detected-ollama:Use the Ollama already running on port 11434")
-  _prism_port_open localhost 8000 && \
-    provider_opts+=("detected-vllm:Use the server already running on port 8000")
+  # Something already listening usually beats everything: it costs nothing and is
+  # running for a reason. But "already running" must name *which* server, and it
+  # must not hide the native option — the container holding the port is exactly
+  # when someone wants to switch to Metal, and we can stop it to let them.
+  local port_taken=false container_up=false native_installed=false
+  _prism_port_open localhost 11434 && port_taken=true
+  _prism_ollama_container_running && container_up=true
+  command -v ollama >/dev/null 2>&1 && native_installed=true
 
-  if command -v ollama >/dev/null 2>&1 && ! _prism_port_open localhost 11434; then
-    if [ "$os" = "Darwin" ]; then
-      provider_opts+=("start-ollama:Start the Ollama you have installed — uses the Apple GPU via Metal")
+  local detected_opt="" start_opt=""
+
+  if $port_taken; then
+    if $container_up; then
+      if [ "$os" = "Darwin" ]; then
+        detected_opt="detected-ollama:Use the Ollama container already on 11434 — CPU-only on macOS"
+      else
+        detected_opt="detected-ollama:Use the Ollama container already running on port 11434"
+      fi
     else
-      provider_opts+=("start-ollama:Start the Ollama you have installed")
+      detected_opt="detected-ollama:Use the Ollama already running natively on port 11434"
     fi
   fi
+
+  # Offered when the port is free, and also when our own container is the one
+  # holding it, because that is a conflict dev.sh knows how to resolve. Withheld
+  # only when a native Ollama already has the port — "start it" would be a no-op
+  # and the detected option above says the same thing more honestly.
+  if $native_installed && { ! $port_taken || $container_up; }; then
+    start_opt="start-ollama:Start the Ollama you have installed"
+    $metal && start_opt="$start_opt — uses the Apple GPU via Metal"
+    if $container_up; then
+      start_opt="$start_opt (stops the container, which holds the port)"
+    fi
+  fi
+
+  # Likely-fastest first. A CPU-only container should not outrank the native
+  # Metal server merely because it happens to be up already.
+  if [ -n "$start_opt" ] && $container_up && [ "$os" = "Darwin" ]; then
+    provider_opts+=("$start_opt")
+    [ -n "$detected_opt" ] && provider_opts+=("$detected_opt")
+  else
+    [ -n "$detected_opt" ] && provider_opts+=("$detected_opt")
+    [ -n "$start_opt" ] && provider_opts+=("$start_opt")
+  fi
+
+  # Everything else that might already be up. Port 11434 is handled above, because
+  # Ollama is the one where *which* server answers changes what we offer.
+  local candidate cport cid ctype cendpoint clabel
+  for candidate in "${PRISM_PROVIDER_CANDIDATES[@]}"; do
+    IFS='|' read -r cport cid ctype cendpoint clabel <<< "$candidate"
+
+    if [ "$cport" != "11434" ] && _prism_port_open localhost "$cport"; then
+      provider_opts+=("$cid:Use the $clabel already running on port $cport")
+    fi
+  done
 
   # The container needs no install at all, which is the point. State the cost
   # honestly rather than letting someone discover it as "the model is slow".
@@ -349,7 +452,12 @@ if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
   $GPU && COMPOSE_ARGS+=(--profile gpu)
   COMPOSE_ARGS+=(up -d)
 
-  docker compose "${COMPOSE_ARGS[@]}"
+  # Fall through to the readiness check rather than letting `set -e` end the run here.
+  # The wait loop below exists precisely to report a Postgres that did not come up, and an
+  # unguarded failure at this line kills the launcher before it can — no message, no API, no
+  # frontend, just a script that stops.
+  docker compose "${COMPOSE_ARGS[@]}" \
+    || warn "docker compose exited non-zero; checking whether Postgres came up anyway."
 
   echo -n "   Waiting for PostgreSQL..."
   ready=false
@@ -377,12 +485,26 @@ PROVIDER_TYPE=""
 if ! $FRONTEND_ONLY; then
   case "$PRISM_PROVIDER" in
 
-    detected-ollama)
-      PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-      ;;
+    detected-*)
+      # Resolved from the candidate list rather than hard-coded per provider, so
+      # adding a server is one line in one place.
+      for candidate in "${PRISM_PROVIDER_CANDIDATES[@]}"; do
+        IFS='|' read -r cport cid ctype cendpoint clabel <<< "$candidate"
 
-    detected-vllm)
-      PROVIDER_ENDPOINT="http://localhost:8000"; PROVIDER_TYPE="Vllm"
+        [ "$cid" = "$PRISM_PROVIDER" ] || continue
+
+        if _prism_port_open localhost "$cport"; then
+          ok "$clabel is listening on $cport."
+          PROVIDER_ENDPOINT="$cendpoint"; PROVIDER_TYPE="$ctype"
+        else
+          # Saved from a previous run, but gone now — say so rather than
+          # registering an endpoint nothing is behind.
+          warn "Nothing is answering on port $cport, where $clabel used to be."
+          warn "Prism will still start; connect a model from the Models page."
+        fi
+
+        break
+      done
       ;;
 
     start-ollama)
@@ -391,29 +513,38 @@ if ! $FRONTEND_ONLY; then
       # native `ollama serve` cannot bind, every client keeps talking to the
       # container, and you end up comparing the container against itself while
       # believing you switched to Metal.
-      if docker ps --filter 'name=prism-ollama' --filter 'status=running' --format '{{.Names}}' 2>/dev/null \
-           | grep -q prism-ollama; then
+      if _prism_ollama_container_running; then
         warn "The Ollama container is holding port 11434, so a native Ollama cannot start."
         step "Stopping the container so the native one can take the port..."
-        docker compose -f "$ROOT/docker-compose.yml" --profile ollama stop ollama >/dev/null 2>&1
+        docker compose -f "$ROOT/docker-compose.yml" --profile ollama stop ollama >/dev/null 2>&1 || true
         for _ in $(seq 1 15); do _prism_port_open localhost 11434 || break; sleep 1; done
       fi
 
-      if _prism_port_open localhost 11434; then
-        ok "Ollama is already running natively."
-      else
-        step "Starting Ollama..."
-        ollama serve > "$LOGS/ollama.log" 2>&1 &
-        echo $! > "$LOGS/ollama.pid"
-        for _ in $(seq 1 20); do _prism_port_open localhost 11434 && break; sleep 1; done
-      fi
-
-      if _prism_port_open localhost 11434; then
-        ok "Ollama is listening on 11434."
+      # Ask again rather than assume the stop worked. Announcing "running
+      # natively" while the container still has the port would recreate the
+      # exact false belief this branch exists to prevent.
+      if _prism_ollama_container_running; then
+        warn "The container still holds port 11434, so this is the container, not Metal."
+        warn "Stop it yourself and run again:  docker compose --profile ollama stop ollama"
         PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-        ensure_ollama_model "" "$PRISM_MODEL"
+        ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
       else
-        warn "Ollama did not come up — see $LOGS/ollama.log"
+        if _prism_port_open localhost 11434; then
+          ok "Ollama is already running natively."
+        else
+          step "Starting Ollama..."
+          ollama serve > "$LOGS/ollama.log" 2>&1 &
+          echo $! > "$LOGS/ollama.pid"
+          for _ in $(seq 1 20); do _prism_port_open localhost 11434 && break; sleep 1; done
+        fi
+
+        if _prism_port_open localhost 11434; then
+          ok "Ollama is listening on 11434."
+          PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+          ensure_ollama_model "" "$PRISM_MODEL"
+        else
+          warn "Ollama did not come up — see $LOGS/ollama.log"
+        fi
       fi
       ;;
 
@@ -421,39 +552,40 @@ if ! $FRONTEND_ONLY; then
       # The mirror image of the problem above: a native Ollama on 11434 stops
       # the container publishing to it, and the container ends up unreachable
       # while everything still appears to work.
-      if _prism_port_open localhost 11434 \
-         && ! docker ps --filter 'name=prism-ollama' --filter 'status=running' --format '{{.Names}}' 2>/dev/null \
-              | grep -q prism-ollama; then
+      if _prism_port_open localhost 11434 && ! _prism_ollama_container_running; then
         warn "Something already holds port 11434 — most likely a native Ollama."
         warn "Prism will use that instead of the container; they cannot both have the port."
         warn "To use the container, stop the native one first:  pkill -f 'ollama serve'"
         PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+        # Still the native server's model list that matters, so pull into it —
+        # registering an endpoint whose model is missing opens an empty
+        # Playground, which is the thing this whole step exists to avoid.
+        ensure_ollama_model "" "$PRISM_MODEL"
       else
+        step "Starting Ollama in a container..."
+        export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
+        export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
+        echo "   Limits: ${PRISM_OLLAMA_MEMORY} memory, ${PRISM_OLLAMA_CPUS} CPUs"
 
-      step "Starting Ollama in a container..."
-      export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
-      export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
-      echo "   Limits: ${PRISM_OLLAMA_MEMORY} memory, ${PRISM_OLLAMA_CPUS} CPUs"
+        if docker compose -f "$ROOT/docker-compose.yml" --profile ollama up -d ollama; then
+          echo -n "   Waiting for Ollama..."
+          for _ in $(seq 1 60); do
+            _prism_port_open localhost 11434 && break
+            echo -n "."; sleep 1
+          done
+          echo ""
 
-      if docker compose -f "$ROOT/docker-compose.yml" --profile ollama up -d ollama; then
-        echo -n "   Waiting for Ollama..."
-        for _ in $(seq 1 60); do
-          _prism_port_open localhost 11434 && break
-          echo -n "."; sleep 1
-        done
-        echo ""
-
-        if _prism_port_open localhost 11434; then
-          ok "Ollama is listening on 11434."
-          PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-          ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+          if _prism_port_open localhost 11434; then
+            ok "Ollama is listening on 11434."
+            PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+            ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+          else
+            warn "The container started but nothing is answering on 11434."
+            warn "Check:  docker compose logs ollama"
+          fi
         else
-          warn "The container started but nothing is answering on 11434."
-          warn "Check:  docker compose logs ollama"
+          warn "Could not start the Ollama container. Check:  docker compose logs ollama"
         fi
-      else
-        warn "Could not start the Ollama container. Check:  docker compose logs ollama"
-      fi
       fi
       ;;
 
@@ -530,7 +662,15 @@ if ! $FRONTEND_ONLY; then
 
   if [ ! -d "$ROOT/backend/src/Prism.Api/bin" ]; then
     echo "   Building backend (first run)..."
-    dotnet build "$ROOT/backend/Prism.sln" --nologo -q
+
+    # A compile error is a normal thing to hit on a first run, and it needs to be reported as
+    # one. Unguarded, `set -e` ends the launcher on the spot with the build output already
+    # swallowed by -q, which reads as "the script mysteriously stopped".
+    if ! dotnet build "$ROOT/backend/Prism.sln" --nologo; then
+      warn "The backend did not build. Fix the errors above, then run ./dev.sh again."
+      warn "The database is up, so this is the only thing standing in the way."
+      exit 1
+    fi
   fi
 
   # --no-launch-profile keeps launchSettings.json from overriding the URL, but it also
