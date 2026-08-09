@@ -14,6 +14,8 @@ interface PlaygroundPaneProps {
   sharedInput: string | null
   onRemove: () => void
   onStreamDone: (paneId: string) => void
+  /** Lifts the pane's conversation up so the panes can be compared against each other. */
+  onMessagesChange?: (paneId: string, messages: Message[]) => void
 }
 
 export function PlaygroundPane({
@@ -23,11 +25,22 @@ export function PlaygroundPane({
   sharedInput,
   onRemove,
   onStreamDone,
+  onMessagesChange,
 }: PlaygroundPaneProps) {
   const store = usePlaygroundStore()
   const stream = useStreamChat()
 
-  const messages: Message[] = stream.completedConversation?.messages ?? []
+  const completedConversation = stream.completedConversation
+  const messages: Message[] = completedConversation?.messages ?? []
+
+  // Keyed on the conversation rather than on `messages`, which is a fresh array every
+  // render and would loop. The completed conversation carries the whole history, so the
+  // parent's comparison averages over every response, not just the last one.
+  useEffect(() => {
+    if (completedConversation) {
+      onMessagesChange?.(paneId, completedConversation.messages)
+    }
+  }, [completedConversation, paneId, onMessagesChange])
 
   const handleSend = useCallback(
     async (content: string) => {
@@ -71,6 +84,7 @@ export function PlaygroundPane({
     ? {
         tokens: lastAssistant.tokenCount,
         latency: lastAssistant.latencyMs,
+        ttft: lastAssistant.ttftMs,
         tps: lastAssistant.tokensPerSecond,
       }
     : null
@@ -130,8 +144,11 @@ export function PlaygroundPane({
 
       {/* Pane Footer: Stats */}
       {stats && (
-        <div className="flex gap-3 border-t border-border px-3 py-1.5 text-[10px] text-zinc-500">
+        <div className="flex gap-3 border-t border-border px-3 py-1.5 text-[10px] tabular-nums text-zinc-500">
           {stats.latency != null && <span>{stats.latency}ms</span>}
+          {/* TTFT is the metric that separates a GPU-accelerated server from a CPU one;
+              leaving it out of this strip is what forced the two-run manual comparison. */}
+          {stats.ttft != null && <span>{stats.ttft}ms TTFT</span>}
           {stats.tokens != null && <span>{stats.tokens} tokens</span>}
           {stats.tps != null && <span>{stats.tps.toFixed(1)} t/s</span>}
         </div>

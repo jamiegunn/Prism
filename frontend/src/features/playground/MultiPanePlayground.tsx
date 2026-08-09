@@ -6,7 +6,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { useInstances } from '@/features/models/api'
 import { PlaygroundPane } from './components/PlaygroundPane'
+import { PaneComparisonSummary } from './components/PaneComparisonSummary'
 import { SystemPromptEditor } from './components/SystemPromptEditor'
+import type { Message } from './types'
 
 interface PaneConfig {
   id: string
@@ -20,7 +22,15 @@ export function MultiPanePlayground() {
   const [panes, setPanes] = useState<PaneConfig[]>([])
   const [inputText, setInputText] = useState('')
   const [sharedInput, setSharedInput] = useState<string | null>(null)
-  const [completedCount, setCompletedCount] = useState(0)
+  // Which panes have finished, not how many events arrived. A plain counter double-counts a
+  // pane that is sent to twice and keeps counting one that has since been removed, so the
+  // "2/3 completed" line drifts away from what is on screen.
+  const [completedPaneIds, setCompletedPaneIds] = useState<Set<string>>(() => new Set())
+  const [paneMessages, setPaneMessages] = useState<Record<string, Message[]>>({})
+
+  const handleMessagesChange = useCallback((paneId: string, messages: Message[]) => {
+    setPaneMessages((prev) => ({ ...prev, [paneId]: messages }))
+  }, [])
 
   const handleAddPane = useCallback(
     (instanceId: string) => {
@@ -46,6 +56,17 @@ export function MultiPanePlayground() {
 
   const handleRemovePane = useCallback((paneId: string) => {
     setPanes((prev) => prev.filter((p) => p.id !== paneId))
+    // Drop its numbers too, or a removed pane keeps competing in the comparison.
+    setPaneMessages((prev) => {
+      const { [paneId]: _removed, ...rest } = prev
+      return rest
+    })
+    setCompletedPaneIds((prev) => {
+      if (!prev.has(paneId)) return prev
+      const next = new Set(prev)
+      next.delete(paneId)
+      return next
+    })
   }, [])
 
   const handleSendAll = useCallback(() => {
@@ -54,12 +75,12 @@ export function MultiPanePlayground() {
       toast.error('Add at least one instance pane')
       return
     }
-    setCompletedCount(0)
+    setCompletedPaneIds(new Set())
     setSharedInput(inputText.trim())
   }, [inputText, panes])
 
-  const handleStreamDone = useCallback(() => {
-    setCompletedCount((prev) => prev + 1)
+  const handleStreamDone = useCallback((paneId: string) => {
+    setCompletedPaneIds((prev) => (prev.has(paneId) ? prev : new Set(prev).add(paneId)))
   }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -68,6 +89,10 @@ export function MultiPanePlayground() {
       handleSendAll()
     }
   }
+
+  // Counted against the panes actually on screen, so the total and the tally can never
+  // disagree about how many there are.
+  const completedCount = panes.filter((pane) => completedPaneIds.has(pane.id)).length
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -131,11 +156,21 @@ export function MultiPanePlayground() {
                 sharedInput={sharedInput}
                 onRemove={() => handleRemovePane(pane.id)}
                 onStreamDone={handleStreamDone}
+                onMessagesChange={handleMessagesChange}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Head-to-head performance. Renders nothing until two panes have real numbers. */}
+      <PaneComparisonSummary
+        panes={panes.map((pane) => ({
+          paneId: pane.id,
+          label: pane.instanceName,
+          messages: paneMessages[pane.id] ?? [],
+        }))}
+      />
 
       {/* Shared Input */}
       <div className="border-t border-zinc-800 px-4 py-3">
