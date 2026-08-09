@@ -61,10 +61,34 @@ if $STOP; then
     rm -f "$pidfile"
   done
 
-  docker compose -f "$ROOT/docker-compose.yml" --profile gpu down 2>/dev/null || true
+  docker compose -f "$ROOT/docker-compose.yml" --profile gpu --profile ollama down 2>/dev/null || true
   ok "Stopped Docker containers"
   exit 0
 fi
+
+# Pulls a model when the server has none, because a running Ollama with an
+# empty model list produces exactly the same empty screens as no Ollama at all.
+# The prefix lets the same logic drive the host binary and the container.
+ensure_ollama_model() {
+  local prefix="$1" model="$2"
+
+  if ${prefix}ollama list 2>/dev/null | tail -n +2 | grep -qE '\S'; then
+    ok "A model is already available."
+    return 0
+  fi
+
+  [ -n "$model" ] || model="mistral:7b-instruct"
+
+  step "Pulling $model (first run only — this downloads a few GB)..."
+  if ${prefix}ollama pull "$model"; then
+    ok "$model is ready."
+  else
+    warn "Could not pull $model. Do it yourself with:  ${prefix}ollama pull $model"
+  fi
+
+  warn "Ollama returns no per-token probabilities, so the heatmap, entropy view"
+  warn "and Token Explorer stay empty. vLLM is the local option that supports them."
+}
 
 # ── Configuration ─────────────────────────────────────────────────────
 #
@@ -78,6 +102,9 @@ fi
 PRISM_SCOPE="${PRISM_SCOPE:-all}"
 PRISM_PROVIDER="${PRISM_PROVIDER:-later}"
 PRISM_API_PORT_PREF="${PRISM_API_PORT_PREF:-5000}"
+PRISM_MODEL="${PRISM_MODEL:-}"
+PRISM_OLLAMA_MEMORY_GIB="${PRISM_OLLAMA_MEMORY_GIB:-}"
+PRISM_REMOTE_URL="${PRISM_REMOTE_URL:-}"
 
 interactive() { [ -t 0 ] && [ -t 1 ] && ! $ASSUME_YES; }
 
@@ -124,40 +151,84 @@ configure() {
     "backend:Backend only — database and API" \
     "frontend:Frontend only — the Vite dev server"
 
-  # Only offer what this machine can actually do. Listing a vLLM option on a
-  # Mac with no NVIDIA GPU is an invitation to pick something that cannot work.
-  local provider_opts=() detected=""
+  # Only offer what this machine can actually do, and put the fastest workable
+  # option first. Listing vLLM on an Apple Silicon Mac would be an invitation to
+  # pick something that cannot run at all.
+  local provider_opts=() os avail model_default
+  os="$(uname -s)"
 
-  if _prism_port_open localhost 11434; then
-    detected="ollama"
-    provider_opts+=("detected:Use the Ollama already running on port 11434")
-  elif command -v ollama >/dev/null 2>&1; then
-    provider_opts+=("start-ollama:Start Ollama for me (it is installed but not running)")
-  fi
+  # Size from what the container runtime can hand out. On macOS and Windows that
+  # is the VM's allocation, which is the real ceiling; fall back to the host's
+  # RAM only when no runtime is up to ask.
+  avail="$(prism_runtime_memory_gib 2>/dev/null || true)"
+  [ -n "$avail" ] || avail="$(prism_host_memory_gib 2>/dev/null || true)"
+  [ -n "$avail" ] || avail=8
 
-  if _prism_port_open localhost 8000; then
-    detected="${detected:-vllm}"
+  model_default="$(prism_recommended_model "$avail")"
+  PRISM_OLLAMA_MEMORY_GIB="$(prism_recommended_memory_gib "$avail")"
+
+  # Already listening beats everything: it costs nothing and is running for a reason.
+  _prism_port_open localhost 11434 && \
+    provider_opts+=("detected-ollama:Use the Ollama already running on port 11434")
+  _prism_port_open localhost 8000 && \
     provider_opts+=("detected-vllm:Use the server already running on port 8000")
+
+  if command -v ollama >/dev/null 2>&1 && ! _prism_port_open localhost 11434; then
+    if [ "$os" = "Darwin" ]; then
+      provider_opts+=("start-ollama:Start the Ollama you have installed — uses the Apple GPU, fastest here")
+    else
+      provider_opts+=("start-ollama:Start the Ollama you have installed")
+    fi
   fi
 
-  if command -v nvidia-smi >/dev/null 2>&1; then
-    provider_opts+=("vllm:Start vLLM in Docker — full token-level introspection")
+  # The container needs no install at all, which is the point. State the cost
+  # honestly rather than letting someone discover it as "the model is slow".
+  if command -v docker >/dev/null 2>&1; then
+    if [ "$os" = "Darwin" ]; then
+      provider_opts+=("container-ollama:Run Ollama in a container — nothing to install, but CPU-only on macOS")
+    elif command -v nvidia-smi >/dev/null 2>&1; then
+      provider_opts+=("container-ollama:Run Ollama in a container — nothing to install, uses your GPU")
+    else
+      provider_opts+=("container-ollama:Run Ollama in a container — nothing to install")
+    fi
+
+    # vLLM is CUDA-only. No GPU, no option.
+    command -v nvidia-smi >/dev/null 2>&1 && \
+      provider_opts+=("container-vllm:Run vLLM in a container — the only one with token probabilities")
   fi
 
+  provider_opts+=("remote:Point at a server somewhere else — I will give you the URL")
   provider_opts+=("later:Nothing yet — I will connect one from the Models page")
 
-  if [ ${#provider_opts[@]} -gt 1 ]; then
-    ask PRISM_PROVIDER \
-      "Which model should Prism read? (this is what the heatmaps and Token Explorer need)" \
-      "${provider_opts[0]%%:*}" \
-      "${provider_opts[@]}"
-  else
-    PRISM_PROVIDER="later"
-    echo ""
-    warn "No inference server found on this machine."
-    warn "Install Ollama from https://ollama.com/download to get started quickly,"
-    warn "or run vLLM if you want the token-level views. Prism will start either way."
-  fi
+  echo ""
+  echo -e "${CYAN}Detected ${avail} GiB available to containers.${NC}"
+
+  ask PRISM_PROVIDER \
+    "Which model should Prism read? (the heatmaps and Token Explorer are built on this)" \
+    "${provider_opts[0]%%:*}" \
+    "${provider_opts[@]}"
+
+  # Follow-ups, only for the answers that need them.
+  case "$PRISM_PROVIDER" in
+    container-ollama|start-ollama)
+      echo ""
+      printf "   Model to pull [%s]: " "$model_default"
+      read -r answer || answer=""
+      PRISM_MODEL="${answer:-$model_default}"
+
+      if [ "$PRISM_PROVIDER" = "container-ollama" ]; then
+        printf "   Memory for the container in GiB [%s]: " "$PRISM_OLLAMA_MEMORY_GIB"
+        read -r answer || answer=""
+        PRISM_OLLAMA_MEMORY_GIB="${answer:-$PRISM_OLLAMA_MEMORY_GIB}"
+      fi
+      ;;
+    remote)
+      echo ""
+      printf "   Endpoint URL [http://localhost:11434]: "
+      read -r answer || answer=""
+      PRISM_REMOTE_URL="${answer:-http://localhost:11434}"
+      ;;
+  esac
 
   # Only worth asking about when the usual port is unavailable; otherwise it is
   # a question with one sensible answer.
@@ -178,6 +249,9 @@ configure() {
 PRISM_SCOPE=$PRISM_SCOPE
 PRISM_PROVIDER=$PRISM_PROVIDER
 PRISM_API_PORT_PREF=$PRISM_API_PORT_PREF
+PRISM_MODEL=$PRISM_MODEL
+PRISM_OLLAMA_MEMORY_GIB=$PRISM_OLLAMA_MEMORY_GIB
+PRISM_REMOTE_URL=$PRISM_REMOTE_URL
 EOF
 
   echo ""
@@ -202,7 +276,7 @@ if ! $SCOPE_FROM_FLAG; then
   esac
 fi
 
-[ "$PRISM_PROVIDER" = "vllm" ] && GPU=true
+[ "$PRISM_PROVIDER" = "container-vllm" ] && GPU=true
 : "${PRISM_API_PORT:=$PRISM_API_PORT_PREF}"
 
 # ── Preflight ─────────────────────────────────────────────────────────
@@ -259,31 +333,101 @@ fi
 # Answering "start Ollama for me" and then being told there is no model
 # connected would make the question pointless.
 
-if [ "$PRISM_PROVIDER" = "start-ollama" ] && ! $FRONTEND_ONLY; then
-  if _prism_port_open localhost 11434; then
-    ok "Ollama is already running."
-  else
-    step "Starting Ollama..."
-    ollama serve > "$LOGS/ollama.log" 2>&1 &
-    echo $! > "$LOGS/ollama.pid"
+# PROVIDER_ENDPOINT is what gets registered with the API further down, so the
+# app is usable the moment it opens rather than showing an empty Models page.
+PROVIDER_ENDPOINT=""
+PROVIDER_TYPE=""
 
-    for _ in $(seq 1 20); do
-      _prism_port_open localhost 11434 && break
-      sleep 1
-    done
+if ! $FRONTEND_ONLY; then
+  case "$PRISM_PROVIDER" in
 
-    if _prism_port_open localhost 11434; then
-      ok "Ollama is listening on 11434."
-      # A running Ollama with no model pulled still gives you nothing.
-      if ! ollama list 2>/dev/null | grep -qE '^[a-zA-Z]'; then
-        warn "No model is pulled yet. Fetch one with:  ollama pull mistral:7b-instruct"
-        warn "Note that Ollama returns no token probabilities, so the heatmap and"
-        warn "Token Explorer stay empty. Run vLLM if those are what you are here for."
+    detected-ollama)
+      PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+      ;;
+
+    detected-vllm)
+      PROVIDER_ENDPOINT="http://localhost:8000"; PROVIDER_TYPE="Vllm"
+      ;;
+
+    start-ollama)
+      if _prism_port_open localhost 11434; then
+        ok "Ollama is already running."
+      else
+        step "Starting Ollama..."
+        ollama serve > "$LOGS/ollama.log" 2>&1 &
+        echo $! > "$LOGS/ollama.pid"
+        for _ in $(seq 1 20); do _prism_port_open localhost 11434 && break; sleep 1; done
       fi
-    else
-      warn "Ollama did not come up — see $LOGS/ollama.log"
-    fi
-  fi
+
+      if _prism_port_open localhost 11434; then
+        ok "Ollama is listening on 11434."
+        PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+        ensure_ollama_model "" "$PRISM_MODEL"
+      else
+        warn "Ollama did not come up — see $LOGS/ollama.log"
+      fi
+      ;;
+
+    container-ollama)
+      step "Starting Ollama in a container..."
+      export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
+      export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
+      echo "   Limits: ${PRISM_OLLAMA_MEMORY} memory, ${PRISM_OLLAMA_CPUS} CPUs"
+
+      if docker compose -f "$ROOT/docker-compose.yml" --profile ollama up -d ollama; then
+        echo -n "   Waiting for Ollama..."
+        for _ in $(seq 1 60); do
+          _prism_port_open localhost 11434 && break
+          echo -n "."; sleep 1
+        done
+        echo ""
+
+        if _prism_port_open localhost 11434; then
+          ok "Ollama is listening on 11434."
+          PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+          ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+        else
+          warn "The container started but nothing is answering on 11434."
+          warn "Check:  docker compose logs ollama"
+        fi
+      else
+        warn "Could not start the Ollama container. Check:  docker compose logs ollama"
+      fi
+      ;;
+
+    container-vllm)
+      # Brought up by the gpu profile in the PostgreSQL step above.
+      if _prism_port_open localhost 8000; then
+        ok "vLLM is listening on 8000."
+        PROVIDER_ENDPOINT="http://localhost:8000"; PROVIDER_TYPE="Vllm"
+      else
+        warn "vLLM is not answering on 8000 yet. It loads weights on first start,"
+        warn "which can take several minutes. Follow it with: docker compose logs -f vllm"
+      fi
+      ;;
+
+    remote)
+      step "Checking $PRISM_REMOTE_URL ..."
+      remote_host="$(printf '%s' "$PRISM_REMOTE_URL" | sed -E 's#^[a-z]+://##; s#[:/].*$##')"
+      remote_port="$(printf '%s' "$PRISM_REMOTE_URL" | sed -nE 's#^[a-z]+://[^:/]+:([0-9]+).*#\1#p')"
+      [ -n "$remote_port" ] || case "$PRISM_REMOTE_URL" in https://*) remote_port=443 ;; *) remote_port=80 ;; esac
+
+      if _prism_port_open "$remote_host" "$remote_port"; then
+        ok "Reachable."
+        PROVIDER_ENDPOINT="$PRISM_REMOTE_URL"
+        # Guess the type from how it answers; the probe on registration corrects it.
+        if curl -fsS --max-time 5 "$PRISM_REMOTE_URL/api/tags" >/dev/null 2>&1; then
+          PROVIDER_TYPE="Ollama"
+        else
+          PROVIDER_TYPE="OpenAiCompatible"
+        fi
+        echo "   Looks like: $PROVIDER_TYPE"
+      else
+        warn "Nothing is answering at $remote_host:$remote_port."
+        warn "Prism will still start; connect it from the Models page once it is up."
+      fi
+      ;;
+  esac
 fi
 
 # ── 2. Backend API ───────────────────────────────────────────────────
@@ -356,6 +500,27 @@ if ! $FRONTEND_ONLY; then
 
   if $api_up; then
     ok " Ready! Swagger: $PRISM_API_URL/swagger"
+
+    # Register whatever we started, so the app opens on a working Playground
+    # rather than an empty Models page. Skipped when something is already
+    # registered — re-adding on every launch would pile up duplicates.
+    if [ -n "$PROVIDER_ENDPOINT" ]; then
+      existing="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null || echo '')"
+
+      if printf '%s' "$existing" | grep -q "\"endpoint\":\"${PROVIDER_ENDPOINT}\""; then
+        ok "$PROVIDER_ENDPOINT is already registered."
+      else
+        if curl -fsS --max-time 15 -X POST "$PRISM_API_URL/api/v1/models/instances" \
+             -H 'Content-Type: application/json' \
+             -d "{\"name\":\"Local ${PROVIDER_TYPE}\",\"endpoint\":\"${PROVIDER_ENDPOINT}\",\"providerType\":\"${PROVIDER_TYPE}\",\"isDefault\":true}" \
+             >/dev/null 2>&1; then
+          ok "Registered $PROVIDER_ENDPOINT as the default model."
+        else
+          warn "Could not register $PROVIDER_ENDPOINT automatically."
+          warn "Add it from the Models page — it will be found by the search there."
+        fi
+      fi
+    fi
   else
     echo ""
     echo -e "${RED}The API did not come up.${NC}"

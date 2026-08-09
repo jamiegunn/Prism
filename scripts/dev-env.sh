@@ -294,6 +294,85 @@ prism_env_prepare() {
 }
 
 # ---------------------------------------------------------------------------
+# Sizing
+#
+# On macOS and Windows the container runtime is a Linux VM with its own memory
+# allocation, and that allocation — not the machine's RAM — is the ceiling a
+# container actually hits. A 64 GB MacBook whose Docker VM is capped at 8 GB
+# can only give a container 8 GB, so reading hw.memsize would size things
+# wrongly in the one direction that hurts: an OOM-killed model load.
+# ---------------------------------------------------------------------------
+
+# Memory the container runtime can hand out, in whole GiB. Empty if unknown.
+prism_runtime_memory_gib() {
+  local bytes
+  bytes="$(docker info --format '{{.MemTotal}}' 2>/dev/null)"
+
+  if [ -n "$bytes" ] && [ "$bytes" -gt 0 ] 2>/dev/null; then
+    printf '%d' $((bytes / 1073741824))
+    return 0
+  fi
+
+  return 1
+}
+
+# CPUs the container runtime can hand out. Empty if unknown.
+prism_runtime_cpus() {
+  local cpus
+  cpus="$(docker info --format '{{.NCPU}}' 2>/dev/null)"
+  [ -n "$cpus" ] && [ "$cpus" -gt 0 ] 2>/dev/null && printf '%d' "$cpus"
+}
+
+# Memory of the host itself, as a fallback when no runtime is up.
+prism_host_memory_gib() {
+  case "$(uname -s)" in
+    Darwin)
+      local bytes
+      bytes="$(sysctl -n hw.memsize 2>/dev/null)"
+      [ -n "$bytes" ] && printf '%d' $((bytes / 1073741824))
+      ;;
+    Linux)
+      local kb
+      kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)"
+      [ -n "$kb" ] && printf '%d' $((kb / 1048576))
+      ;;
+  esac
+}
+
+# A model that will actually load in the memory available.
+#
+# Sizes are the q4 quantisations Ollama pulls by default. The headroom matters:
+# a 7B q4 is about 4.4 GB of weights and wants roughly 6 GB in practice once
+# the KV cache and runtime are counted, so the thresholds sit above the naive
+# file size rather than at it.
+prism_recommended_model() {
+  local gib="${1:-0}"
+
+  if   [ "$gib" -ge 24 ] 2>/dev/null; then printf 'qwen2.5:14b-instruct'
+  elif [ "$gib" -ge 10 ] 2>/dev/null; then printf 'mistral:7b-instruct'
+  elif [ "$gib" -ge 6 ]  2>/dev/null; then printf 'llama3.2:3b'
+  else                                     printf 'qwen2.5:1.5b'
+  fi
+}
+
+# Memory limit to give the Ollama container, in GiB.
+#
+# Most of what is available, with a floor so a small VM still gets enough to
+# load the small model, and a ceiling because handing a single container 60 GB
+# helps nothing and starves everything else.
+prism_recommended_memory_gib() {
+  local available="${1:-0}" want
+
+  want=$(( available * 3 / 4 ))
+
+  [ "$want" -lt 4 ] && want=4
+  [ "$want" -gt 24 ] && want=24
+  [ "$want" -gt "$available" ] && [ "$available" -gt 0 ] && want="$available"
+
+  printf '%d' "$want"
+}
+
+# ---------------------------------------------------------------------------
 # Database options
 #
 # "No database available" is a diagnosis, not a decision. What a person can

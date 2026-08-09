@@ -29,6 +29,42 @@ services:
       timeout: 5s
       retries: 5
 
+  # Ollama in a container, so nobody has to install anything to get a model.
+  #
+  # Behind a profile, because whether you want this depends on your machine:
+  #
+  #   Linux + NVIDIA  the container reaches the GPU and is as fast as native
+  #   macOS           it cannot. Docker runs a Linux VM and Metal is not passed
+  #                   through, so this is CPU-only and noticeably slower than
+  #                   installing Ollama natively. Convenient, not fast.
+  #   Windows + WSL2  reaches the GPU through WSL
+  #
+  # dev.sh sizes and starts this; the limits below are what it passes in.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: prism-ollama
+    profiles: [ollama]
+    ports:
+      - "11434:11434"
+    volumes:
+      # Named volume so a `docker compose down` does not throw away several
+      # gigabytes of downloaded weights.
+      - prism-ollama-models:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: ${PRISM_OLLAMA_KEEP_ALIVE:-5m}
+    # Sized by dev.sh from what the container runtime actually has, since on
+    # macOS that is the VM's allocation rather than the machine's RAM. Override
+    # with PRISM_OLLAMA_MEMORY / PRISM_OLLAMA_CPUS.
+    mem_limit: ${PRISM_OLLAMA_MEMORY:-8g}
+    cpus: ${PRISM_OLLAMA_CPUS:-4}
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   vllm:
     image: vllm/vllm-openai:latest
     container_name: prism-vllm
@@ -56,6 +92,7 @@ services:
         condition: service_healthy
 
 volumes:
+  prism-ollama-models:
   prism-pgdata:
   prism-redis-data:
   prism-models:

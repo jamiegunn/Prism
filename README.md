@@ -78,14 +78,51 @@ have the Windows one on a Mac.
 a working setup:
 
 - what to start — everything, backend only, or just the frontend
-- which model to read — it offers whatever it finds running, offers to start Ollama if you have
-  it installed, and offers vLLM only on a machine with an NVIDIA GPU
+- **which model to read**, offering only what your machine can actually do (see below)
 - which port the API should use, but only when the usual one is taken
+
+Whatever you pick is started, the model is pulled if there isn't one, and it is registered with
+Prism as the default — so the app opens on a working Playground rather than an empty Models
+page. Running it again does not re-register.
 
 Answers are saved to `.prism-dev.conf`, which is not tracked, so it only asks once. Change them
 with `./dev.sh --reconfigure`. It never prompts when stdin is not a terminal, so CI and scripts
 get the defaults instead of hanging on a question nobody is there to answer; `--yes` does the
 same thing deliberately.
+
+##### Which model options you get
+
+You do not have to install anything: Ollama can run in a container. What is worth knowing is
+that a container cannot reach the GPU on every platform.
+
+| Your machine | Native Ollama | Ollama in a container | vLLM in a container |
+|---|---|---|---|
+| **macOS, Apple Silicon** | Uses the Apple GPU — **fastest here** | Works, but **CPU-only**: Docker runs a Linux VM and Metal is not passed through | Not possible — vLLM needs CUDA |
+| **Linux / WSL2 + NVIDIA** | Uses the GPU | Uses the GPU | Uses the GPU — **the only option with token probabilities** |
+| **Anything else** | CPU | CPU | Not possible |
+
+The menu lists only the workable options and puts the fastest first, so on a Mac it recommends
+a native Ollama when you have one and the container when you do not. There is also a **point at
+a server somewhere else** option, which asks for a URL, checks it responds, and works out what
+kind of server it is.
+
+The container is sized from what your container runtime reports it can hand out — on macOS and
+Windows that is the VM's allocation, not the machine's RAM, which is the limit a container
+actually hits. The suggested model follows from the same number:
+
+| Available | Suggested model | Container limit |
+|---|---|---|
+| under 6 GiB | `qwen2.5:1.5b` | 4 GiB |
+| 6–10 GiB | `llama3.2:3b` | 4–6 GiB |
+| 10–24 GiB | `mistral:7b-instruct` | 9–18 GiB |
+| 24 GiB and up | `qwen2.5:14b-instruct` | 24 GiB |
+
+Both are offered as editable defaults, and saved so you are only asked once.
+
+> **Only vLLM returns per-token probabilities.** Ollama — native or containerised — gives you
+> chat and structured output, and leaves the heatmap, entropy view and Token Explorer empty.
+> That is a limitation of Ollama's API, not of Prism, and it is the reason the menu says so at
+> the point where you choose.
 
 After that it starts the database container and waits for it to be healthy, launches the API
 and **waits until it actually answers** rather than assuming, installs frontend packages if
