@@ -90,24 +90,34 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are record
 
 | Requirement | Version | Why, and how it is pinned |
 |---|---|---|
-| [.NET SDK](https://dotnet.microsoft.com/download) | **10.0.100 or later 10.0.x** | Pinned by [`global.json`](global.json) with `rollForward: latestFeature`. The projects target `net9.0`, so you also need the **.NET 9 runtime** — or set `DOTNET_ROLL_FORWARD=Major` to run them on the 10 runtime. |
+| [.NET SDK](https://dotnet.microsoft.com/download) | **10.0.100 or later 10.0.x** | Pinned by [`global.json`](global.json). The projects target `net9.0` but do not need a 9.0 runtime — [`backend/Directory.Build.props`](backend/Directory.Build.props) sets `RollForward=Major`, so they run on the 10.0 runtime you already have. |
 | [Node.js](https://nodejs.org/) | **22** | Pinned by [`frontend/.nvmrc`](frontend/.nvmrc). `nvm use` in `frontend/` picks it up. 20 also works; 22 is what CI runs. |
 | [Docker](https://www.docker.com/) | any recent | Runs PostgreSQL 16 + pgvector on port 5438. Also the fallback the integration tests use when `PRISM_TEST_DB` is unset. |
 | An LLM inference server | — | Prism needs at least one running model to do anything. See [Setting Up an LLM](#setting-up-an-llm). |
 
-Check what you have:
+### Check, and fix, your machine in one command
+
+```bash
+./scripts/doctor.sh
+```
+
+It finds the SDK even when it is not on `PATH`, loads Node through `nvm`, installs frontend
+packages, starts Docker Desktop and the Postgres container, and tells you the one line to add
+to your shell profile. Run it after cloning, after a machine rebuild, or any time something
+stops working. It only asks you to intervene for things it genuinely cannot do, such as
+installing an SDK that is not there at all.
+
+If you would rather check by hand:
 
 ```bash
 dotnet --list-sdks       # expect a 10.0.x
-dotnet --list-runtimes   # expect Microsoft.NETCore.App 9.0.x
 node --version           # expect v22.x
 docker info              # expect no error
 ```
 
-If `dotnet --list-runtimes` shows no 9.0 entry, either install the [.NET 9
-runtime](https://dotnet.microsoft.com/download/dotnet/9.0) or export
-`DOTNET_ROLL_FORWARD=Major` so the 10 runtime is used instead. Without one of those, `dotnet
-run` and `dotnet test` fail with a missing-framework error even though the build succeeds.
+A missing .NET 9 runtime is **not** a problem — `RollForward=Major` covers it. If you see
+*"You must install or update .NET to run this application"* from `dotnet test`, you are on a
+checkout from before that was set; `git pull` rather than installing anything.
 
 ### Setting Up an LLM
 
@@ -357,7 +367,8 @@ The gate above can run automatically before every commit:
 
 That points `core.hooksPath` at [`.githooks/`](.githooks/), so the hooks are version-controlled
 and reviewed like any other code rather than living untracked in `.git/hooks`. Each clone needs
-to run it once — git has no way to do this for you.
+to run it once — git has no way to do this for you. It finishes by running `doctor.sh`, so if
+anything is missing you find out while you are setting up rather than mid-commit later.
 
 The hook only runs the half you touched:
 
@@ -368,17 +379,34 @@ The hook only runs the half you touched:
 | `backend/` only | build, `dotnet format`, xunit | ~60s |
 | Both, or `global.json` / `scripts/` / `.githooks/` | everything | ~90s |
 
-It fails loudly rather than skipping. If it cannot find a database for the backend tests it
-aborts the commit and tells you how to start one, because a suite that silently skipped its
-integration half is worse than no gate at all.
+### It provisions rather than complains
+
+Most of what used to stop a commit is now fixed on the spot:
+
+| Situation | What happens |
+|---|---|
+| `dotnet` not on `PATH` | Looked for in the usual install locations, including `/usr/local/share/dotnet` and `~/.dotnet` |
+| No .NET 9 runtime | Nothing to do — `RollForward=Major` handles it; the hook also exports `DOTNET_ROLL_FORWARD` as a belt-and-braces measure |
+| `npm` only visible via `nvm` | `nvm.sh` is sourced |
+| `frontend/node_modules` missing or stale | `npm ci` runs |
+| Postgres not running | `docker compose up -d postgres`, then waits for it |
+| `PRISM_TEST_DB` unset | Set automatically once a local Postgres answers |
+| `prism_test` database does not exist | Created by the test fixture on first connection |
+| `PRISM_TEST_DB` set but unreachable | Said out loud, rather than letting sixty tests fail with connection errors and calling that a red suite |
+
+It still refuses to guess where it should not. No SDK on the machine, or Docker not running,
+stops the commit — with `./scripts/doctor.sh` named as the way out. A suite that quietly skipped
+its integration half is worse than no gate at all.
+
+You do not have to set `PRISM_TEST_DB` yourself. Setting it is still worth doing if you want a
+different server, or to save the hook a few seconds:
 
 ```bash
 export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres"
 ```
 
-Put that in your shell profile. Hooks inherit the environment of whatever launched them, so
-without it in the profile, committing from an editor or GUI client will fail even though your
-terminal works.
+> The test fixture **empties that database on every run**. Point it at a database that exists
+> only for tests. One named `prism` is refused outright, since that is the application's own.
 
 Two escape hatches:
 
