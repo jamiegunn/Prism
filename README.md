@@ -102,11 +102,29 @@ that a container cannot reach the GPU on every platform.
 | Your machine | Native Ollama | Ollama in a container | vLLM in a container |
 |---|---|---|---|
 | **macOS, Apple Silicon** | Uses the Apple GPU via Metal | Works, but **CPU-only**: Docker runs a Linux VM and Metal is not passed through | Not possible — vLLM needs CUDA |
-| **Linux / WSL2 + NVIDIA** | Uses the GPU | Uses the GPU | Uses the GPU — **the only option with token probabilities** |
+| **Linux / WSL2 + NVIDIA** | Uses the GPU | Uses the GPU | Uses the GPU |
 | **Anything else** | CPU | CPU | Not possible |
 
+**Token probabilities work on all of these**, so the heatmap, entropy chart and Token Explorer
+are not a reason to pick one over another. Ollama returns per-token logprobs from **0.12.11**
+onwards; before that it did not, which is why older documentation — including this file until
+recently — sent people to vLLM for token-level introspection. On an Apple Silicon Mac that was
+advice to install something that cannot run there at all. If your Ollama predates 0.12.11,
+updating it is the whole fix, and Prism says so when it probes the server.
+
 The menu lists only the workable options and puts the likely-fastest first, so on a Mac it
-recommends a native Ollama when you have one and the container when you do not.
+recommends a native Ollama when you have one and the container when you do not. It offers the
+native one even when the container is already running, and stops the container for you — that
+switch is the whole point, so hiding it behind "something is already on 11434" would be
+useless. There is also a **point at a server somewhere else** option, which asks for a URL,
+checks it responds, and works out what kind of server it is.
+
+It finds servers by asking the conventional ports who is there — Ollama on 11434, vLLM on
+8000, LM Studio on 1234 — rather than by looking for binaries on `PATH`. A binary on `PATH`
+may not be running, a running server may not be the binary you found, and under WSL or Git
+Bash a Windows-side install is not on `PATH` at all while its port answers perfectly well.
+The launcher and the app's **Models → Discover** both read the same list, and a test fails if
+the two ever disagree.
 
 > **How much Metal actually buys you on Apple Silicon is worth measuring rather than assuming.**
 > The CPU and GPU share the same unified memory and the same bandwidth, and generating tokens is
@@ -115,16 +133,19 @@ recommends a native Ollama when you have one and the container when you do not.
 > time-to-first-token, not as tok/s. On a long prompt the difference is obvious; on a short one
 > with a long answer it may not be.
 >
-> Prism records both per response. Send the same prompt to each and compare **TTFT** and
-> **tok/s** separately in the Statistics panel — that is a real measurement, and one this tool
-> is built to make easy.
+> Prism measures this for you. Open **Playground → Compare**, point one pane at each server,
+> and send the prompt once: the **Performance comparison** strip underneath reports average
+> TTFT and average tok/s per pane, how many responses each average is over, and how far behind
+> the best pane the others are. The two metrics are reported separately and never combined into
+> one "speed" number, because a Metal server can win TTFT several times over while tying on
+> tok/s — and that pair of facts *is* the answer. Anything it could not measure says so rather
+> than showing a zero.
 >
 > One trap first: **only one of them can hold port 11434.** If the container has it, a native
 > `ollama serve` cannot bind and every client keeps talking to the container — so you measure
-> the same thing twice. `dev.sh` now detects this and stops the container when you ask for the
-> native one, but check with `docker ps` if a comparison looks suspiciously flat. There is also a **point at
-a server somewhere else** option, which asks for a URL, checks it responds, and works out what
-kind of server it is.
+> the same thing twice. `dev.sh` detects this and stops the container when you ask for the
+> native one, and names which of the two it found when it offers you the one already running.
+> If a comparison still looks suspiciously flat, `docker ps` settles it.
 
 The container is sized from what your container runtime reports it can hand out — on macOS and
 Windows that is the VM's allocation, not the machine's RAM, which is the limit a container
@@ -195,6 +216,14 @@ Open **http://localhost:5173/models**. With nothing registered yet, Prism looks 
 inference server on the usual local ports, tells you which ones it checked, and offers to
 connect whatever answered — including what that provider can and cannot do before you commit
 to it.
+
+> On a first visit Prism opens a one-minute tour of the main areas. It appears once and never
+> again on its own; the compass button beside the Prism logo reopens it, along with a handful
+> of short walkthroughs that each end with a real task done — a first prompt sent and its
+> timings read, one answer taken apart token by token, two servers measured against each
+> other. Walkthroughs that need something you do not have yet say so instead of leading you
+> onto an empty page, and the switch at the bottom of that panel controls whether the tour
+> ever opens by itself.
 
 If nothing is found, you need a model server running. [Connecting an inference
 server](#connecting-an-inference-server) below covers the options; the shortest path is:
@@ -396,7 +425,7 @@ looks trivial, that is deliberate — the build is the first gate, not a suggest
 
 There are two suites and they run separately.
 
-### Backend — 155 tests
+### Backend — 177 tests
 
 ```bash
 cd backend
@@ -435,7 +464,7 @@ dotnet test Prism.sln --filter "FullyQualifiedName~Integration"
 dotnet test Prism.sln --filter "FullyQualifiedName~JobWorker"
 ```
 
-### Frontend — 27 tests
+### Frontend — 86 tests
 
 ```bash
 cd frontend
@@ -448,6 +477,35 @@ No database, no backend, no browser — jsdom plus Testing Library, with `fetch`
 test. These cover the logprob maths (perplexity, Shannon entropy in bits) and the components
 that make claims about backend state.
 
+### The launcher — 41 assertions
+
+```bash
+./scripts/tests/menu_test.sh       # which options dev.sh offers, and why
+./scripts/tests/provider_test.sh   # what it does once you have chosen
+```
+
+`dev.sh` decides which inference server you end up talking to, and it gets that wrong in ways
+that look like success — offering a container while you believe you picked the native server,
+or reporting "already running natively" about something else entirely. These run the real
+functions and the real `case` block sliced straight out of `dev.sh`, faking only the outside
+world: `docker`, `ollama` and `uname` become stubs on `PATH`, and port checks read a state file
+the stubs can change. Everything is scratch-space; nothing touches your machine.
+
+They have already caught two live bugs — a `pipefail` pipeline that would have taken the whole
+launcher down, and a menu that could not offer the option it was written to offer.
+
+### Live inference — skipped unless a server is up
+
+`Integration/OllamaLogprobsTests` pins Ollama's logprobs wire format against a real server.
+It quietly does nothing when port 11434 is closed, which reads exactly like a fast pass — so
+when you want to be sure it ran:
+
+```bash
+PRISM_REQUIRE_OLLAMA=1 dotnet test Prism.sln --filter "FullyQualifiedName~OllamaLogprobs"
+```
+
+That turns "no server, nothing to check" into a failure.
+
 ### The full gate
 
 This is exactly what CI runs and what the pre-commit hook runs:
@@ -459,13 +517,13 @@ export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=post
 cd backend
 dotnet build Prism.sln                       # 0 warnings, 0 errors
 dotnet format Prism.sln --verify-no-changes  # clean
-dotnet test Prism.sln                        # 155 passed
+dotnet test Prism.sln                        # 177 passed
 
 cd ../frontend
 npm ci
 npx tsc -b --noEmit                          # clean
 npm run lint                                 # 0 errors
-npm test                                     # 27 passed
+npm test                                     # 86 passed
 ```
 
 ## Pre-commit hooks
