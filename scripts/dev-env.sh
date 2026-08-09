@@ -307,6 +307,28 @@ prism_env_prepare() {
 # the order they were printed.
 # ---------------------------------------------------------------------------
 
+# Identifies which container runtime is installed, since "start Docker" means a
+# different thing depending on which one it is. Docker Desktop is not the only
+# way to get a daemon, and telling a Rancher Desktop user to open Docker.app
+# sends them looking for something they deliberately did not install.
+#
+# Echoes "<id>|<display name>|<start command>", or nothing when none is found.
+_prism_container_runtime() {
+  if [ -d "/Applications/Rancher Desktop.app" ]; then
+    printf 'rancher|Rancher Desktop|open -a "Rancher Desktop"'
+  elif [ -d /Applications/OrbStack.app ]; then
+    printf 'orbstack|OrbStack|open -a OrbStack'
+  elif [ -d /Applications/Docker.app ]; then
+    printf 'docker-desktop|Docker Desktop|open -a Docker'
+  elif command -v colima >/dev/null 2>&1; then
+    printf 'colima|Colima|colima start'
+  elif command -v podman >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
+    printf 'podman|Podman|podman machine start'
+  elif command -v systemctl >/dev/null 2>&1 && [ -S /var/run/docker.sock -o -f /lib/systemd/system/docker.service ]; then
+    printf 'systemd|Docker|sudo systemctl start docker'
+  fi
+}
+
 # Names whatever holds a TCP port, when the tools to find out are present.
 _prism_port_owner() {
   local port="$1"
@@ -352,14 +374,23 @@ prism_database_options() {
       _cmd "docker compose up -d postgres"
       _note "The compose file pins pgvector/pgvector:pg16, so the extension is there."
       _note "If it fails, the reason is in:  docker compose logs postgres"
-    elif [ "$os" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
-      _opt docker-start "Start Docker Desktop, then the bundled Postgres  (recommended)"
-      _cmd "open -a Docker && docker compose up -d postgres"
-      _note "Takes about a minute the first time while Docker boots."
     else
-      _opt docker-start "Start Docker, then the bundled Postgres  (recommended)"
-      _cmd "docker compose up -d postgres"
-      _note "Docker is installed but its daemon is not responding."
+      local rt rt_name rt_cmd
+      rt="$(_prism_container_runtime)"
+      rt_name="$(printf '%s' "$rt" | cut -d'|' -f2)"
+      rt_cmd="$(printf '%s' "$rt" | cut -d'|' -f3)"
+
+      if [ -n "$rt_name" ]; then
+        _opt docker-start "Start $rt_name, then the bundled Postgres  (recommended)"
+        _cmd "$rt_cmd"
+        _cmd "docker compose up -d postgres"
+        _note "The daemon takes up to a minute to come up the first time."
+      else
+        _opt docker-start "Start your container runtime, then the bundled Postgres"
+        _cmd "docker compose up -d postgres"
+        _note "The docker command is here but no daemon is answering, and none of the"
+        _note "usual runtimes were recognised. Start whichever one you use."
+      fi
     fi
   fi
 

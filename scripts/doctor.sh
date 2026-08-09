@@ -4,9 +4,9 @@
 #
 #     ./scripts/doctor.sh
 #
-# Unlike the pre-commit hook, this is allowed to be slow and to start Docker
-# Desktop, because you are sitting in front of it. Run it after cloning, after
-# a machine rebuild, or any time the hook tells you something is missing.
+# Unlike the pre-commit hook, this is allowed to be slow and to start your
+# container runtime, because you are sitting in front of it. Run it after
+# cloning, after a machine rebuild, or when the hook says something is missing.
 
 set -uo pipefail
 
@@ -55,9 +55,13 @@ elif ! command -v docker >/dev/null 2>&1; then
   printf '    %s\n' "${DIM}is available another way — checked below.${RESET}"
 else
   warn "installed but not running"
-  if [ "$(uname -s)" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
-    printf '    %s' "starting Docker Desktop"
-    open -a Docker >/dev/null 2>&1
+  RT="$(_prism_container_runtime)"
+  RT_NAME="$(printf '%s' "$RT" | cut -d'|' -f2)"
+  RT_CMD="$(printf '%s' "$RT" | cut -d'|' -f3)"
+
+  if [ -n "$RT_CMD" ]; then
+    printf '    %s' "starting $RT_NAME"
+    eval "$RT_CMD" >/dev/null 2>&1
     waited=0
     while [ "$waited" -lt 90 ]; do
       if docker info >/dev/null 2>&1; then break; fi
@@ -67,12 +71,12 @@ else
     done
     printf '\n'
     if docker info >/dev/null 2>&1; then
-      pass "daemon is running"
+      pass "daemon is running ($RT_NAME)"
     else
-      warn "Docker did not come up within 90 seconds"
+      warn "$RT_NAME did not come up within 90 seconds"
     fi
   else
-    printf '    %s\n' "${DIM}Start it if the database check below fails.${RESET}"
+    printf '    %s\n' "${DIM}Start your container runtime if the database check below fails.${RESET}"
   fi
 fi
 
@@ -166,9 +170,11 @@ else
       case "$picked" in
         docker-start)
           printf '\n'
-          if [ "$(uname -s)" = "Darwin" ] && [ -d /Applications/Docker.app ]; then
-            printf '  %s' "starting Docker Desktop"
-            open -a Docker >/dev/null 2>&1
+          RT_CMD="$(_prism_container_runtime | cut -d'|' -f3)"
+          RT_NAME="$(_prism_container_runtime | cut -d'|' -f2)"
+          if [ -n "$RT_CMD" ]; then
+            printf '  %s' "starting ${RT_NAME:-the container runtime}"
+            eval "$RT_CMD" >/dev/null 2>&1
             waited=0
             while [ "$waited" -lt 120 ] && ! docker info >/dev/null 2>&1; do
               printf '.'; sleep 3; waited=$((waited + 3))
@@ -178,7 +184,7 @@ else
           if docker info >/dev/null 2>&1; then
             docker compose up -d postgres && sleep 3
           else
-            bad "Docker still is not responding — start it by hand and re-run"
+            bad "No daemon is responding yet — start it by hand and re-run"
           fi
           ;;
         docker-compose)

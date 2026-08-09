@@ -58,27 +58,35 @@ checkout from before that was set; `git pull` rather than installing anything.
 
 ### 3. Start Prism
 
-**PowerShell:**
-```powershell
-.\dev.ps1              # Starts PostgreSQL + Backend API + Frontend
-```
+**macOS and Linux:**
 
-**Bash:**
 ```bash
-./dev.sh               # Starts PostgreSQL + Backend API + Frontend
+./dev.sh                 # PostgreSQL + backend API + frontend
 ```
 
-The script handles everything: starts Docker containers, waits for Postgres, builds and launches the API, installs npm packages, and starts the Vite dev server.
+**Windows (PowerShell):**
+
+```powershell
+.\dev.ps1                # PostgreSQL + backend API + frontend
+```
+
+One script per platform — `dev.sh` is a shell script and will not run in PowerShell, and
+`dev.ps1` will not run in bash or zsh. If your shell says `command not found: .dev.ps1`, you
+have the Windows one on a Mac.
+
+It starts the database container, waits for it to become healthy, builds and launches the API,
+installs frontend packages if they are missing, and starts the Vite dev server. Logs go to
+`logs/`; stop everything with `./dev.sh --stop`.
 
 #### Other ways to start it
 
-| Command | What it does |
-|---------|-------------|
-| `.\dev.ps1` | Start everything (Postgres + API + Frontend) |
-| `.\dev.ps1 -Gpu` | Also start vLLM inference server (requires NVIDIA GPU) |
-| `.\dev.ps1 -BackendOnly` | Just Postgres + API (no frontend) |
-| `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
-| `.\dev.ps1 -Stop` | Stop all running services |
+| macOS / Linux | Windows | What it does |
+|---|---|---|
+| `./dev.sh` | `.\dev.ps1` | Everything: Postgres, API, frontend |
+| `./dev.sh --gpu` | `.\dev.ps1 -Gpu` | Also start vLLM (needs an NVIDIA GPU) |
+| `./dev.sh --backend` | `.\dev.ps1 -BackendOnly` | Just Postgres and the API |
+| `./dev.sh --frontend` | `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
+| `./dev.sh --stop` | `.\dev.ps1 -Stop` | Stop everything it started |
 
 #### Starting the pieces by hand
 

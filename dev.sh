@@ -52,9 +52,32 @@ fi
 
 # ── Preflight ─────────────────────────────────────────────────────────
 step "Checking prerequisites..."
+
+# Same discovery the pre-commit hook and the doctor use, so a toolchain that is
+# installed but not on this shell's PATH is found rather than reported missing.
+# shellcheck disable=SC1091
+. "$ROOT/scripts/dev-env.sh"
+
+prism_find_dotnet || {
+  echo -e "${RED}No .NET SDK found.${NC}"
+  echo "Run ./scripts/doctor.sh — it looks in the usual install locations and says what to do."
+  exit 1
+}
+prism_check_dotnet_runtime
+
+prism_find_node || {
+  echo -e "${RED}No Node.js found.${NC}"
+  echo "Run ./scripts/doctor.sh — it can load Node through nvm."
+  exit 1
+}
+
 command -v docker >/dev/null 2>&1 || { warn "Docker not found — Postgres must be running separately"; NO_DOCKER=true; }
-command -v dotnet >/dev/null 2>&1 || { echo -e "${RED}dotnet not found. Install .NET 9 SDK.${NC}"; exit 1; }
-command -v node   >/dev/null 2>&1 || { echo -e "${RED}node not found. Install Node.js.${NC}"; exit 1; }
+
+if [ -z "${NO_DOCKER:-}" ] && ! docker info >/dev/null 2>&1; then
+  warn "Docker is installed but its daemon is not responding."
+  warn "Run ./scripts/doctor.sh for the options on this machine."
+  NO_DOCKER=true
+fi
 
 # ── 1. PostgreSQL ────────────────────────────────────────────────────
 if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
@@ -66,13 +89,16 @@ if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
   docker compose "${COMPOSE_ARGS[@]}"
 
   echo -n "   Waiting for PostgreSQL..."
-  for i in $(seq 1 30); do
+  ready=false
+  for _ in $(seq 1 45); do
     health=$(docker inspect --format='{{.State.Health.Status}}' prism-postgres 2>/dev/null || echo "unknown")
-    [ "$health" = "healthy" ] && { ok " Ready!"; break; }
+    if [ "$health" = "healthy" ] || _prism_port_open localhost 5438; then
+      ready=true; ok " Ready!"; break
+    fi
     echo -n "."
     sleep 1
   done
-  [ "$health" != "healthy" ] && warn " Not healthy yet, continuing..."
+  $ready || warn " Postgres did not report ready. Check:  docker compose logs postgres"
 fi
 
 # ── 2. Backend API ───────────────────────────────────────────────────
@@ -94,10 +120,11 @@ fi
 if ! $BACKEND_ONLY; then
   step "Starting frontend on http://localhost:5173 ..."
 
-  if [ ! -d "$ROOT/frontend/node_modules" ]; then
-    echo "   Installing npm packages (first run)..."
-    (cd "$ROOT/frontend" && npm install)
-  fi
+  prism_ensure_node_modules || {
+    echo -e "${RED}Frontend packages could not be installed.${NC}"
+    echo "Run it directly to see why:  cd frontend && npm ci"
+    exit 1
+  }
 
   (cd "$ROOT/frontend" && npm run dev) \
     > "$LOGS/frontend-stdout.log" 2> "$LOGS/frontend-stderr.log" &
@@ -111,10 +138,12 @@ echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}  Prism is starting up!${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
-echo "  Frontend:  http://localhost:5173"
-echo "  API:       http://localhost:5000"
-echo "  Swagger:   http://localhost:5000/swagger"
-echo "  Health:    http://localhost:5000/health"
+# Only advertise what was actually started — listing a frontend that --backend
+# deliberately skipped sends people to a port with nothing on it.
+$BACKEND_ONLY  || echo "  Frontend:  http://localhost:5173"
+$FRONTEND_ONLY || echo "  API:       http://localhost:5000"
+$FRONTEND_ONLY || echo "  Swagger:   http://localhost:5000/swagger"
+$FRONTEND_ONLY || echo "  Health:    http://localhost:5000/health"
 $GPU && echo "  vLLM:      http://localhost:8000"
 echo ""
 echo -e "  Stop all:  ${CYAN}./dev.sh --stop${NC}"
