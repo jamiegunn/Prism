@@ -1,5 +1,6 @@
 import { Microscope, Loader2, Brain } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { describeMutationError } from '@/services/mutationErrors'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Select } from '@/components/ui/select'
@@ -344,6 +345,25 @@ export function TokenExplorerPage() {
                     totalProbability={store.currentPredictions.totalProbability}
                     onTokenClick={handleBranchFromPrediction}
                   />
+                ) : predictMutation.isError ? (
+                  /* The overwhelmingly common failure here is a server that returns no
+                     per-token probabilities. Previously the spinner simply stopped and the
+                     "no predictions yet" state stayed put, which reads as the button being
+                     broken rather than the provider being unable. */
+                  <div className="flex h-64 flex-col items-center justify-center gap-2 px-8 text-center">
+                    <Microscope className="h-8 w-8 text-red-500/70" />
+                    <p className="text-sm font-medium text-red-300">That prediction did not run.</p>
+                    <p className="max-w-md text-xs text-red-200/70">
+                      {describeMutationError(predictMutation.error)}
+                    </p>
+                    <p className="max-w-md text-xs text-zinc-500">
+                      This page needs a server that reports per-token probabilities. Check the
+                      Logprobs indicator in the status bar, and press Probe Capabilities on the
+                      Models page after updating a server &mdash; capabilities are recorded when
+                      it is registered, so a version that has since gained them is not noticed
+                      until you ask.
+                    </p>
+                  </div>
                 ) : (
                   <div className="flex h-64 flex-col items-center justify-center gap-2 text-zinc-500">
                     <Microscope className="h-8 w-8 text-zinc-600" />

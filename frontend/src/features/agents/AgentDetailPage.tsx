@@ -1,6 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Clock } from 'lucide-react'
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { describeMutationError } from '@/services/mutationErrors'
 import { useWorkflow, useRuns } from './api'
 import type { AgentRun, AgentStep } from './types'
 
@@ -13,10 +16,12 @@ export function AgentDetailPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('run')
   const [input, setInput] = useState('')
+  const [runError, setRunError] = useState<string | null>(null)
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [runResult, setRunResult] = useState<AgentRun | null>(null)
 
+  const queryClient = useQueryClient()
   const { data: workflow } = useWorkflow(id!)
   const { data: runs } = useRuns(id!)
 
@@ -25,6 +30,7 @@ export function AgentDetailPage() {
     setIsRunning(true)
     setLiveSteps([])
     setRunResult(null)
+    setRunError(null)
 
     try {
       const response = await fetch(`/api/v1/agents/${id}/run`, {
@@ -33,7 +39,12 @@ export function AgentDetailPage() {
         body: JSON.stringify({ input }),
       })
 
-      if (!response.ok) throw new Error('Run failed')
+      if (!response.ok) {
+        // Carry the server's reason rather than a fixed string; a 404 on the instance and a
+        // 500 from the provider are different problems with different fixes.
+        const body = await response.text().catch(() => '')
+        throw new Error(body || `The run failed (${response.status}).`)
+      }
 
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response body')
@@ -69,9 +80,16 @@ export function AgentDetailPage() {
         }
       }
     } catch (err) {
-      console.error('Agent run error:', err)
+      // Was console.error only, so a failed run looked exactly like a run that produced
+      // nothing: the button stopped spinning and the page did not change.
+      setRunError(describeMutationError(err))
+      toast.error('The agent run failed.')
     } finally {
       setIsRunning(false)
+
+      // The run is persisted server-side, so without this the History tab keeps showing the
+      // list as it was before the run that just finished.
+      void queryClient.invalidateQueries({ queryKey: ['agents', 'runs', id] })
     }
   }
 
@@ -163,6 +181,13 @@ export function AgentDetailPage() {
                     <span>{runResult.totalTokens} tokens</span>
                     <span>{runResult.totalLatencyMs}ms</span>
                   </div>
+
+          {runError && (
+            <div className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-3 text-sm">
+              <p className="font-medium text-red-300">The run did not finish.</p>
+              <p className="mt-1 text-red-200/80">{runError}</p>
+            </div>
+          )}
                   {runResult.output && (
                     <div className="mt-2 rounded bg-zinc-900 p-3 text-sm text-zinc-50">
                       {runResult.output}

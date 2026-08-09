@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { InstancePicker } from '@/features/models/components/InstancePicker'
+import { describeMutationError } from '@/services/mutationErrors'
 import { Braces, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { useSchemas, useCreateSchema, useDeleteSchema, useStructuredInference } from './api'
 import type { JsonSchema, StructuredInferenceResult } from './types'
@@ -146,10 +147,17 @@ function TestPanel({ schema }: { schema: JsonSchema }) {
       <button
         className="rounded bg-violet-600 px-4 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-50"
         onClick={handleRun}
-        disabled={infer.isPending || !prompt}
+        disabled={infer.isPending || !prompt || !instanceId || !model}
       >
         {infer.isPending ? 'Running...' : 'Run Structured Inference'}
       </button>
+
+      {infer.isError && !infer.isPending && (
+        <div className="rounded border border-red-900/60 bg-red-950/40 p-3 text-sm">
+          <p className="font-medium text-red-300">The request did not complete.</p>
+          <p className="mt-1 text-red-200/80">{describeMutationError(infer.error)}</p>
+        </div>
+      )}
 
       {result && (
         <div className="space-y-3">
@@ -167,11 +175,25 @@ function TestPanel({ schema }: { schema: JsonSchema }) {
             </span>
           </div>
 
-          {result.validationErrors.length > 0 && (
+          {result.validationErrors.filter((err) => !err.startsWith('Note:')).length > 0 && (
             <div className="rounded border border-red-800 bg-red-900/20 p-2">
-              {result.validationErrors.map((err, i) => (
-                <p key={i} className="text-xs text-red-400">{err}</p>
-              ))}
+              {result.validationErrors
+                .filter((err) => !err.startsWith('Note:'))
+                .map((err, i) => (
+                  <p key={i} className="text-xs text-red-400">{err}</p>
+                ))}
+            </div>
+          )}
+
+          {result.validationErrors.filter((err) => err.startsWith('Note:')).length > 0 && (
+            <div className="rounded border border-amber-800/60 bg-amber-900/10 p-2">
+              {result.validationErrors
+                .filter((err) => err.startsWith('Note:'))
+                .map((note, i) => (
+                  <p key={i} className="text-xs text-amber-300/90">
+                    {note.replace(/^Note:\s*/, '')}
+                  </p>
+                ))}
             </div>
           )}
 

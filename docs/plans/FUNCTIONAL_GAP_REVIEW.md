@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** proposed, not started
+**Status:** Phase 0 done, Phase 1 done. Phase 2 next.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -183,12 +183,21 @@ planned as one.
 
 Ordered by "would a newcomer hit this", not by effort.
 
-**Phase 0 — cross-cutting, one change each, unblocks the rest**
-G1 (surface mutation failures), G2 (instance dropdown), G3 (`dev.sh` detects a running Prism).
-Ends when a failed mutation is visible everywhere and no page asks for a GUID.
+**Phase 0 — cross-cutting, one change each, unblocks the rest. DONE.**
+G1 surfaced via a MutationCache handler that skips mutations handling their own errors; G2
+replaced both GUID boxes with a shared `InstancePicker`; G3 now stops stale APIs *and* stale
+Vite servers, the latter being worse because Vite fixes its proxy target at launch.
 
-**Phase 1 — silent failures.** Token Explorer, RAG search, Structured Output, Agents. Every one
-is "it looks like it worked and nothing happened". Highest confusion per line of code.
+**Phase 1 — silent failures. DONE.** Token Explorer now explains a failed predict and names the
+logprobs cause; RAG search distinguishes "did not run" from "matched nothing" and points at BM25;
+Structured Output cannot present an enabled button that does nothing, shows inference errors, and
+no longer files the guided-decoding advisory as a validation error beside a green tick; Agents
+surfaces a failed run and refreshes its history afterwards.
+
+Found while verifying: **`npx tsc --noEmit` checks nothing in this repo.** The root
+`tsconfig.json` is `"files": []` plus references, so it exits 0 regardless. `tsc -b --noEmit` is
+the real check and is what the pre-commit gate runs — which is why nothing broken was committed,
+but any typecheck claim made with the plain form was worthless.
 
 **Phase 2 — missing entry points.** Evaluation, Batch, Models' hidden button. Subject to
 decision 3.
