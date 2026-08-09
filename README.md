@@ -74,8 +74,9 @@ One script per platform — `dev.sh` is a shell script and will not run in Power
 `dev.ps1` will not run in bash or zsh. If your shell says `command not found: .dev.ps1`, you
 have the Windows one on a Mac.
 
-**The first run asks a few questions**, each with a recommended default, so holding Enter gets
-a working setup:
+**It asks a few questions each run**, so you can start it differently today than yesterday
+without remembering any flags. Your previous answers become the defaults, so holding Enter
+repeats your last setup exactly:
 
 - what to start — everything, backend only, or just the frontend
 - **which model to read**, offering only what your machine can actually do (see below)
@@ -85,10 +86,13 @@ Whatever you pick is started, the model is pulled if there isn't one, and it is 
 Prism as the default — so the app opens on a working Playground rather than an empty Models
 page. Running it again does not re-register.
 
-Answers are saved to `.prism-dev.conf`, which is not tracked, so it only asks once. Change them
-with `./dev.sh --reconfigure`. It never prompts when stdin is not a terminal, so CI and scripts
-get the defaults instead of hanging on a question nobody is there to answer; `--yes` does the
-same thing deliberately.
+Answers are saved to `.prism-dev.conf`, which is not tracked.
+
+- `./dev.sh --yes` skips the questions and reuses your previous answers
+- `./dev.sh --reconfigure` asks but ignores what you saved, starting from this machine's
+  recommendations — useful when the config came from a different machine
+- It never prompts when stdin is not a terminal, so CI and scripts get the saved or default
+  answers rather than hanging on a question nobody is there to answer
 
 ##### Which model options you get
 
@@ -139,8 +143,8 @@ reason from its log and a non-zero exit. Logs are in `logs/`; stop everything wi
 | `./dev.sh --backend` | `.\dev.ps1 -BackendOnly` | Just Postgres and the API |
 | `./dev.sh --frontend` | `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
 | `./dev.sh --stop` | `.\dev.ps1 -Stop` | Stop everything it started |
-| `./dev.sh --reconfigure` | — | Ask the setup questions again |
-| `./dev.sh --yes` | — | Take every default, ask nothing |
+| `./dev.sh --yes` | — | Skip the questions, reuse your last answers |
+| `./dev.sh --reconfigure` | — | Ask, ignoring your saved answers |
 
 #### Starting the pieces by hand
 

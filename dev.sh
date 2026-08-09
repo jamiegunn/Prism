@@ -2,13 +2,15 @@
 #
 # Prism development environment launcher.
 #
-# On the first run it asks a few questions, each with a recommended default, and
-# remembers the answers in .prism-dev.conf. After that it just starts.
+# Asks a few questions each run and remembers the answers in .prism-dev.conf, so
+# the next run's defaults are what you chose last time — hold Enter to repeat a
+# setup, or change one answer without remembering any flags.
 #
 # Usage:
-#   ./dev.sh                Start what you configured (asks on the first run)
-#   ./dev.sh --reconfigure  Ask the questions again
-#   ./dev.sh --yes          Take every default, ask nothing
+#   ./dev.sh                Ask, then start. Enter accepts the previous answer.
+#   ./dev.sh --yes          Skip the questions, reuse the previous answers
+#   ./dev.sh --reconfigure  Ask, ignoring the previous answers — useful when the
+#                           saved ones came from a different machine
 #   ./dev.sh --stop         Stop all services
 #
 #   ./dev.sh --backend      Only Postgres + API     ) explicit flags win over
@@ -97,7 +99,7 @@ ensure_ollama_model() {
 # option, so holding Enter gets a working setup.
 
 # shellcheck disable=SC1090
-[ -f "$CONFIG" ] && . "$CONFIG"
+[ -f "$CONFIG" ] && ! $RECONFIGURE && . "$CONFIG"
 
 PRISM_SCOPE="${PRISM_SCOPE:-all}"
 PRISM_PROVIDER="${PRISM_PROVIDER:-later}"
@@ -107,6 +109,22 @@ PRISM_OLLAMA_MEMORY_GIB="${PRISM_OLLAMA_MEMORY_GIB:-}"
 PRISM_REMOTE_URL="${PRISM_REMOTE_URL:-}"
 
 interactive() { [ -t 0 ] && [ -t 1 ] && ! $ASSUME_YES; }
+
+# Returns the saved answer when it is still one of the options, otherwise the
+# first option. A config carried to a different machine can name something that
+# is no longer possible — a container runtime that is not installed, a GPU that
+# is not there — and silently defaulting to it would offer a choice that cannot
+# work.
+default_or_first() {
+  local saved="$1"; shift
+  local opt
+
+  for opt in "$@"; do
+    [ "${opt%%:*}" = "$saved" ] && { printf '%s' "$saved"; return; }
+  done
+
+  printf '%s' "${1%%:*}"
+}
 
 # ask <variable> <prompt> <default> <option>...
 #
@@ -144,9 +162,15 @@ ask() {
 
 configure() {
   echo ""
-  echo -e "${CYAN}Setting up. Press Enter to take the default in each case.${NC}"
+  if $RECONFIGURE; then
+    echo -e "${CYAN}Starting from this machine's recommendations, ignoring your saved answers.${NC}"
+  elif [ -f "$CONFIG" ]; then
+    echo -e "${CYAN}Press Enter to keep what you chose last time, or pick something else.${NC}"
+  else
+    echo -e "${CYAN}Setting up. Press Enter to take the default in each case.${NC}"
+  fi
 
-  ask PRISM_SCOPE "What should I start?" all \
+  ask PRISM_SCOPE "What should I start?" "$PRISM_SCOPE" \
     "all:Everything — database, API and frontend" \
     "backend:Backend only — database and API" \
     "frontend:Frontend only — the Vite dev server"
@@ -165,7 +189,12 @@ configure() {
   [ -n "$avail" ] || avail=8
 
   model_default="$(prism_recommended_model "$avail")"
-  PRISM_OLLAMA_MEMORY_GIB="$(prism_recommended_memory_gib "$avail")"
+
+  # Recommend from the machine only when there is no previous answer. Silently
+  # replacing a deliberate 11 GiB with a freshly computed 5 would undo a choice
+  # without saying so.
+  local memory_default
+  memory_default="${PRISM_OLLAMA_MEMORY_GIB:-$(prism_recommended_memory_gib "$avail")}"
 
   # Already listening beats everything: it costs nothing and is running for a reason.
   _prism_port_open localhost 11434 && \
@@ -205,28 +234,30 @@ configure() {
 
   ask PRISM_PROVIDER \
     "Which model should Prism read? (the heatmaps and Token Explorer are built on this)" \
-    "${provider_opts[0]%%:*}" \
+    "$(default_or_first "$PRISM_PROVIDER" "${provider_opts[@]}")" \
     "${provider_opts[@]}"
 
   # Follow-ups, only for the answers that need them.
   case "$PRISM_PROVIDER" in
     container-ollama|start-ollama)
       echo ""
+      [ -n "$PRISM_MODEL" ] && model_default="$PRISM_MODEL"
       printf "   Model to pull [%s]: " "$model_default"
       read -r answer || answer=""
       PRISM_MODEL="${answer:-$model_default}"
 
       if [ "$PRISM_PROVIDER" = "container-ollama" ]; then
-        printf "   Memory for the container in GiB [%s]: " "$PRISM_OLLAMA_MEMORY_GIB"
+        printf "   Memory for the container in GiB [%s]: " "$memory_default"
         read -r answer || answer=""
-        PRISM_OLLAMA_MEMORY_GIB="${answer:-$PRISM_OLLAMA_MEMORY_GIB}"
+        PRISM_OLLAMA_MEMORY_GIB="${answer:-$memory_default}"
       fi
       ;;
     remote)
       echo ""
-      printf "   Endpoint URL [http://localhost:11434]: "
+      local url_default="${PRISM_REMOTE_URL:-http://localhost:11434}"
+      printf "   Endpoint URL [%s]: " "$url_default"
       read -r answer || answer=""
-      PRISM_REMOTE_URL="${answer:-http://localhost:11434}"
+      PRISM_REMOTE_URL="${answer:-$url_default}"
       ;;
   esac
 
@@ -250,19 +281,24 @@ PRISM_SCOPE=$PRISM_SCOPE
 PRISM_PROVIDER=$PRISM_PROVIDER
 PRISM_API_PORT_PREF=$PRISM_API_PORT_PREF
 PRISM_MODEL=$PRISM_MODEL
-PRISM_OLLAMA_MEMORY_GIB=$PRISM_OLLAMA_MEMORY_GIB
+PRISM_OLLAMA_MEMORY_GIB=${PRISM_OLLAMA_MEMORY_GIB:-$memory_default}
 PRISM_REMOTE_URL=$PRISM_REMOTE_URL
 EOF
 
   echo ""
-  ok "Saved to .prism-dev.conf — ./dev.sh --reconfigure to change it."
+  ok "Saved. Next run these become the defaults; --yes skips the questions."
 }
 
 # Source dev-env early: configure() needs _prism_port_open.
 # shellcheck disable=SC1091
 . "$ROOT/scripts/dev-env.sh"
 
-if $RECONFIGURE || { [ ! -f "$CONFIG" ] && interactive; }; then
+# Ask every time there is someone to answer. What you wanted last run is not
+# necessarily what you want now — a different model, backend only, a remote
+# endpoint — and having to remember a --reconfigure flag to change your mind is
+# a worse default than three keystrokes. Last run's answers become this run's
+# defaults, so holding Enter reproduces it exactly.
+if interactive; then
   configure
 elif [ -f "$CONFIG" ]; then
   echo -e "${CYAN}Using .prism-dev.conf${NC} (scope: $PRISM_SCOPE, provider: $PRISM_PROVIDER)"
