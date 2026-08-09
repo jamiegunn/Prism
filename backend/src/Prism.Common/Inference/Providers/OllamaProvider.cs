@@ -56,15 +56,39 @@ public sealed class OllamaProvider : IHotReloadableProvider
     public string Endpoint { get; }
 
     /// <summary>
-    /// Gets the Ollama-specific capabilities. Ollama supports streaming and hot-reload,
-    /// but has limited logprobs support and no guided decoding or metrics.
+    /// The first Ollama release whose API returns per-token log probabilities.
     /// </summary>
-    public ProviderCapabilities Capabilities { get; } = new()
+    /// <remarks>
+    /// Before this version there was no way to get them at all, which is why Prism used to
+    /// declare the heatmap, entropy chart and Token Explorer permanently unavailable on Ollama
+    /// and point people at vLLM instead. That advice is now wrong, and on Apple Silicon it was
+    /// advice to run something that cannot run there at all.
+    /// </remarks>
+    private static readonly Version LogprobsFromVersion = new(0, 12, 11);
+
+    private ProviderCapabilities _capabilities = BuildCapabilities(supportsLogprobs: true);
+
+    /// <summary>
+    /// Gets the Ollama-specific capabilities. Ollama supports streaming and hot-reload, but no
+    /// guided decoding or server metrics. Logprobs depend on the server's version and are
+    /// confirmed by <see cref="CheckHealthAsync"/>.
+    /// </summary>
+    public ProviderCapabilities Capabilities => _capabilities;
+
+    /// <summary>
+    /// Builds the capability set, which differs only in whether logprobs are on offer.
+    /// </summary>
+    /// <param name="supportsLogprobs">Whether this server returns per-token probabilities.</param>
+    /// <returns>The capabilities to advertise.</returns>
+    private static ProviderCapabilities BuildCapabilities(bool supportsLogprobs) => new()
     {
         SupportsChat = true,
         SupportsStreaming = true,
-        SupportsLogprobs = false,
-        MaxTopLogprobs = 0,
+        SupportsLogprobs = supportsLogprobs,
+
+        // Kept in step with the flag above: a top-K count without logprobs behind it is what
+        // puts a slider in the UI with nothing attached to it.
+        MaxTopLogprobs = supportsLogprobs ? 20 : 0,
         SupportsTokenize = false,
         SupportsGuidedDecoding = false,
         SupportsMetrics = false,
@@ -74,6 +98,129 @@ public sealed class OllamaProvider : IHotReloadableProvider
         SupportsPresencePenalty = true,
         SupportsStopSequences = true
     };
+
+    /// <summary>
+    /// Asks the server which Ollama it is, so the advertised capabilities describe the server
+    /// in front of us rather than Ollama in general.
+    /// </summary>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>True when this server is new enough to return logprobs.</returns>
+    /// <remarks>
+    /// An unreadable version is treated as capable. Every currently shipping Ollama returns
+    /// logprobs, so guessing "no" over a transient failure would hide working features; the
+    /// cost of guessing "yes" wrongly is an empty heatmap on a server old enough that the user
+    /// can re-probe. Erring the other way is what made the product look broken before.
+    /// </remarks>
+    private async Task<bool> ServerReturnsLogprobsAsync(CancellationToken ct)
+    {
+        try
+        {
+            using HttpResponseMessage response = await _httpClient.GetAsync($"{Endpoint}/api/version", ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return true;
+            }
+
+            string body = await response.Content.ReadAsStringAsync(ct);
+            string? reported = JsonNode.Parse(body)?["version"]?.GetValue<string>();
+
+            if (string.IsNullOrWhiteSpace(reported))
+            {
+                return true;
+            }
+
+            // Release candidates arrive as "0.12.11-rc1", which Version cannot parse.
+            string numeric = reported.Split('-', '+')[0];
+
+            if (!Version.TryParse(numeric, out Version? version))
+            {
+                _logger.LogDebug("Could not read Ollama version {Version}; assuming logprobs", reported);
+                return true;
+            }
+
+            bool supported = version >= LogprobsFromVersion;
+
+            if (!supported)
+            {
+                _logger.LogInformation(
+                    "Ollama {Version} predates logprobs (added in {Required}); token-level views will be empty",
+                    reported, LogprobsFromVersion);
+            }
+
+            return supported;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Could not read the Ollama version; assuming logprobs are available");
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Converts Ollama's logprobs array into the provider-agnostic shape.
+    /// </summary>
+    /// <param name="node">The <c>logprobs</c> node from a response or stream chunk.</param>
+    /// <returns>The parsed data, or null when the server returned none.</returns>
+    private static LogprobsData? ParseLogprobs(JsonNode? node)
+    {
+        if (node is not JsonArray entries || entries.Count == 0)
+        {
+            return null;
+        }
+
+        List<TokenLogprob> tokens = [];
+
+        foreach (JsonNode? entry in entries)
+        {
+            TokenLogprob? token = ParseTokenLogprob(entry);
+            if (token is not null)
+            {
+                tokens.Add(token);
+            }
+        }
+
+        return tokens.Count > 0 ? new LogprobsData { Tokens = tokens } : null;
+    }
+
+    /// <summary>
+    /// Converts a single Ollama logprobs entry, with its alternatives, into a token entry.
+    /// </summary>
+    /// <param name="node">One element of Ollama's <c>logprobs</c> array.</param>
+    /// <returns>The parsed token, or null when the entry is unusable.</returns>
+    private static TokenLogprob? ParseTokenLogprob(JsonNode? node)
+    {
+        if (node?["token"]?.GetValue<string>() is not string token)
+        {
+            return null;
+        }
+
+        List<TopLogprob> alternatives = [];
+
+        if (node["top_logprobs"] is JsonArray tops)
+        {
+            foreach (JsonNode? alternative in tops)
+            {
+                if (alternative?["token"]?.GetValue<string>() is not string alternativeToken)
+                {
+                    continue;
+                }
+
+                alternatives.Add(new TopLogprob
+                {
+                    Token = alternativeToken,
+                    Logprob = alternative["logprob"]?.GetValue<double>() ?? 0
+                });
+            }
+        }
+
+        return new TokenLogprob
+        {
+            Token = token,
+            Logprob = node["logprob"]?.GetValue<double>() ?? 0,
+            TopLogprobs = alternatives
+        };
+    }
 
     /// <summary>
     /// Sends a chat completion request to Ollama's /api/chat endpoint.
@@ -126,7 +273,7 @@ public sealed class OllamaProvider : IHotReloadableProvider
                 Content = responseContent,
                 FinishReason = doneReason ?? (done ? "stop" : null),
                 Usage = new UsageInfo(promptTokens, completionTokens, promptTokens + completionTokens),
-                LogprobsData = null,
+                LogprobsData = ParseLogprobs(responseNode["logprobs"]),
                 ModelId = request.Model,
                 Timing = new TimingInfo(
                     LatencyMs: totalDurationNs / 1_000_000,
@@ -222,11 +369,16 @@ public sealed class OllamaProvider : IHotReloadableProvider
                 usage = new UsageInfo(promptTokens, completionTokens, promptTokens + completionTokens);
             }
 
+            // One entry per chunk, since a chunk carries one token.
+            TokenLogprob? logprobsEntry = chunkNode["logprobs"] is JsonArray chunkLogprobs
+                ? ParseTokenLogprob(chunkLogprobs.FirstOrDefault())
+                : null;
+
             yield return new StreamChunk
             {
                 Content = content,
                 Index = index,
-                LogprobsEntry = null,
+                LogprobsEntry = logprobsEntry,
                 FinishReason = finishReason,
                 IsFirst = isFirst,
                 Usage = usage
@@ -298,6 +450,11 @@ public sealed class OllamaProvider : IHotReloadableProvider
                 {
                     model = modelInfo.Value.ModelId;
                 }
+
+                // Whether this server does logprobs is a property of its version, so settle it
+                // while we are talking to it. Registration reads Capabilities straight after
+                // a health check, which is what persists the answer.
+                _capabilities = BuildCapabilities(await ServerReturnsLogprobsAsync(ct));
             }
 
             return new HealthStatus(
@@ -519,6 +676,19 @@ public sealed class OllamaProvider : IHotReloadableProvider
         {
             // Ollama takes the schema directly as `format`, with no OpenAI-style wrapper.
             body["format"] = JsonNode.Parse(request.JsonSchema);
+        }
+
+        // Top level, not inside `options` — Ollama treats these as request fields rather than
+        // sampler settings, and putting them in `options` silently returns nothing.
+        if (request.Logprobs)
+        {
+            body["logprobs"] = true;
+
+            if (request.TopLogprobs is int topLogprobs)
+            {
+                // Ollama rejects anything outside 0-20 rather than clamping it itself.
+                body["top_logprobs"] = Math.Clamp(topLogprobs, 0, 20);
+            }
         }
 
         JsonObject options = new();

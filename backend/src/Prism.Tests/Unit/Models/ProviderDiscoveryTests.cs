@@ -14,20 +14,26 @@ namespace Prism.Tests.Unit.Models;
 public sealed class ProviderDiscoveryTests
 {
     /// <summary>
-    /// Ollama's note must say plainly that the token-level views will not work, because that is
-    /// the whole reason someone chose this tool.
+    /// An Ollama too old for logprobs must say so, and must say that updating fixes it.
     /// </summary>
+    /// <remarks>
+    /// This note used to send people to vLLM. That was wrong twice over once Ollama gained
+    /// logprobs in 0.12.11: it recommended replacing a server that would work after an update,
+    /// and on an Apple Silicon Mac it recommended something that cannot run there at all, since
+    /// vLLM needs CUDA. The remedy has to be one the reader can actually carry out.
+    /// </remarks>
     [Fact]
-    public void Ollama_Is_Described_As_Lacking_Token_Probabilities()
+    public void An_Old_Ollama_Is_Told_To_Update_Rather_Than_Replaced()
     {
         string note = DiscoverProvidersHandler.DescribeProvider(
             InferenceProviderType.Ollama, supportsLogprobs: false);
 
-        Assert.Contains("does not return per-token probabilities", note, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per-token probabilities", note, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("empty", note, StringComparison.OrdinalIgnoreCase);
 
-        // It must also say what to do about it rather than leaving the user stuck.
-        Assert.Contains("vLLM", note, StringComparison.Ordinal);
+        // The remedy is an update, and it must not be "run vLLM" — see the remarks above.
+        Assert.Contains("updating", note, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("vLLM", note, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

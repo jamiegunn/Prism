@@ -53,7 +53,16 @@ public sealed record ProviderDiscoveryResult(
 /// </remarks>
 public sealed class DiscoverProvidersHandler
 {
-    private static readonly (InferenceProviderType Type, string Endpoint, string Name)[] Candidates =
+    /// <summary>
+    /// The conventional local endpoints probed at discovery time.
+    /// </summary>
+    /// <remarks>
+    /// <c>dev.sh</c> keeps the same list in <c>PRISM_PROVIDER_CANDIDATES</c> so the launcher
+    /// offers what the app can find. Internal rather than private so the parity test can hold
+    /// the two in step; they were silently different before, and the launcher could not offer
+    /// LM Studio even though the platform supported it.
+    /// </remarks>
+    internal static readonly (InferenceProviderType Type, string Endpoint, string Name)[] Candidates =
     [
         (InferenceProviderType.Vllm, "http://localhost:8000", "Local vLLM"),
         (InferenceProviderType.Ollama, "http://localhost:11434", "Local Ollama"),
@@ -122,9 +131,9 @@ public sealed class DiscoverProvidersHandler
         return providerType switch
         {
             InferenceProviderType.Ollama =>
-                "Chat and structured output work. Ollama does not return per-token probabilities, "
-                + "so the heatmap, entropy chart and Token Explorer will be empty. Run vLLM if "
-                + "token-level introspection is what you are here for.",
+                "Chat and structured output work. This Ollama predates 0.12.11, so it returns no "
+                + "per-token probabilities and the heatmap, entropy chart and Token Explorer will "
+                + "be empty. Updating Ollama is enough to turn them on.",
             _ =>
                 "Chat works. This provider does not return per-token probabilities, so the "
                 + "heatmap, entropy chart and Token Explorer will be empty.",

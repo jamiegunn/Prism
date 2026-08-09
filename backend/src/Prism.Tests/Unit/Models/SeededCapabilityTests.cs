@@ -13,10 +13,10 @@ namespace Prism.Tests.Unit.Models;
 /// <remarks>
 /// <para>
 /// The seeded instances are the first thing a new developer sees, and the UI trusts their
-/// capability flags until someone presses Probe Capabilities. The Ollama seed claimed
-/// <c>SupportsLogprobs = true</c>, which is false: the Playground therefore offered the
-/// heatmap, entropy and surprise views, suppressed the warning that explains why they produce
-/// nothing, and left the product looking broken rather than the provider looking limited.
+/// capability flags until someone presses Probe Capabilities. A seed that overclaims makes the
+/// Playground offer views that render nothing; a seed that underclaims hides working features
+/// and, in Ollama's case, sent the reader off to install vLLM instead. Both have happened here,
+/// in that order — Ollama genuinely could not return logprobs until 0.12.11, and now can.
 /// </para>
 /// <para>
 /// Rather than pin the specific values — which would need editing every time a provider gains
@@ -71,15 +71,21 @@ public sealed class SeededCapabilityTests
     /// Named so the failure message says which claim was wrong.
     /// </summary>
     [Fact]
-    public void Ollama_Does_Not_Claim_Token_Probabilities()
+    public void Ollama_Claims_The_Token_Probabilities_It_Now_Returns()
     {
         InferenceInstance ollama = ModelsSeeder.SeedInstances()
             .Single(i => i.ProviderType == InferenceProviderType.Ollama);
 
-        Assert.False(
+        Assert.True(
             ollama.SupportsLogprobs,
-            "Ollama's API returns no per-token probabilities. Seeding it as though it does "
-            + "makes the Playground offer views that silently render nothing.");
+            "Ollama returns per-token probabilities from 0.12.11 onwards, verified against a "
+            + "live server on /api/generate, /api/chat and /v1/chat/completions. Seeding it as "
+            + "incapable hides the heatmap, entropy and Token Explorer views on a server that "
+            + "supports them, and sends the reader to vLLM — which cannot run on Apple Silicon.");
+
+        Assert.True(
+            ollama.MaxTopLogprobs > 0,
+            "Logprobs without a top-K count is the same disagreement in the other direction.");
     }
 
     /// <summary>

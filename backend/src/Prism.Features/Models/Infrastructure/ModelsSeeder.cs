@@ -92,12 +92,12 @@ public sealed class ModelsSeeder : IDataSeeder
                 ModelId = "mistral:7b-instruct",
                 MaxContextLength = 8192,
 
-                // Ollama does not return per-token probabilities. Claiming otherwise made the
-                // Playground offer the heatmap, entropy and surprise views, and suppress the
-                // warning that explains why they are empty — so the product looked broken
-                // rather than the provider looking limited.
-                SupportsLogprobs = false,
-                MaxTopLogprobs = 0,
+                // Ollama returns per-token probabilities from 0.12.11 onwards, so the heatmap,
+                // entropy and surprise views do work here. An older server is corrected down to
+                // false when its capabilities are probed — the seed describes a current Ollama,
+                // which is what a new developer will have installed.
+                SupportsLogprobs = true,
+                MaxTopLogprobs = 20,
                 SupportsStreaming = true,
                 SupportsMetrics = false,
                 SupportsTokenize = false,
