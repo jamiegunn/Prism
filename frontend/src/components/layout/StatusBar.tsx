@@ -19,7 +19,9 @@ export function StatusBar() {
   const connection = describeConnection({ isLoading, isError, hasInstance: Boolean(instance), instance })
 
   return (
-    <div className="fixed bottom-0 right-0 left-64 z-20 flex h-8 items-center justify-between border-t border-zinc-800 bg-zinc-900 px-4 text-xs text-zinc-400">
+    <div
+      data-tour="status-bar"
+      className="fixed bottom-0 right-0 left-64 z-20 flex h-8 items-center justify-between border-t border-zinc-800 bg-zinc-900 px-4 text-xs text-zinc-400">
       <div className="flex items-center gap-2">
         <span
           data-testid="connection-dot"

@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
 import { ProviderGate } from './ProviderGate'
 import { ShortcutsDialog } from '@/components/feedback/ShortcutsDialog'
+import { TourHost } from '@/features/tour/TourHost'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 interface AppShellProps {
@@ -26,12 +27,13 @@ export function AppShell({ children }: AppShellProps) {
       <Sidebar />
       <div className="flex flex-1 flex-col ml-64 overflow-hidden">
         <ProviderGate />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-14">
+        <main data-tour="main" className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-14">
           {children}
         </main>
         <StatusBar />
       </div>
       <ShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <TourHost />
     </div>
   )
 }

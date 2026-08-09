@@ -16,11 +16,13 @@ import {
   NotebookPen,
   Diamond,
   Wand2,
+  Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { WorkspaceSwitcher } from '@/features/workspaces/WorkspaceSwitcher'
+import { useTourStore } from '@/features/tour/store'
 
 interface NavItem {
   label: string
@@ -49,11 +51,27 @@ const navItems: NavItem[] = [
 ]
 
 export function Sidebar() {
+  const setPanelOpen = useTourStore((state) => state.setPanelOpen)
+
   return (
-    <div className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900">
+    <div
+      data-tour="sidebar"
+      className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-zinc-800 bg-zinc-900"
+    >
       <div className="flex h-14 items-center gap-2 border-b border-zinc-800 px-4">
         <Diamond className="h-6 w-6 text-violet-500" />
         <span className="text-lg font-bold tracking-tight text-zinc-50">Prism</span>
+
+        <button
+          type="button"
+          data-tour="guide-button"
+          onClick={() => setPanelOpen(true)}
+          title="Guide and walkthroughs"
+          className="ml-auto rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+        >
+          <Compass className="h-4 w-4" />
+          <span className="sr-only">Open the guide</span>
+        </button>
       </div>
 
       <WorkspaceSwitcher />
@@ -82,6 +100,9 @@ export function Sidebar() {
               <NavLink
                 key={item.label}
                 to={item.path}
+                // Anchors the tour to nav items by route rather than by label, so renaming
+                // one in the sidebar cannot silently unhook a walkthrough step.
+                data-tour={`nav-${item.path.replace(/^\//, '')}`}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',

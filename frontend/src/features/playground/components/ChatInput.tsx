@@ -46,7 +46,7 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
   const estimatedTokens = Math.ceil(charCount / 4)
 
   return (
-    <div className="border-t border-zinc-800 bg-zinc-950 p-4">
+    <div data-tour="playground-composer" className="border-t border-zinc-800 bg-zinc-950 p-4">
       <div className="flex items-end gap-2">
         <div className="relative flex-1">
           <textarea

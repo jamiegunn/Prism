@@ -173,6 +173,7 @@ export function PlaygroundPage() {
             <Button
               variant="ghost"
               size="sm"
+              data-tour="playground-stats-toggle"
               onClick={() => setShowStatsPanel(!showStatsPanel)}
               className={cn('h-8 gap-1.5 text-xs', showStatsPanel && 'text-emerald-400')}
             >
@@ -184,6 +185,7 @@ export function PlaygroundPage() {
             <Button
               variant="ghost"
               size="sm"
+              data-tour="playground-logprobs-toggle"
               onClick={() => {
                 setShowBottomPanel(!showBottomPanel)
                 if (!logprobsMessage && lastAssistantMessage) {
@@ -307,7 +309,10 @@ export function PlaygroundPage() {
 
         {/* Right Panel: Parameters */}
         {showRightPanel && !showInspector && (
-          <div className="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/50">
+          <div
+            data-tour="playground-parameters"
+            className="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/50"
+          >
             <ParameterSidebar />
           </div>
         )}
