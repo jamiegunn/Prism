@@ -784,6 +784,30 @@ fi
 
 # ── 3. Frontend ──────────────────────────────────────────────────────
 if ! $BACKEND_ONLY; then
+  # A leftover dev server is worse here than a leftover API, because it keeps the
+  # port and answers. Vite reads the API's address once, at launch, so an old one
+  # still holding 5173 proxies to whichever API existed when *it* started — and
+  # once that API is gone, every request through it returns 500 while the page
+  # itself loads perfectly. Observed: a server from an earlier run pointing at a
+  # port whose API had since been stopped.
+  stale_vite="$(pgrep -f "$ROOT/frontend/node_modules/.bin/vite" 2>/dev/null | tr '\n' ' ' || true)"
+
+  if [ -n "${stale_vite// /}" ]; then
+    warn "A frontend dev server from an earlier run is still going."
+    warn "It proxies to the API address it was started with, so leaving it would"
+    warn "serve the app against an endpoint that may no longer be there."
+    step "Stopping it..."
+
+    for stale_pid in $stale_vite; do
+      kill "$stale_pid" 2>/dev/null || true
+    done
+
+    for _ in $(seq 1 10); do
+      pgrep -f "$ROOT/frontend/node_modules/.bin/vite" >/dev/null 2>&1 || break
+      sleep 1
+    done
+  fi
+
   step "Starting frontend on http://localhost:5173 ..."
 
   prism_ensure_node_modules || {

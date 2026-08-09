@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { InstancePicker } from '@/features/models/components/InstancePicker'
 import { Braces, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { useSchemas, useCreateSchema, useDeleteSchema, useStructuredInference } from './api'
 import type { JsonSchema, StructuredInferenceResult } from './types'
@@ -126,20 +127,14 @@ function TestPanel({ schema }: { schema: JsonSchema }) {
         </pre>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
-          placeholder="Instance ID"
-          value={instanceId}
-          onChange={(e) => setInstanceId(e.target.value)}
-        />
-        <input
-          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
-          placeholder="Model name"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-        />
-      </div>
+      <InstancePicker
+        instanceId={instanceId}
+        model={model}
+        onChange={(nextInstanceId, nextModel) => {
+          setInstanceId(nextInstanceId)
+          setModel(nextModel)
+        }}
+      />
 
       <textarea
         className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 min-h-[100px]"

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { InstancePicker } from '@/features/models/components/InstancePicker'
 import { useNavigate } from 'react-router-dom'
 import { Bot, Plus, Trash2 } from 'lucide-react'
 import { useWorkflows, useCreateWorkflow, useDeleteWorkflow, useTools } from './api'
@@ -153,25 +154,17 @@ function CreateWorkflowDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-sm text-zinc-400">Instance ID *</label>
-              <input
-                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
-                placeholder="Instance GUID"
-                value={instanceId}
-                onChange={(e) => setInstanceId(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-zinc-400">Model *</label>
-              <input
-                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
-                placeholder="Model name"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              />
-            </div>
+          <div>
+            <label className="text-sm text-zinc-400">Server and model *</label>
+            <InstancePicker
+              className="mt-1"
+              instanceId={instanceId}
+              model={model}
+              onChange={(nextInstanceId, nextModel) => {
+                setInstanceId(nextInstanceId)
+                setModel(nextModel)
+              }}
+            />
           </div>
           <div>
             <label className="text-sm text-zinc-400">System Prompt</label>
