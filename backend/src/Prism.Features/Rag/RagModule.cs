@@ -49,7 +49,12 @@ public static class RagModule
         services.AddSingleton<IDocumentParser, HtmlParser>();
 
         // Embedding provider
-        services.AddSingleton<IEmbeddingProvider, OpenAiEmbeddingProvider>();
+        // Scoped, not singleton. It resolves its endpoint from the registered inference
+        // instances, which means it takes AppDbContext — and a singleton holding a scoped
+        // DbContext is a captive dependency: never disposed, shared across every request, and
+        // DbContext is not thread-safe. Only scoped handlers consume this, so scoped is both
+        // correct and sufficient.
+        services.AddScoped<IEmbeddingProvider, OpenAiEmbeddingProvider>();
 
         // Seeders
         services.AddScoped<IDataSeeder, RagSeeder>();

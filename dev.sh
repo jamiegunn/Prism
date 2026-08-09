@@ -102,18 +102,104 @@ if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
 fi
 
 # ── 2. Backend API ───────────────────────────────────────────────────
+API_PORT="${PRISM_API_PORT:-5000}"
+
 if ! $FRONTEND_ONLY; then
-  step "Starting backend API on http://localhost:5000 ..."
+  # Port 5000 is not as free as it looks. On macOS the AirPlay Receiver holds it
+  # by default, and any other stopped-then-restarted service may still have it.
+  # Kestrel's failure is a bind error buried in a log the launcher used to
+  # ignore, so find out here instead.
+  if _prism_port_open localhost "$API_PORT"; then
+    holder="$(command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1}')"
+    warn "Port $API_PORT is already in use${holder:+ by '$holder'}."
+
+    if [ "$(uname -s)" = "Darwin" ] && [ "$API_PORT" = "5000" ]; then
+      warn "On macOS this is usually AirPlay Receiver. To free it:"
+      warn "  System Settings -> General -> AirDrop & Handoff -> AirPlay Receiver: Off"
+    fi
+
+    for candidate in 5001 5002 5003 5004 5005; do
+      if ! _prism_port_open localhost "$candidate"; then
+        API_PORT="$candidate"
+        break
+      fi
+    done
+
+    if _prism_port_open localhost "$API_PORT"; then
+      echo -e "${RED}No free port found between 5000 and 5005. Set PRISM_API_PORT.${NC}"
+      exit 1
+    fi
+    ok "Using port $API_PORT instead."
+  fi
+
+  # The Vite dev server proxies /api to this, so it has to be told.
+  export PRISM_API_URL="http://localhost:$API_PORT"
+
+  step "Starting backend API on $PRISM_API_URL ..."
 
   if [ ! -d "$ROOT/backend/src/Prism.Api/bin" ]; then
     echo "   Building backend (first run)..."
     dotnet build "$ROOT/backend/Prism.sln" --nologo -q
   fi
 
-  dotnet run --project "$ROOT/backend/src/Prism.Api" --no-launch-profile --urls "http://localhost:5000" \
+  # --no-launch-profile keeps launchSettings.json from overriding the URL, but it also
+  # drops ASPNETCORE_ENVIRONMENT to Production. Migrations, seeding, Swagger and the DI
+  # scope validation are all gated on Development, so without this the API starts, applies
+  # no migrations, and the first request fails with 'relation "jobs" does not exist'.
+  export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Development}"
+
+  dotnet run --project "$ROOT/backend/src/Prism.Api" --no-launch-profile --urls "$PRISM_API_URL" \
     > "$LOGS/api-stdout.log" 2> "$LOGS/api-stderr.log" &
-  echo $! > "$LOGS/api.pid"
-  ok "API starting (PID $!)... Swagger: http://localhost:5000/swagger"
+  API_PID=$!
+  echo $API_PID > "$LOGS/api.pid"
+
+  # Wait for it to actually answer. Printing "API starting (PID 71848)" and
+  # exiting 0 while Kestrel died two seconds later is how a bind failure turns
+  # into "Backend unreachable" in the UI with no clue where to look.
+  echo -n "   Waiting for the API..."
+  api_up=false
+  for _ in $(seq 1 60); do
+    if ! kill -0 "$API_PID" 2>/dev/null; then
+      break                       # process gone; no point waiting out the clock
+    fi
+    if curl -fsS "$PRISM_API_URL/health" >/dev/null 2>&1; then
+      api_up=true; break
+    fi
+    echo -n "."
+    sleep 1
+  done
+
+  if $api_up; then
+    ok " Ready! Swagger: $PRISM_API_URL/swagger"
+  else
+    echo ""
+    echo -e "${RED}The API did not come up.${NC}"
+    echo ""
+    # Look in both streams. A .NET exception is logged to stdout by Serilog,
+    # but the SDK's own failures — a missing project, an unrestorable package —
+    # only ever reach stderr, which is how this printed nothing at all the first
+    # time it was tried.
+    shown=false
+    for logfile in "$LOGS/api-stderr.log" "$LOGS/api-stdout.log"; do
+      [ -s "$logfile" ] || continue
+      echo "From $(basename "$logfile"):"
+      if grep -m1 -A4 -iE "error|exception|fail|denied" "$logfile" 2>/dev/null | grep -q .; then
+        grep -m1 -A4 -iE "error|exception|fail|denied" "$logfile" 2>/dev/null | cut -c1-160 | sed 's/^/    /'
+      else
+        tail -8 "$logfile" 2>/dev/null | cut -c1-160 | sed 's/^/    /'
+      fi
+      echo ""
+      shown=true
+    done
+    $shown || echo "    (both logs are empty — the process died before writing anything)"
+
+    echo "Full logs: $LOGS/api-stdout.log"
+    echo "           $LOGS/api-stderr.log"
+    echo "Diagnose:  ./scripts/doctor.sh"
+    kill "$API_PID" 2>/dev/null || true
+    rm -f "$LOGS/api.pid"
+    exit 1
+  fi
 fi
 
 # ── 3. Frontend ──────────────────────────────────────────────────────
@@ -141,9 +227,9 @@ echo ""
 # Only advertise what was actually started — listing a frontend that --backend
 # deliberately skipped sends people to a port with nothing on it.
 $BACKEND_ONLY  || echo "  Frontend:  http://localhost:5173"
-$FRONTEND_ONLY || echo "  API:       http://localhost:5000"
-$FRONTEND_ONLY || echo "  Swagger:   http://localhost:5000/swagger"
-$FRONTEND_ONLY || echo "  Health:    http://localhost:5000/health"
+$FRONTEND_ONLY || echo "  API:       http://localhost:$API_PORT"
+$FRONTEND_ONLY || echo "  Swagger:   http://localhost:$API_PORT/swagger"
+$FRONTEND_ONLY || echo "  Health:    http://localhost:$API_PORT/health"
 $GPU && echo "  vLLM:      http://localhost:8000"
 echo ""
 echo -e "  Stop all:  ${CYAN}./dev.sh --stop${NC}"

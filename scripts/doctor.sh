@@ -233,6 +233,92 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Ports
+#
+# Checking a tool is installed is not the same as checking the app can run.
+# A port held by something else is the most common reason a green environment
+# still produces "Backend unreachable" in the browser.
+# ---------------------------------------------------------------------------
+
+head_ "Ports"
+
+port_holder() {
+  command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1}'
+}
+port_open() { ( exec 3<>"/dev/tcp/localhost/$1" ) >/dev/null 2>&1; }
+
+# 5000 API, 5173 Vite, 5438 Postgres. Postgres being held by our own container
+# is the desired state, so it is reported differently.
+for entry in "5000:API" "5173:frontend"; do
+  port="${entry%%:*}"; label="${entry##*:}"
+  if port_open "$port"; then
+    holder="$(port_holder "$port")"
+    if curl -fsS "http://localhost:$port/health" >/dev/null 2>&1; then
+      pass "$port ($label) — Prism is already running here"
+    else
+      warn "$port ($label) is held${holder:+ by '$holder'}, and it is not Prism"
+      if [ "$port" = "5000" ] && [ "$(uname -s)" = "Darwin" ]; then
+        printf '    %s\n' "On macOS this is usually AirPlay Receiver. Either turn it off in"
+        printf '    %s\n' "System Settings -> General -> AirDrop & Handoff -> AirPlay Receiver,"
+        printf '    %s\n' "or let dev.sh move the API to the next free port, which it does"
+        printf '    %s\n' "automatically and tells the frontend about."
+      fi
+    fi
+  else
+    pass "$port ($label) is free"
+  fi
+done
+
+if port_open 5438; then
+  pass "5438 (PostgreSQL) is answering"
+else
+  warn "5438 (PostgreSQL) is not answering — see the database section above"
+fi
+
+# ---------------------------------------------------------------------------
+# Running services
+#
+# Only meaningful when Prism is up. Silent otherwise, so a pre-start check does
+# not report failures for things nobody has started yet.
+# ---------------------------------------------------------------------------
+
+API_URL=""
+for candidate in 5000 5001 5002 5003 5004 5005; do
+  if curl -fsS "http://localhost:$candidate/health" >/dev/null 2>&1; then
+    API_URL="http://localhost:$candidate"
+    break
+  fi
+done
+
+if [ -n "$API_URL" ]; then
+  head_ "Running services"
+  pass "API is healthy at $API_URL"
+
+  # A registered provider is what separates "the app runs" from "the app does
+  # anything". Without one, every headline feature is an empty panel.
+  instances="$(curl -fsS "$API_URL/api/v1/models/instances" 2>/dev/null)"
+  if [ -z "$instances" ]; then
+    warn "could not read the model list — the API is up but that endpoint failed"
+  elif printf '%s' "$instances" | grep -q '"id"'; then
+    count="$(printf '%s' "$instances" | grep -o '"id"' | wc -l | tr -d ' ')"
+    pass "$count inference instance(s) registered"
+  else
+    warn "no inference provider is connected"
+    printf '    %s\n' "Prism runs, but the token heatmap, entropy view and Token Explorer"
+    printf '    %s\n' "have nothing to read. Open http://localhost:5173/models — it looks"
+    printf '    %s\n' "for a local server and offers to connect whatever answers."
+    printf '    %s\n' "${DIM}Quickest: install Ollama, then 'ollama serve' and${RESET}"
+    printf '    %s\n' "${DIM}'ollama pull mistral:7b-instruct'. For token-level views, run vLLM.${RESET}"
+  fi
+
+  if port_open 5173; then
+    pass "frontend is serving on http://localhost:5173"
+  else
+    warn "frontend is not running — start it with ./dev.sh --frontend"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Hooks
 # ---------------------------------------------------------------------------
 
