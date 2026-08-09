@@ -13,8 +13,13 @@ export type Side = 'top' | 'bottom' | 'left' | 'right'
 /** What the tool must already have before a walkthrough is worth starting. */
 export type Requirement = 'provider' | 'logprobs' | 'history'
 
-/** Orientation versus a concrete task. */
-export type TourKind = 'welcome' | 'situation'
+/**
+ * Orientation, a concrete task, or a single area of the app.
+ *
+ * A `page` tour belongs to one route and offers itself the first time you go there, which is
+ * the moment it is worth having and the only moment it is not an interruption.
+ */
+export type TourKind = 'welcome' | 'situation' | 'page'
 
 /** One stop in a walkthrough. */
 export interface TourStep {
@@ -40,6 +45,11 @@ export interface TourStep {
 export interface Tour {
   id: string
   kind: TourKind
+  /**
+   * For a `page` tour, the route it belongs to. Arriving there for the first time offers it,
+   * and the guide pins it to the top while you are on that route.
+   */
+  area?: string
   title: string
   /** What the reader can do afterwards that they could not do before. */
   outcome: string

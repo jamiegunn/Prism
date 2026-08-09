@@ -85,7 +85,7 @@ export function HistoryPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4" data-tour="history-filters">
         {/* Search */}
         <div className="flex-1 min-w-[200px]">
           <label className="text-xs text-zinc-500 mb-1 block">Search</label>
@@ -196,7 +196,7 @@ export function HistoryPage() {
       </div>
 
       {/* Results Table */}
-      <div className="rounded-lg border border-zinc-800 overflow-hidden">
+      <div className="rounded-lg border border-zinc-800 overflow-hidden" data-tour="history-results">
         {/* Header Row */}
         <div className="grid grid-cols-[140px_110px_1fr_180px_80px_80px_60px_1fr] gap-2 px-4 py-2.5 bg-zinc-800/60 text-xs font-medium text-zinc-400 uppercase tracking-wider">
           <div>Time</div>

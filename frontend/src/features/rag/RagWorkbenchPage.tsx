@@ -50,7 +50,7 @@ export function RagWorkbenchPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-tour="rag-collections">
         {collections?.map((col: RagCollection) => (
           <div
             key={col.id}

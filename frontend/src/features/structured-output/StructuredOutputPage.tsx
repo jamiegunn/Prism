@@ -31,7 +31,7 @@ export function StructuredOutputPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Schema List */}
-        <div className="space-y-4">
+        <div className="space-y-4" data-tour="structured-schemas">
           <input
             className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
             placeholder="Search schemas..."
@@ -81,7 +81,7 @@ export function StructuredOutputPage() {
         </div>
 
         {/* Test Panel */}
-        <div>
+        <div data-tour="structured-test">
           {selectedSchema ? (
             <TestPanel schema={selectedSchema} />
           ) : (

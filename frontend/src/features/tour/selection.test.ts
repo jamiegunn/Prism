@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { describeOffer, describeOffers, shouldAutoStart } from './selection'
+import {
+  describeOffer,
+  describeOffers,
+  pageTourFor,
+  shouldAutoStart,
+  shouldOfferPageTour,
+} from './selection'
 import { allTours, findTour, WELCOME_TOUR_ID } from './tours'
 import type { Tour, TourContext } from './types'
 
@@ -100,6 +106,61 @@ describe('shouldAutoStart', () => {
         WELCOME_TOUR_ID
       )
     ).toBe(true)
+  })
+})
+
+describe('page tours', () => {
+  const analytics: Tour = {
+    id: 'page-analytics',
+    kind: 'page',
+    area: '/analytics',
+    title: 'Analytics',
+    outcome: 'Test',
+    minutes: 2,
+    requires: ['history'],
+    steps: [{ id: 'only', title: 'Only', body: 'Body' }],
+  }
+
+  const enabled = { completedTourIds: [], autoStartEnabled: true }
+
+  it('finds the tour belonging to a route', () => {
+    expect(pageTourFor([analytics], '/analytics')?.id).toBe('page-analytics')
+    expect(pageTourFor([analytics], '/datasets')).toBeUndefined()
+  })
+
+  it('does not match a route that merely starts the same way', () => {
+    // '/analytics/detail' is a different page and may have nothing the tour describes.
+    expect(pageTourFor([analytics], '/analytics/detail')).toBeUndefined()
+  })
+
+  it('offers on a first visit once its requirements are met', () => {
+    expect(shouldOfferPageTour(analytics, enabled, workingInstall, false)).toBe(true)
+  })
+
+  it('stays quiet on an area that has nothing in it yet', () => {
+    // The whole point of the requirement: touring an empty Analytics page teaches the
+    // reader that the tool is broken.
+    expect(shouldOfferPageTour(analytics, enabled, emptyInstall, false)).toBe(false)
+  })
+
+  it('never interrupts a walkthrough already running', () => {
+    expect(shouldOfferPageTour(analytics, enabled, workingInstall, true)).toBe(false)
+  })
+
+  it('offers only once, then never again', () => {
+    const seen = { completedTourIds: ['page-analytics'], autoStartEnabled: true }
+
+    expect(shouldOfferPageTour(analytics, seen, workingInstall, false)).toBe(false)
+  })
+
+  it('respects the switch', () => {
+    const off = { completedTourIds: [], autoStartEnabled: false }
+
+    expect(shouldOfferPageTour(analytics, off, workingInstall, false)).toBe(false)
+  })
+
+  it('does nothing for a route with no tour', () => {
+    expect(shouldOfferPageTour(undefined, enabled, workingInstall, false)).toBe(false)
   })
 })
 

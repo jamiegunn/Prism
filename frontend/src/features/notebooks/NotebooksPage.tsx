@@ -56,7 +56,7 @@ export function NotebooksPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-tour="notebooks-list">
         {notebooks?.map((nb: NotebookSummary) => (
           <div
             key={nb.id}

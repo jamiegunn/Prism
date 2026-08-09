@@ -23,7 +23,7 @@ export function FineTuningPage() {
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-zinc-700">
+      <div className="flex gap-1 border-b border-zinc-700" data-tour="fine-tuning-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -57,7 +57,7 @@ function AdaptersPanel({ onShowCreate }: { onShowCreate: () => void }) {
   const deleteAdapter = useDeleteAdapter()
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="fine-tuning-adapters">
       <div className="flex justify-end">
         <button
           className="flex items-center gap-2 rounded bg-violet-600 px-4 py-2 text-sm text-white hover:bg-violet-700"
@@ -174,7 +174,7 @@ function ExportPanel() {
         </select>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2" data-tour="fine-tuning-mapping">
         <div>
           <label className="text-sm text-zinc-400">Instruction Column</label>
           <input

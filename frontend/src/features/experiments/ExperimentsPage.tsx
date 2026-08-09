@@ -34,7 +34,7 @@ export function ExperimentsPage() {
         <CreateProjectDialog />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" data-tour="experiments-filters">
         <Input
           placeholder="Search projects..."
           value={search}
@@ -68,7 +68,7 @@ export function ExperimentsPage() {
           <CreateProjectDialog />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-tour="experiments-projects">
           {projects.map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}

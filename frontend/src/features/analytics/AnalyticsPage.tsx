@@ -21,7 +21,7 @@ export function AnalyticsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4" data-tour="analytics-summary">
         <SummaryCard
           title="Total Requests"
           value={usage?.totalRequests.toLocaleString() ?? '0'}
@@ -45,7 +45,7 @@ export function AnalyticsPage() {
       </div>
 
       <Tabs defaultValue="usage">
-        <TabsList>
+        <TabsList data-tour="analytics-tabs">
           <TabsTrigger value="usage">Usage</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="cost">Cost</TabsTrigger>

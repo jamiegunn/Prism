@@ -10,6 +10,8 @@ interface GuidePanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   offers: TourOffer[]
+  /** The route being viewed, so its own tour can be offered first. */
+  currentArea: string
   completedTourIds: string[]
   autoStartEnabled: boolean
   onStart: (tourId: string) => void
@@ -29,6 +31,7 @@ export function GuidePanel({
   open,
   onOpenChange,
   offers,
+  currentArea,
   completedTourIds,
   autoStartEnabled,
   onStart,
@@ -37,6 +40,12 @@ export function GuidePanel({
 }: GuidePanelProps) {
   const welcome = offers.filter((offer) => offer.tour.kind === 'welcome')
   const situations = offers.filter((offer) => offer.tour.kind === 'situation')
+  const pages = offers.filter((offer) => offer.tour.kind === 'page')
+
+  // The tour for the page you are looking at is the one you are most likely to want, so it
+  // goes first rather than making you find it in a list of fifteen.
+  const thisPage = pages.find((offer) => offer.tour.area === currentArea)
+  const otherPages = pages.filter((offer) => offer !== thisPage)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -61,6 +70,15 @@ export function GuidePanel({
               onStart={onStart}
             />
           ))}
+
+          {thisPage && (
+            <TourRow
+              offer={thisPage}
+              completed={completedTourIds.includes(thisPage.tour.id)}
+              onStart={onStart}
+              eyebrow="This page"
+            />
+          )}
         </div>
 
         <Separator className="my-5" />
@@ -79,6 +97,27 @@ export function GuidePanel({
             />
           ))}
         </div>
+
+        {otherPages.length > 0 && (
+          <>
+            <Separator className="my-5" />
+
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+              Tour an area
+            </p>
+
+            <div className="space-y-2">
+              {otherPages.map((offer) => (
+                <TourRow
+                  key={offer.tour.id}
+                  offer={offer}
+                  completed={completedTourIds.includes(offer.tour.id)}
+                  onStart={onStart}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         <Separator className="my-5" />
 
@@ -115,9 +154,11 @@ interface TourRowProps {
   offer: TourOffer
   completed: boolean
   onStart: (tourId: string) => void
+  /** Small label above the title, used to mark the tour for the current page. */
+  eyebrow?: string
 }
 
-function TourRow({ offer, completed, onStart }: TourRowProps) {
+function TourRow({ offer, completed, onStart, eyebrow }: TourRowProps) {
   const { tour, available, blockedReason } = offer
 
   return (
@@ -126,11 +167,17 @@ function TourRow({ offer, completed, onStart }: TourRowProps) {
         'rounded-lg border p-3 transition-colors',
         available
           ? 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-700'
-          : 'border-zinc-800/60 bg-zinc-900/20'
+          : 'border-zinc-800/60 bg-zinc-900/20',
+        eyebrow && available && 'border-violet-500/40'
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {eyebrow && (
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-400">
+              {eyebrow}
+            </p>
+          )}
           <p className={cn('text-sm font-medium', available ? 'text-zinc-100' : 'text-zinc-500')}>
             {tour.title}
           </p>

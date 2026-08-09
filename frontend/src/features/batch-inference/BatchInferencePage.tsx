@@ -41,7 +41,7 @@ export function BatchInferencePage() {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2" data-tour="batch-filters">
         {['All', 'Queued', 'Running', 'Completed', 'Failed'].map((s) => (
           <Button
             key={s}
@@ -61,7 +61,7 @@ export function BatchInferencePage() {
           ))}
         </div>
       ) : jobs && jobs.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4" data-tour="batch-jobs">
           {jobs.map((job) => (
             <BatchJobCard
               key={job.id}

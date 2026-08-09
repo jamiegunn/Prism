@@ -54,7 +54,11 @@ export function ModelsPage() {
       </div>
 
       {/* Capability Matrix (shown when instances exist) */}
-      {instances && instances.length > 0 && <CapabilityMatrix />}
+      {instances && instances.length > 0 && (
+        <div data-tour="models-capabilities">
+          <CapabilityMatrix />
+        </div>
+      )}
 
       <div className="flex gap-6">
         {/* Left: Instance Grid */}
@@ -68,7 +72,7 @@ export function ModelsPage() {
           ) : !instances || instances.length === 0 ? (
             <FirstRunSetup />
           ) : (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div data-tour="models-instances" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {instances.map((instance) => (
                 <InstanceCard
                   key={instance.id}
@@ -82,7 +86,7 @@ export function ModelsPage() {
         </div>
 
         {/* Right: Detail Panel */}
-        <div className="hidden w-96 shrink-0 lg:block">
+        <div data-tour="models-detail" className="hidden w-96 shrink-0 lg:block">
           {selectedInstance ? (
             <InstanceDetailPanel
               instance={selectedInstance}

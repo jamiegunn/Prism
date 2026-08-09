@@ -212,7 +212,7 @@ export function TemplateEditor() {
         <Separator orientation="vertical" />
 
         {/* Right: Variables + Test */}
-        <div className="w-80 shrink-0 flex flex-col border-l border-border">
+        <div className="w-80 shrink-0 flex flex-col border-l border-border" data-tour="prompt-lab-test">
           {currentVersion && (
             <>
               <VariablePanel variables={currentVersion.variables} />

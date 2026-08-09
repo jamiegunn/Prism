@@ -110,7 +110,7 @@ export function TokenExplorerPage() {
       {/* Main 3-panel layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: Controls */}
-        <div className="w-80 shrink-0 border-r border-zinc-800">
+        <div className="w-80 shrink-0 border-r border-zinc-800" data-tour="token-explorer-controls">
           <ScrollArea className="h-full">
             <div className="space-y-5 p-4">
               {/* Instance selector */}
@@ -305,7 +305,7 @@ export function TokenExplorerPage() {
         {/* Center panel: Tabs */}
         <div className="flex-1 overflow-hidden">
           <Tabs defaultValue="predictions" className="flex h-full flex-col">
-            <div className="shrink-0 border-b border-zinc-800 px-4 py-2">
+            <div className="shrink-0 border-b border-zinc-800 px-4 py-2" data-tour="token-explorer-views">
               <TabsList>
                 <TabsTrigger value="predictions">Predictions</TabsTrigger>
                 <TabsTrigger value="step-through">Step Through</TabsTrigger>
@@ -447,7 +447,7 @@ export function TokenExplorerPage() {
         </div>
 
         {/* Right panel: Sampling Analysis */}
-        <div className="w-64 shrink-0 border-l border-zinc-800">
+        <div className="w-64 shrink-0 border-l border-zinc-800" data-tour="token-explorer-sampling">
           <ScrollArea className="h-full p-4">
             <SamplingVisualization />
           </ScrollArea>

@@ -23,7 +23,7 @@ export function PromptLabPage() {
       {/* Main content: sidebar + editor */}
       <div className="flex flex-1 overflow-hidden">
         {/* Template sidebar */}
-        <div className="w-72 shrink-0 border-r border-border">
+        <div className="w-72 shrink-0 border-r border-border" data-tour="prompt-lab-templates">
           <TemplateList search={search} onSearchChange={setSearch} />
         </div>
 

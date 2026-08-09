@@ -35,7 +35,7 @@ export function EvaluationPage() {
       </div>
 
       <Tabs defaultValue="evaluations">
-        <TabsList>
+        <TabsList data-tour="evaluation-tabs">
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
         </TabsList>

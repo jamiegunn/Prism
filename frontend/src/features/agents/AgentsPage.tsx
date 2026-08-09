@@ -47,7 +47,7 @@ export function AgentsPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-tour="agents-list">
         {workflows?.map((workflow: AgentWorkflow) => (
           <div
             key={workflow.id}

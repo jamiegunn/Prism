@@ -82,6 +82,46 @@ export interface AutoStartState {
 }
 
 /**
+ * Finds the page tour belonging to a route, if there is one.
+ *
+ * @param tours Every walkthrough.
+ * @param pathname The current route.
+ * @returns The page tour for that exact route, or undefined.
+ */
+export function pageTourFor(tours: Tour[], pathname: string): Tour | undefined {
+  return tours.find((tour) => tour.kind === 'page' && tour.area === pathname)
+}
+
+/**
+ * Whether arriving on a route should offer its tour unprompted.
+ *
+ * Deliberately narrow. It fires on the first visit to that area and never again, only when
+ * nothing else is running, and only while the reader has left the switch on. Fifteen areas
+ * each offering once is a manageable amount of help; any one of them offering twice is
+ * nagging, and one that interrupts a walkthrough already in progress is worse.
+ *
+ * @param tour The page tour for the route just arrived at, if any.
+ * @param state The persisted flags.
+ * @param context What the app has, so an area with nothing in it stays quiet.
+ * @param tourInProgress Whether a walkthrough is already running.
+ * @returns True when it should open on its own.
+ */
+export function shouldOfferPageTour(
+  tour: Tour | undefined,
+  state: AutoStartState,
+  context: TourContext,
+  tourInProgress: boolean
+): boolean {
+  if (!tour || tourInProgress) return false
+  if (!state.autoStartEnabled) return false
+  if (state.completedTourIds.includes(tour.id)) return false
+
+  // An area whose requirements are unmet has nothing to show, and touring an empty page
+  // teaches the reader the tool is broken.
+  return describeOffer(tour, context).available
+}
+
+/**
  * Whether the welcome tour should open on its own.
  *
  * Only ever true once. Reappearing after a dismissal is the behaviour that makes people
