@@ -628,6 +628,34 @@ fi
 API_PORT="${PRISM_API_PORT:-5000}"
 
 if ! $FRONTEND_ONLY; then
+  # Another Prism API already running is not a port conflict, and moving to a free
+  # port makes it worse rather than better: both connect to the same database and
+  # each runs its own health-check writer, so they overwrite each other's model
+  # capabilities every thirty seconds.
+  #
+  # This is not hypothetical. Four stale APIs on ports 5000-5003, three of them
+  # predating a capability fix, spent an afternoon flipping SupportsLogprobs
+  # between true and false — which reads as "the token views randomly stop
+  # working" and is invisible from any one of them.
+  stale_apis="$(pgrep -f "$ROOT/backend/src/Prism.Api" 2>/dev/null | tr '\n' ' ' || true)"
+
+  if [ -n "${stale_apis// /}" ]; then
+    warn "Another Prism API is already running (PID${stale_apis#* } ${stale_apis% })."
+    warn "Two APIs share one database and overwrite each other's model capabilities,"
+    warn "so a second one is worse than a port conflict rather than a way around it."
+    step "Stopping the one already running..."
+
+    for stale_pid in $stale_apis; do
+      kill "$stale_pid" 2>/dev/null || true
+    done
+
+    # Give them a moment to release their ports before the check below reads them.
+    for _ in $(seq 1 10); do
+      pgrep -f "$ROOT/backend/src/Prism.Api" >/dev/null 2>&1 || break
+      sleep 1
+    done
+  fi
+
   # Port 5000 is not as free as it looks. On macOS the AirPlay Receiver holds it
   # by default, and any other stopped-then-restarted service may still have it.
   # Kestrel's failure is a bind error buried in a log the launcher used to

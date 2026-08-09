@@ -133,17 +133,49 @@ requirement that is currently UNMET, or a withdrawal with a reason. Nothing here
 | Notebooks | JupyterLite build absent; the dev server serves Prism inside Prism rather than 404ing | broken feature |
 | Notebooks | Save validates nothing; broken and empty notebooks are indistinguishable | data correctness |
 
-### Decisions needed before work starts
+### Decisions taken (2026-08-09)
 
-These are not mine to make, and each blocks a whole tab:
+**2. Notebooks — ship the JupyterLite build.** In scope. The page is otherwise sound; only the
+runtime is missing.
 
-1. **Fine-Tuning** — is training in scope? If not, the tab should say what it is (dataset export
-   and an adapter register) and `IsActive` should go. If yes, it is a project, not a gap.
-2. **Notebooks** — ship the JupyterLite build, or drop in-browser execution and present the tab
-   as storage and versioning?
-3. **Evaluation and Batch** — build the create UI, or mark both explicitly API-driven in the
-   product truth matrix and stop implying otherwise?
-4. **Agents `api_call`** — what is the intended network boundary? Treat as security work.
+**3. Evaluation and Batch — build the create UI.** In scope. Both backends are complete and
+tested; this is frontend work against existing endpoints.
+
+**4. Agents `api_call` — stays open, documented.** Correct for a local research tool. The risk
+and the operational rules were already written up in `docs/features/agents.md`; a **Hardening
+this later** section now sets out the path — resolve-then-check against private address space,
+no redirect following, per-workflow scope, URL audit lines, per-run call caps, and never
+forwarding Prism's own credentials. The end state proposed there is deny-by-default with an
+explicit unrestricted mode that refuses to run when Prism is not bound to loopback, so a laptop
+default cannot silently become a server default.
+
+**1. Fine-Tuning — recommendation: remove the tab, keep Export, move it to Datasets.**
+
+The instruction was "in scope, or if it is too large we remove the tab", so here is the sizing.
+
+*Training is disproportionate.* Prism installs as .NET, Node and Docker. Every LoRA trainer worth
+using is Python — PEFT, Unsloth, MLX-LM — so training means adding a Python toolchain, an
+environment to manage, a trainer script to ship, progress streaming, and artefact handling. The
+durable job system already exists (`Prism.Common/Jobs`, with leases and a Redis queue) so the
+orchestration half is cheap, but the toolchain half is a new dependency for the whole product.
+
+*And it would not work on this machine.* Adapters only become useful if inference can load them.
+vLLM serves LoRA adapters per request; vLLM needs CUDA and cannot run on Apple Silicon. Ollama
+takes an `ADAPTER` only at model-creation time via a Modelfile, not per request. So on the
+hardware this project is being developed on, both training and adapter-serving are unavailable —
+we would be building a tab that its author cannot use.
+
+*What is actually real here is Export*, and it is finished: four formats, a preview, a record
+count, warnings. It has nothing to do with adapters. It belongs beside the dataset it exports,
+where the dataset id is already in the URL — which also removes the hand-typed GUID (G2).
+
+So: fold Export into the dataset detail page, delete the inert adapter register (`IsActive` has
+no writer and no inference path reads `LoraAdapter`), and remove the sidebar entry. Smaller than
+either alternative, and nothing real is lost. **Reversible** — if training is wanted later it
+arrives as a job type, which is the part that is already built.
+
+Override this if the intent was always to train; it is a project, not a gap, and should be
+planned as one.
 
 ---
 
@@ -164,7 +196,10 @@ decision 3.
 **Phase 3 — wrong or stale data.** Analytics cost, Datasets state leak, Evaluation/Batch polling,
 Fine-Tuning export mapping. These mislead quietly, which makes them worse than a crash.
 
-**Phase 4 — scope decisions.** Fine-Tuning and Notebooks, per decisions 1 and 2.
+**Phase 4 — scope decisions, now settled.** Notebooks: ship the JupyterLite build (decision 2).
+Fine-Tuning: fold Export into Datasets, drop the adapter register and the sidebar entry
+(decision 1, pending override). Note the tour test asserts every sidebar destination has a tour,
+so removing a tab means removing its tour in the same change — the suite will say so.
 
 **Phase 5 — tour reconciliation.** Re-read all fifteen tours against the fixed reality. Anything
 a tour apologises for that is now fixed gets rewritten; the anchor tests already fail if a

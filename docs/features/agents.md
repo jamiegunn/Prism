@@ -153,6 +153,47 @@ it matters.
 > On a laptop with a local model and no secrets, this is fine. On a shared or cloud-hosted
 > deployment, treat the checkbox as an outbound proxy with no rules attached.
 
+### Hardening this later
+
+Leaving `api_call` open is a deliberate choice for a local research tool, not an oversight — an
+allow-list you have to edit before you can fetch a paper is a tool nobody uses. But it is the
+wrong default the moment Prism runs anywhere other than your own machine, and the change is
+worth making before that day rather than after it.
+
+The ordering below is by protection per unit of work. The first two are most of the benefit.
+
+**1. Reject private address space, after resolution.** The check that matters is against the
+resolved IP, not the hostname: blocking `169.254.169.254` by string does nothing against a DNS
+name that resolves to it, and a name that resolves twice — once for your check, once for the
+fetch — defeats a naive guard entirely. Resolve once, verify the address is public, then connect
+to that address. Deny loopback, RFC1918, link-local, and IPv6 equivalents. This closes the
+metadata-endpoint and internal-service cases together, and needs no configuration from anyone.
+
+**2. Do not follow redirects.** A permitted public URL that 302s to `169.254.169.254` walks
+straight through an address check applied only to the original request. Either disable redirects
+and let the model see the 302, or re-run the address check on every hop.
+
+**3. Make it opt-in per workflow, with the reach stated.** The tool checkbox already exists;
+what it lacks is a scope. A workflow that only needs one documentation site should say so, and
+the common case — an agent that needs no network at all — should be the default.
+
+**4. Log the URL, not just the observation.** Runs record what came back but not always what was
+asked for. A fetched-URL audit line per step turns "did this agent exfiltrate anything" from an
+inference into a query.
+
+**5. Cap calls per run.** The step limit bounds reasoning turns, not fetches. A run that makes
+forty requests to one host is either broken or being used as a scanner, and neither should be
+silent.
+
+**6. Strip inbound credentials.** The tool should never forward Prism's own auth headers, cookies
+or bearer tokens onto an arbitrary host. Today it constructs a bare client, which is the right
+behaviour — it is worth a test so it stays that way.
+
+A reasonable end state is deny-by-default with a per-workflow allow-list, the address check from
+(1) applied regardless of the list, and an explicit "unrestricted" mode that is obvious in the UI
+and refuses to run when Prism is not bound to loopback. That last part is what stops a laptop
+default silently becoming a server default.
+
 ---
 
 ## Running an agent
