@@ -6,13 +6,19 @@
 # never reaches a branch. It only runs the halves you actually touched: a
 # docs-only commit costs nothing, a frontend-only commit skips the .NET suite.
 #
+# Missing dependencies are provisioned rather than reported wherever that is
+# possible: the SDK is looked for off-PATH, Postgres is started, the test
+# database is created, npm packages are installed. Only things that genuinely
+# need a human — no SDK on the machine, Docker not running — stop the commit.
+#
 # Install:  ./scripts/install-hooks.sh
+# Diagnose: ./scripts/doctor.sh
 # Skip once (use sparingly):  git commit --no-verify
 #
 # Environment:
-#   PRISM_TEST_DB     Postgres connection string for the integration tests.
-#                     Without it the tests start a Testcontainers pgvector
-#                     container, which needs a running Docker daemon.
+#   PRISM_TEST_DB     Postgres connection string for the integration tests. Set
+#                     automatically when a local Postgres can be reached or
+#                     started; export it yourself to use a different server.
 #   PRISM_HOOK_STRICT Set to 1 to refuse to run when the working tree differs
 #                     from what is staged. Off by default; see the warning below.
 
@@ -65,6 +71,33 @@ fi
 
 say ""
 say "${BOLD}Prism pre-commit gate${RESET}"
+
+# ---------------------------------------------------------------------------
+# Dependencies
+#
+# Done before anything else, and before the "what changed" summary, because a
+# missing dependency is not a code problem and should not be reported as one.
+# ---------------------------------------------------------------------------
+
+if [ ! -f scripts/dev-env.sh ]; then
+  fail "scripts/dev-env.sh is missing — cannot check dependencies."
+  say  "This hook needs it. Restore it, or commit with --no-verify."
+  exit 1
+fi
+
+# shellcheck disable=SC1091
+. scripts/dev-env.sh
+
+if ! prism_env_prepare "$TOUCHED_BACKEND" "$TOUCHED_FRONTEND"; then
+  say ""
+  fail "Missing dependencies the hook could not resolve on its own."
+  prism_env_explain >&2
+  say ""
+  say "${DIM}./scripts/doctor.sh checks everything and fixes what it can.${RESET}"
+  say "${DIM}To commit without the gate:  git commit --no-verify${RESET}"
+  say ""
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Honesty about what is actually being tested
@@ -124,37 +157,6 @@ run() {
 if [ "$TOUCHED_BACKEND" -eq 1 ]; then
   say "${BOLD}Backend${RESET}"
 
-  if ! command -v dotnet >/dev/null 2>&1; then
-    say ""
-    fail "dotnet is not on PATH, so the backend gate cannot run."
-    say ""
-    say "  Install the .NET SDK, or if it is installed but invisible to this shell"
-    say "  (common when committing from a GUI git client), add it to PATH in your"
-    say "  shell profile. Verify with:  dotnet --info"
-    say ""
-    exit 1
-  fi
-
-  # The integration tests need a database. Decide which one, and refuse to run
-  # rather than quietly passing a suite that skipped its integration half.
-  if [ -n "${PRISM_TEST_DB:-}" ]; then
-    step "using PRISM_TEST_DB"
-  elif docker info >/dev/null 2>&1; then
-    step "no PRISM_TEST_DB; falling back to Testcontainers via Docker"
-  else
-    say ""
-    fail "The backend tests need a database and cannot reach one."
-    say ""
-    say "  Either start Postgres and point the tests at it:"
-    say ""
-    say "      docker compose up -d"
-    say "      export PRISM_TEST_DB=\"Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres\""
-    say ""
-    say "  or start Docker so the tests can create their own container."
-    say ""
-    exit 1
-  fi
-
   run "build (warnings are errors)" backend dotnet build Prism.sln -v q --nologo
   run "format"                      backend dotnet format Prism.sln --verify-no-changes
   run "tests"                       backend dotnet test Prism.sln --nologo -v q
@@ -167,22 +169,6 @@ fi
 
 if [ "$TOUCHED_FRONTEND" -eq 1 ]; then
   say "${BOLD}Frontend${RESET}"
-
-  if ! command -v npm >/dev/null 2>&1; then
-    say ""
-    fail "npm is not on PATH, so the frontend gate cannot run."
-    say "  Install Node.js 20 or newer. Verify with:  node --version"
-    say ""
-    exit 1
-  fi
-
-  if [ ! -d frontend/node_modules ]; then
-    say ""
-    fail "frontend/node_modules is missing."
-    say "  Run:  cd frontend && npm ci"
-    say ""
-    exit 1
-  fi
 
   run "typecheck" frontend npx tsc -b --noEmit
   run "lint"      frontend npm run lint

@@ -71,6 +71,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
         {
             _connectionString = external;
             GuardAgainstApplicationDatabase(external!);
+            await EnsureDatabaseExistsAsync(external!);
         }
         else
         {
@@ -92,6 +93,57 @@ public sealed class DatabaseFixture : IAsyncLifetime
         {
             await TruncateAllTablesAsync(context);
         }
+    }
+
+    /// <summary>
+    /// Creates the target database when the server does not already have it.
+    /// </summary>
+    /// <param name="connectionString">The externally supplied connection string.</param>
+    /// <remarks>
+    /// <para>
+    /// EF's <c>MigrateAsync</c> creates the schema but not the database, so pointing
+    /// <c>PRISM_TEST_DB</c> at a server that has never seen this project fails with
+    /// <c>3D000: database "prism_test" does not exist</c> — a message that reads like a
+    /// misconfiguration rather than a one-line fix.
+    /// </para>
+    /// <para>
+    /// Doing it here rather than in the setup scripts means it works from any entry point:
+    /// a bare <c>dotnet test</c>, an editor's test runner, CI, or the pre-commit hook. It also
+    /// needs no <c>psql</c> on the path and does not care whether the server came from this
+    /// repository's compose file or was already on the machine.
+    /// </para>
+    /// </remarks>
+    private static async Task EnsureDatabaseExistsAsync(string connectionString)
+    {
+        var target = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+        string databaseName = target.Database
+            ?? throw new InvalidOperationException(
+                $"{ExternalConnectionStringVariable} does not name a database.");
+
+        // Connect to the maintenance database, which every PostgreSQL server has.
+        var maintenance = new Npgsql.NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Database = "postgres",
+        };
+
+        await using var connection = new Npgsql.NpgsqlConnection(maintenance.ConnectionString);
+        await connection.OpenAsync();
+
+        await using (Npgsql.NpgsqlCommand exists = connection.CreateCommand())
+        {
+            exists.CommandText = "SELECT 1 FROM pg_database WHERE datname = @name";
+            exists.Parameters.AddWithValue("name", databaseName);
+
+            if (await exists.ExecuteScalarAsync() is not null)
+            {
+                return;
+            }
+        }
+
+        // CREATE DATABASE cannot be parameterised, so the identifier is quoted instead.
+        await using Npgsql.NpgsqlCommand create = connection.CreateCommand();
+        create.CommandText = $"CREATE DATABASE \"{databaseName.Replace("\"", "\"\"")}\"";
+        await create.ExecuteNonQueryAsync();
     }
 
     /// <summary>

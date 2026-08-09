@@ -5,5 +5,21 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      Run on a newer major runtime when the exact one is missing.
+
+      These projects target net9.0 while global.json pins the SDK to the 10.0 band, which is
+      what most people now have installed. Without this the build succeeds — targeting packs
+      come from NuGet — and then `dotnet run` and `dotnet test` die at launch with "You must
+      install or update .NET to run this application", listing a 10.0 runtime as the only one
+      present. Because it surfaces from the test host, it reads like a broken test suite rather
+      than a missing runtime.
+
+      Setting it here writes rollForward into each runtimeconfig.json, so it holds in every
+      terminal, editor and CI runner. The DOTNET_ROLL_FORWARD environment variable does the
+      same job, but only for whoever remembered to export it.
+    -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 </Project>

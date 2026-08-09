@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Points git at the version-controlled hooks in .githooks/.
+# Points git at the version-controlled hooks in .githooks/, then checks that the
+# machine can actually run them.
 #
 # Hooks live in the repo rather than in .git/hooks so that everyone gets the
 # same gate and it can be reviewed like any other code. Git does not do this
@@ -13,27 +14,22 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 git config core.hooksPath .githooks
-chmod +x .githooks/* 2>/dev/null || true
+chmod +x .githooks/* scripts/*.sh 2>/dev/null || true
 
-cat <<'EOF'
+echo "Hooks installed. The pre-commit gate builds, format-checks and tests"
+echo "whichever half of the repo you touched; a docs-only commit runs nothing."
+echo ""
+echo "Checking this machine can run them..."
 
-Hooks installed.
-
-  pre-commit   builds, format-checks and tests whichever half of the repo you
-               touched. A docs-only commit runs nothing.
-
-The backend tests need a database. Either:
-
-    docker compose up -d
-    export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres"
-
-or leave PRISM_TEST_DB unset and let the tests start their own container,
-which needs a running Docker daemon.
-
-Put the export in your shell profile so it survives new terminals, and so it
-is set when you commit from an editor or GUI client.
-
-To bypass the gate for one commit:  git commit --no-verify
-To uninstall:                       git config --unset core.hooksPath
-
-EOF
+# Running the doctor here means the first failure you see is on install, when
+# you are expecting to configure things — not three days later, halfway through
+# a commit you were in a hurry to make.
+if ./scripts/doctor.sh; then
+  echo "To bypass the gate for one commit:  git commit --no-verify"
+  echo "To uninstall:                       git config --unset core.hooksPath"
+else
+  echo ""
+  echo "The hooks are installed, but the checks above need attention first."
+  echo "Re-run ./scripts/doctor.sh once you have dealt with them."
+  exit 1
+fi
