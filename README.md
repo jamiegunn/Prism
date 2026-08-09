@@ -20,22 +20,28 @@ Most AI tools show you the final output. Prism shows you *how the model got ther
 
 ## Features
 
-| Module | What It Does | Phase |
+Each module has a how-to guide in [docs/features/](docs/features/) covering what it is for, the
+steps to do the common jobs, what every setting means, and what it will not do.
+
+| Module | What It Does | Guide |
 |--------|-------------|-------|
-| **Playground** | Chat with streaming, logprobs heatmaps, entropy charts, surprise highlighting | 1 |
-| **Token Explorer** | Next-token prediction, step-through generation, branch exploration, sampling visualization | 1 |
-| **Tokenizer Explorer** | Visualize tokenization, compare tokenizers across models, cost estimation | 1 |
-| **Model Management** | Register providers, monitor health/metrics, hot-swap models, KV cache visualization | 1 |
-| **History & Replay** | Browse all inference history, tag, filter, replay with overrides, diff results | 1 |
-| **Prompt Lab** | Template editor with variables, version control, A/B testing, few-shot management | 2 |
-| **Experiments** | Track runs, compare metrics, visualize parameter sweeps, statistical analysis | 2 |
-| **Datasets** | Upload, browse, split, compute statistics, export in training formats | 3 |
-| **Evaluation** | Scoring methods (ROUGE, BLEU, LLM-as-Judge, perplexity), leaderboards, calibration analysis | 3 |
-| **Batch Inference** | Run prompts at scale with concurrency control and progress tracking | 3 |
-| **RAG Workbench** | Ingest documents, chunking strategies, vector search, end-to-end RAG pipeline debugging | 4 |
-| **Structured Output** | Guided decoding with JSON schema constraints, output validation | 4 |
-| **Agent Builder** | YAML-configured agents with ReAct/Plan-and-Execute patterns, execution traces | 5 |
-| **Notebooks** | Embedded JupyterLite with Python helper package for programmatic access | 5 |
+| **Playground** | Chat with streaming, logprobs heatmaps, entropy charts, surprise highlighting | [Guide](docs/features/playground.md) |
+| **Token Explorer** | Next-token prediction, step-through generation, branch exploration, sampling visualization | [Guide](docs/features/token-explorer.md) |
+| **Tokenizer Explorer** | Visualize tokenization, compare tokenizers across models, cost estimation | [Guide](docs/features/tokenizer.md) |
+| **Model Management** | Register providers, monitor health/metrics, hot-swap models, KV cache visualization | [Guide](docs/features/models.md) |
+| **History & Replay** | Browse all inference history, tag, filter, replay with overrides, diff results | [Guide](docs/features/history.md) |
+| **Prompt Lab** | Template editor with variables, version control, few-shot management | [Guide](docs/features/prompt-lab.md) |
+| **Experiments** | Track runs, compare metrics, run parameter sweeps, export results | [Guide](docs/features/experiments.md) |
+| **Workspaces** | Group projects under a named workspace | [Guide](docs/features/workspaces.md) |
+| **Datasets** | Upload, browse, split, compute statistics, export | [Guide](docs/features/datasets.md) |
+| **Evaluation** | Scoring methods (exact match, contains, ROUGE-L, BLEU, length ratio), leaderboards | [Guide](docs/features/evaluation.md) |
+| **Batch Inference** | Run prompts at scale with progress tracking, pause and resume | [Guide](docs/features/batch-inference.md) |
+| **Analytics** | Usage, latency percentiles and token totals across every module | [Guide](docs/features/analytics.md) |
+| **RAG Workbench** | Ingest documents, chunking strategies, vector/BM25/hybrid search | [Guide](docs/features/rag-workbench.md) |
+| **Structured Output** | Guided decoding with JSON schema constraints, output validation | [Guide](docs/features/structured-output.md) |
+| **Agent Builder** | ReAct agents with tool use and step-by-step execution traces | [Guide](docs/features/agents.md) |
+| **Fine-Tuning** | Export datasets in Alpaca, ShareGPT, ChatML and OpenAI formats; register LoRA adapters | [Guide](docs/features/fine-tuning.md) |
+| **Notebooks** | Store and edit `.ipynb` research notebooks | [Guide](docs/features/notebooks.md) |
 
 ## Tech Stack
 
@@ -82,10 +88,26 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are record
 
 ## Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- [Node.js 20+](https://nodejs.org/) (LTS)
-- [Docker](https://www.docker.com/) (for PostgreSQL + vLLM)
-- **An LLM inference server** — Prism needs at least one running model to work. See below for options.
+| Requirement | Version | Why, and how it is pinned |
+|---|---|---|
+| [.NET SDK](https://dotnet.microsoft.com/download) | **10.0.100 or later 10.0.x** | Pinned by [`global.json`](global.json) with `rollForward: latestFeature`. The projects target `net9.0`, so you also need the **.NET 9 runtime** — or set `DOTNET_ROLL_FORWARD=Major` to run them on the 10 runtime. |
+| [Node.js](https://nodejs.org/) | **22** | Pinned by [`frontend/.nvmrc`](frontend/.nvmrc). `nvm use` in `frontend/` picks it up. 20 also works; 22 is what CI runs. |
+| [Docker](https://www.docker.com/) | any recent | Runs PostgreSQL 16 + pgvector on port 5438. Also the fallback the integration tests use when `PRISM_TEST_DB` is unset. |
+| An LLM inference server | — | Prism needs at least one running model to do anything. See [Setting Up an LLM](#setting-up-an-llm). |
+
+Check what you have:
+
+```bash
+dotnet --list-sdks       # expect a 10.0.x
+dotnet --list-runtimes   # expect Microsoft.NETCore.App 9.0.x
+node --version           # expect v22.x
+docker info              # expect no error
+```
+
+If `dotnet --list-runtimes` shows no 9.0 entry, either install the [.NET 9
+runtime](https://dotnet.microsoft.com/download/dotnet/9.0) or export
+`DOTNET_ROLL_FORWARD=Major` so the 10 runtime is used instead. Without one of those, `dotnet
+run` and `dotnet test` fail with a missing-framework error even though the build succeeds.
 
 ### Setting Up an LLM
 
@@ -232,29 +254,165 @@ INFERENCEPROVIDERS__0__ENDPOINT=http://localhost:8000
 VITE_API_URL=http://localhost:5000
 ```
 
-## Development
+## Building
 
 ```bash
-# Run tests
-cd backend && dotnet test
+# Backend — warnings are errors, so a clean build means clean
+cd backend
+dotnet restore Prism.sln
+dotnet build Prism.sln
 
-# Generate TypeScript API client (after backend API changes)
+# Frontend
+cd frontend
+npm ci                    # not `npm install` — respects the lockfile exactly
+npm run build             # tsc -b && vite build, output in dist/
+```
+
+`dotnet build` treats warnings as errors across the solution. If it fails on something that
+looks trivial, that is deliberate — the build is the first gate, not a suggestion.
+
+## Testing
+
+There are two suites and they run separately.
+
+### Backend — 155 tests
+
+```bash
+cd backend
+dotnet test Prism.sln
+```
+
+Roughly two thirds are unit tests with no external dependency. The rest are integration tests
+that need **a real PostgreSQL with pgvector** — they exercise `FOR UPDATE SKIP LOCKED` job
+claiming, `percentile_cont` aggregation and vector search, none of which have a meaningful
+in-memory equivalent.
+
+You have two ways to give them a database.
+
+**Point them at a running Postgres** (faster, and works without a Docker daemon):
+
+```bash
+docker compose up -d
+export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres"
+dotnet test Prism.sln
+```
+
+**Or let them start their own container** — leave `PRISM_TEST_DB` unset and the suite launches
+a `pgvector/pgvector:pg16` container through Testcontainers. This needs Docker running and adds
+container startup to every run.
+
+> The test fixture **empties whatever database you point it at** on startup, so that a
+> long-lived database behaves the same way a throwaway container does. Use a database that
+> exists only for tests. Pointing `PRISM_TEST_DB` at a database named `prism` is refused
+> outright, because that is the one the application itself uses.
+
+Useful filters:
+
+```bash
+dotnet test Prism.sln --filter "FullyQualifiedName~Unit"          # no database needed
+dotnet test Prism.sln --filter "FullyQualifiedName~Integration"
+dotnet test Prism.sln --filter "FullyQualifiedName~JobWorker"
+```
+
+### Frontend — 27 tests
+
+```bash
+cd frontend
+npm test                  # vitest, single run
+npm run test:watch        # re-runs on change
+npm run test:coverage
+```
+
+No database, no backend, no browser — jsdom plus Testing Library, with `fetch` stubbed per
+test. These cover the logprob maths (perplexity, Shannon entropy in bits) and the components
+that make claims about backend state.
+
+### The full gate
+
+This is exactly what CI runs and what the pre-commit hook runs:
+
+```bash
+docker compose up -d
+export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres"
+
+cd backend
+dotnet build Prism.sln                       # 0 warnings, 0 errors
+dotnet format Prism.sln --verify-no-changes  # clean
+dotnet test Prism.sln                        # 155 passed
+
+cd ../frontend
+npm ci
+npx tsc -b --noEmit                          # clean
+npm run lint                                 # 0 errors
+npm test                                     # 27 passed
+```
+
+## Pre-commit hooks
+
+The gate above can run automatically before every commit:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+That points `core.hooksPath` at [`.githooks/`](.githooks/), so the hooks are version-controlled
+and reviewed like any other code rather than living untracked in `.git/hooks`. Each clone needs
+to run it once — git has no way to do this for you.
+
+The hook only runs the half you touched:
+
+| What you staged | What runs | Roughly |
+|---|---|---|
+| Docs, markdown, anything outside `backend/` and `frontend/` | nothing | instant |
+| `frontend/` only | typecheck, lint, vitest | ~30s |
+| `backend/` only | build, `dotnet format`, xunit | ~60s |
+| Both, or `global.json` / `scripts/` / `.githooks/` | everything | ~90s |
+
+It fails loudly rather than skipping. If it cannot find a database for the backend tests it
+aborts the commit and tells you how to start one, because a suite that silently skipped its
+integration half is worse than no gate at all.
+
+```bash
+export PRISM_TEST_DB="Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres"
+```
+
+Put that in your shell profile. Hooks inherit the environment of whatever launched them, so
+without it in the profile, committing from an editor or GUI client will fail even though your
+terminal works.
+
+Two escape hatches:
+
+```bash
+git commit --no-verify        # skip the gate for one commit
+PRISM_HOOK_STRICT=1 git commit  # opposite: refuse to run if the working tree differs from the index
+```
+
+`PRISM_HOOK_STRICT` exists because the hook tests the working tree, not the staged content.
+When everything is staged those are the same thing. When they are not, the hook warns and names
+the files; setting `PRISM_HOOK_STRICT=1` turns that warning into a refusal.
+
+## Other development tasks
+
+```bash
+# Generate the TypeScript API client (after changing backend endpoints)
 cd frontend && npm run api:generate
 
 # Add a database migration
+cd backend
 dotnet ef migrations add MigrationName \
   --project src/Prism.Common \
   --startup-project src/Prism.Api
 
 # Format
 cd backend && dotnet format
-cd frontend && npm run lint
+cd frontend && npm run lint -- --fix
 ```
 
 ## Project Documentation
 
 | Document | Description |
 |----------|-------------|
+| [docs/features/](docs/features/) | How to use each module — one task-oriented guide per feature |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Full architecture: structure, patterns, abstractions, interfaces |
 | [DESIGN.md](DESIGN.md) | Vision, features, wireframes, data models, API surface |
 | [PROJECT_PLAN.md](PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
@@ -263,20 +421,28 @@ cd frontend && npm run lint
 | [docs/module-ownership.md](docs/module-ownership.md) | Module-to-slice mapping and dependency rules |
 | [CLAUDE.md](CLAUDE.md) | Development guidelines for AI-assisted coding |
 
-## Roadmap
+## Status
 
-- **Phase 1 (Walk):** Playground, Token Explorer, Tokenizer, Model Management, History — *implemented*
-- **Phase 2 (Jog):** Prompt Lab, Experiments, Workspaces — *implemented*
-- **Phase 3 (Run):** Datasets, Evaluation, Batch Inference, Analytics — *implemented*
-- **Phase 4 (Sprint):** RAG Workbench, Structured Output — *implemented*
-- **Phase 5 (Fly):** Agent Builder, Notebooks, Fine-Tuning — *implemented*
+Every module has backend handlers, API endpoints and a frontend page. 155 backend tests and 27
+frontend tests. CI runs 9 jobs, all of which gate the build.
 
-All 15 modules have backend handlers, API endpoints, and frontend pages. 71 backend tests. CI pipeline with 9 jobs, all of which gate the build.
+That is not the same as every module being finished, and the difference matters if you are
+choosing what to rely on:
 
-> **Status honesty.** Several modules persist entities and expose endpoints but have no worker
-> executing them yet — see [docs/product-truth.yaml](docs/product-truth.yaml) for the per-module
-> position and [docs/REMEDIATION_PLAN.md](docs/REMEDIATION_PLAN.md) for the plan to close the gap.
-> Where this file and `product-truth.yaml` disagree, `product-truth.yaml` is correct.
+- **Works end to end from the browser:** Playground, Token Explorer, Tokenizer, Model
+  Management, History, Prompt Lab, Experiments, Datasets, RAG Workbench (retrieval), Structured
+  Output, Agent Builder, Notebooks, Fine-Tuning export.
+- **Runs, but has to be started through the HTTP API:** Evaluation and Batch Inference. Both
+  have working background workers; neither has a create form yet.
+- **Not wired up:** LoRA adapters can be registered but never reach an inference call. The
+  Notebooks page links to a JupyterLite build that is not in the repository. Workspaces are a
+  dropdown that does not yet filter anything.
+
+Each feature guide in [docs/features/](docs/features/) states its own limitations at the point
+where you would hit them. [docs/product-truth.yaml](docs/product-truth.yaml) holds the
+machine-readable per-module position, and [docs/assumptions.md](docs/assumptions.md) records
+what has been proven and what was falsified. Where this file and `product-truth.yaml` disagree,
+`product-truth.yaml` is correct.
 
 ## Contributing
 

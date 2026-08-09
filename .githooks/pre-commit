@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+#
+# Prism pre-commit gate.
+#
+# Runs the same checks CI runs, before the commit is created, so a red build
+# never reaches a branch. It only runs the halves you actually touched: a
+# docs-only commit costs nothing, a frontend-only commit skips the .NET suite.
+#
+# Install:  ./scripts/install-hooks.sh
+# Skip once (use sparingly):  git commit --no-verify
+#
+# Environment:
+#   PRISM_TEST_DB     Postgres connection string for the integration tests.
+#                     Without it the tests start a Testcontainers pgvector
+#                     container, which needs a running Docker daemon.
+#   PRISM_HOOK_STRICT Set to 1 to refuse to run when the working tree differs
+#                     from what is staged. Off by default; see the warning below.
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT" || exit 1
+
+BOLD=''; DIM=''; RED=''; GREEN=''; YELLOW=''; RESET=''
+if [ -t 2 ]; then
+  BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'
+  GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
+fi
+
+say()  { printf '%s\n' "$*" >&2; }
+step() { printf '%s\n' "${DIM}   → $*${RESET}" >&2; }
+fail() { printf '%s\n' "${RED}${BOLD}✗ $*${RESET}" >&2; }
+ok()   { printf '%s\n' "${GREEN}✓ $*${RESET}" >&2; }
+
+START=$(date +%s)
+
+# ---------------------------------------------------------------------------
+# What changed
+# ---------------------------------------------------------------------------
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [ -z "$STAGED" ]; then
+  # Nothing staged; let git produce its own "nothing to commit" message.
+  exit 0
+fi
+
+matches() { printf '%s\n' "$STAGED" | grep -qE "$1"; }
+
+TOUCHED_BACKEND=0
+TOUCHED_FRONTEND=0
+matches '^backend/'  && TOUCHED_BACKEND=1
+matches '^frontend/' && TOUCHED_FRONTEND=1
+
+# Files that change how either half builds or is gated.
+if matches '^(global\.json|docker-compose\.yml|\.githooks/|scripts/)'; then
+  TOUCHED_BACKEND=1
+  TOUCHED_FRONTEND=1
+fi
+
+if [ "$TOUCHED_BACKEND" -eq 0 ] && [ "$TOUCHED_FRONTEND" -eq 0 ]; then
+  ok "pre-commit: no backend or frontend changes staged, nothing to gate."
+  exit 0
+fi
+
+say ""
+say "${BOLD}Prism pre-commit gate${RESET}"
+
+# ---------------------------------------------------------------------------
+# Honesty about what is actually being tested
+#
+# These checks run against the working tree, not against the staged content.
+# For the overwhelmingly common case — everything staged, nothing else dirty —
+# those are the same thing. When they are not, say so rather than implying a
+# guarantee the hook cannot make.
+# ---------------------------------------------------------------------------
+
+DIRTY="$(git diff --name-only --diff-filter=ACMR -- backend frontend)"
+
+if [ -n "$DIRTY" ]; then
+  say ""
+  say "${YELLOW}! The working tree does not match what you staged.${RESET}"
+  say "${YELLOW}  These files have unstaged changes:${RESET}"
+  printf '%s\n' "$DIRTY" | sed 's/^/      /' >&2
+  say "${YELLOW}  The gate below tests the working tree, so a pass does not prove${RESET}"
+  say "${YELLOW}  the commit itself is green. Stage everything, or verify after.${RESET}"
+
+  if [ "${PRISM_HOOK_STRICT:-0}" = "1" ]; then
+    say ""
+    fail "PRISM_HOOK_STRICT=1 is set, so this is an error rather than a warning."
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Runner
+# ---------------------------------------------------------------------------
+
+# run <label> <dir> <command...>
+#
+# Runs quietly and only speaks up on failure, where it prints the tail of the
+# output — enough to see the failing assertion or compiler error without
+# burying it under a successful build log.
+run() {
+  local label="$1" dir="$2"; shift 2
+  step "$label"
+  local out
+  if ! out="$(cd "$dir" && "$@" 2>&1)"; then
+    say ""
+    fail "$label"
+    say ""
+    printf '%s\n' "$out" | tail -40 >&2
+    say ""
+    say "${DIM}Commit aborted. Fix the above, or bypass with:  git commit --no-verify${RESET}"
+    say ""
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Backend
+# ---------------------------------------------------------------------------
+
+if [ "$TOUCHED_BACKEND" -eq 1 ]; then
+  say "${BOLD}Backend${RESET}"
+
+  if ! command -v dotnet >/dev/null 2>&1; then
+    say ""
+    fail "dotnet is not on PATH, so the backend gate cannot run."
+    say ""
+    say "  Install the .NET SDK, or if it is installed but invisible to this shell"
+    say "  (common when committing from a GUI git client), add it to PATH in your"
+    say "  shell profile. Verify with:  dotnet --info"
+    say ""
+    exit 1
+  fi
+
+  # The integration tests need a database. Decide which one, and refuse to run
+  # rather than quietly passing a suite that skipped its integration half.
+  if [ -n "${PRISM_TEST_DB:-}" ]; then
+    step "using PRISM_TEST_DB"
+  elif docker info >/dev/null 2>&1; then
+    step "no PRISM_TEST_DB; falling back to Testcontainers via Docker"
+  else
+    say ""
+    fail "The backend tests need a database and cannot reach one."
+    say ""
+    say "  Either start Postgres and point the tests at it:"
+    say ""
+    say "      docker compose up -d"
+    say "      export PRISM_TEST_DB=\"Host=localhost;Port=5438;Database=prism_test;Username=postgres;Password=postgres\""
+    say ""
+    say "  or start Docker so the tests can create their own container."
+    say ""
+    exit 1
+  fi
+
+  run "build (warnings are errors)" backend dotnet build Prism.sln -v q --nologo
+  run "format"                      backend dotnet format Prism.sln --verify-no-changes
+  run "tests"                       backend dotnet test Prism.sln --nologo -v q
+  ok "backend"
+fi
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+
+if [ "$TOUCHED_FRONTEND" -eq 1 ]; then
+  say "${BOLD}Frontend${RESET}"
+
+  if ! command -v npm >/dev/null 2>&1; then
+    say ""
+    fail "npm is not on PATH, so the frontend gate cannot run."
+    say "  Install Node.js 20 or newer. Verify with:  node --version"
+    say ""
+    exit 1
+  fi
+
+  if [ ! -d frontend/node_modules ]; then
+    say ""
+    fail "frontend/node_modules is missing."
+    say "  Run:  cd frontend && npm ci"
+    say ""
+    exit 1
+  fi
+
+  run "typecheck" frontend npx tsc -b --noEmit
+  run "lint"      frontend npm run lint
+  run "tests"     frontend npm test -- --run
+  ok "frontend"
+fi
+
+say ""
+ok "pre-commit passed in $(( $(date +%s) - START ))s"
+say ""

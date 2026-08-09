@@ -4,11 +4,11 @@
 
 | Document | Description |
 |----------|-------------|
-| [DESIGN.md](/DESIGN.md) | Vision, features, wireframes, data models, API surface, deployment |
-| [ARCHITECTURE.md](/ARCHITECTURE.md) | Vertical slice structure, Result pattern, provider abstractions, middleware, testing |
-| [PROJECT_PLAN.md](/PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
-| [AGENTS.md](/AGENTS.md) | Claude Code agent modes (Feature Builder, Debugger, etc.) |
-| [SKILLS.md](/SKILLS.md) | Claude Code skills (create feature, add endpoint, write handler, etc.) |
+| [DESIGN.md](../DESIGN.md) | Vision, features, wireframes, data models, API surface, deployment |
+| [ARCHITECTURE.md](../ARCHITECTURE.md) | Vertical slice structure, Result pattern, provider abstractions, middleware, testing |
+| [PROJECT_PLAN.md](../PROJECT_PLAN.md) | Phased task breakdown (~150 tasks across 5 phases) |
+| [AGENTS.md](../AGENTS.md) | Claude Code agent modes (Feature Builder, Debugger, etc.) |
+| [SKILLS.md](../SKILLS.md) | Claude Code skills (create feature, add endpoint, write handler, etc.) |
 | [Module Ownership Map](./module-ownership.md) | Module-to-slice mapping, entity ownership, dependency rules |
 | [Product Truth Matrix](./product-truth.yaml) | Machine-readable status of every module vs. README promises |
 
@@ -22,10 +22,25 @@
 
 ### Feature Documentation
 
+[**docs/features/**](./features/) holds one task-oriented guide per module: what it is for, the
+steps to do the common jobs, what every setting means, and what the feature will not do. Start
+at the [index](./features/README.md), which groups them by what you are trying to achieve.
+
+These are written for someone using Prism, not someone building it. For internals, see below.
+
+### Internal References
+
 | Document | Description |
 |----------|-------------|
-| [Playground](./features/playground.md) | Chat interface, SSE streaming, logprobs visualization, conversation management, export |
-| [Token Explorer](./features/token-explorer.md) | Next-token prediction, step-through, branching, tokenization, cross-model comparison |
+| [Playground reference](./internals/playground-reference.md) | Handlers, endpoints, state management, streaming internals |
+| [Token Explorer reference](./internals/token-explorer-reference.md) | Prediction, step-through and branch internals |
+
+### Remediation
+
+| Document | Description |
+|----------|-------------|
+| [REMEDIATION_PLAN.md](./REMEDIATION_PLAN.md) | Phased plan for closing the gap between claims and code |
+| [assumptions.md](./assumptions.md) | Assumption ledger: what was proven, what was falsified |
 
 ### Platform Design Documents
 

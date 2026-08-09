@@ -1,262 +1,212 @@
-# Token Explorer — Feature Documentation
+# Token Explorer
 
-The Token Explorer is a research-oriented tool for inspecting LLM inference at the token level. It exposes next-token predictions, step-through generation, branch exploration, tokenization analysis, and cross-model comparison.
+**Stop the model mid-sentence, look at everything it was about to say, and make it say something
+else.**
 
----
+The Playground shows you what a model produced. The Token Explorer shows you what it *nearly*
+produced, and lets you overrule it. You give it a prompt, it returns the ranked list of
+candidate next tokens with their probabilities, and from there you can walk the generation
+forward one token at a time or force a different token and watch where the answer goes instead.
 
-## Overview
+Sidebar: **Token Explorer**.
 
-| Aspect | Detail |
-|--------|--------|
-| Backend slice | `Features/TokenExplorer/` |
-| Frontend slice | `frontend/src/features/token-explorer/` |
-| API prefix | `/api/v1/token-explorer` |
-| State management | Zustand (`useTokenExplorerStore`) with localStorage persistence |
-| Tabs | Predictions, Step Through, Branches, Tokenizer, Compare |
-
----
-
-## Capabilities
-
-### 1. Next-Token Predictions
-
-Predict the most likely next tokens given a prompt, with full probability distributions.
-
-- **Endpoint:** `POST /api/v1/token-explorer/predict`
-- **Handler:** `PredictNextTokenHandler` — sends prompt (optionally with assistant prefix) to the model with `max_tokens: 1` and `logprobs` enabled, returns top-N token candidates with probabilities
-- **Frontend tab:** "Predictions" — enter a prompt, click Predict, see ranked token candidates with probability bars
-- Supports assistant prefill for continuation predictions
-- Shows raw log probabilities alongside normalized percentages
-
-**Sampling Analysis Panel:**
-When predictions are available, an expandable panel shows statistical analysis of the token distribution:
-
-| Stat | Description |
-|------|-------------|
-| Effective Vocab | Number of tokens with non-negligible probability (effective vocabulary size) |
-| Entropy | Shannon entropy measuring uncertainty in the distribution (bits) |
-| Top-p Coverage | How many tokens needed to reach the configured top-p threshold |
-| Top-k Effect | Percentage of total probability captured by the top-k tokens |
-| Max Probability | Highest single-token probability (model confidence in best guess) |
-| Model Confidence | Qualitative assessment: Certain / Confident / Moderate / Uncertain / Very Uncertain |
-| Distribution Shape | Whether the distribution is Peaked, Smooth, Uniform, or Bimodal |
-
-Each stat card has a tooltip explaining its meaning and how to interpret it. See ADR-012.
-
-### 2. Step-Through Generation
-
-Walk through autoregressive generation one token at a time, seeing the full prediction distribution at each step.
-
-- **Endpoint:** `POST /api/v1/token-explorer/step`
-- **Handler:** `StepThroughHandler` — uses assistant prefill pattern to continue from accumulated tokens
-- **Frontend tab:** "Step Through" — two modes:
-  - **Step (Greedy):** automatically selects the highest-probability token and advances
-  - **Step (Sample):** samples from the distribution according to temperature/top-p/top-k settings
-
-**How it works:**
-1. The original prompt is always sent as the user message
-2. Previously accumulated tokens are sent as an assistant message prefix
-3. vLLM receives `continue_final_message: true` + `add_generation_prompt: false` to continue from the prefix
-4. The model predicts the next token from the accumulated context
-5. The selected token is appended to the step history
-
-**UI shows:**
-- The accumulated generated text growing token by token
-- Full prediction distribution at each step
-- Step history as a scrollable list
-
-### 3. Branch Exploration
-
-Explore alternative generation paths by choosing different tokens at any prediction point.
-
-- **Endpoint:** `POST /api/v1/token-explorer/branch`
-- **Handler:** `BranchHandler` — generates a short continuation from a given prefix to show where an alternative token choice would lead
-- **Frontend tab:** "Branches" — after a prediction, click any alternative token to see a branching continuation
-- Calculates perplexity for each branch to compare path quality
-- Visualizes the branching tree of possible continuations
-
-### 4. Tokenization
-
-Inspect how text is tokenized by the model's tokenizer.
-
-- **Endpoint:** `POST /api/v1/token-explorer/tokenize`
-- **Handler:** `TokenizeHandler` — sends text through the model's tokenizer, returns token IDs and string representations
-- **Frontend tab:** "Tokenizer" — enter text, see individual tokens color-coded with their IDs
-- Can be embedded in the Token Explorer page or used standalone
-- Shows token count, individual token boundaries, and token IDs
-
-### 5. Cross-Model Comparison
-
-Compare how different models tokenize the same text.
-
-- **Endpoint:** `POST /api/v1/token-explorer/compare`
-- **Handler:** `CompareHandler` — tokenizes the same text across multiple model instances, returns side-by-side results
-- **Frontend tab:** "Compare" — select multiple models, enter text, see tokenization differences
-- Highlights differences in token boundaries and vocabulary between models
-- Can be embedded in the Token Explorer page or used standalone
-
-### 6. Enable Thinking Toggle
-
-For models that support reasoning chains (e.g., Qwen3), a toggle to enable/disable the `<think>` reasoning block.
-
-- **Parameter:** `enableThinking` — sent on predict, step, and branch requests
-- **UI:** Brain icon toggle in the configuration section
-- When disabled, the model skips its internal reasoning chain, producing direct predictions
-- Persisted in the Zustand store
+The page has five tabs. **Predictions**, **Step Through** and **Branches** are covered here.
+**Tokenizer** and **Compare** are a different job — counting and comparing token boundaries —
+and have their own guide: [Tokenizer and Compare](tokenizer.md).
 
 ---
 
-## Frontend Components
+## Before you start
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| `TokenExplorerPage` | `TokenExplorerPage.tsx` | Top-level layout: config sidebar + tabbed content area |
-| `PredictionsView` | `components/PredictionsView.tsx` | Token predictions with probability bars |
-| `StepThroughView` | `components/StepThroughView.tsx` | Step-by-step generation with greedy/sample modes |
-| `BranchView` | `components/BranchView.tsx` | Branch exploration tree |
-| `TokenizerView` | `components/TokenizerView.tsx` | Text tokenization visualization |
-| `TokenCompareView` | `components/TokenCompareView.tsx` | Cross-model tokenization comparison |
-| `SamplingVisualization` | `components/SamplingVisualization.tsx` | Statistical analysis of token distributions |
-| `HelpPanel` | `components/HelpPanel.tsx` | Collapsible help section (What/Why/How/Tip) |
+You need a registered instance that returns per-token probabilities. See
+[Model Management](models.md).
 
-### Layout
+**In practice that means vLLM.** The three tabs described on this page are built entirely on
+logprobs. On Ollama, **Predict Next Token** and **Step (Greedy)** fail outright with
 
-```
-+-----------------------------------------------------------+
-|  Token Explorer                                            |
-+----------------+------------------------------------------+
-|                |  [Predictions] [Step Through] [Branches]  |
-|  Config        |  [Tokenizer] [Compare]                    |
-|  Sidebar       |------------------------------------------|
-|                |  Help Panel (collapsible)                 |
-|  - Instance    |------------------------------------------|
-|  - Top Logprobs|                                          |
-|  - Temperature |  Tab Content                             |
-|  - Top P       |  (predictions, step-through, etc.)       |
-|  - Top K       |                                          |
-|  - Thinking    |  Sampling Analysis (collapsible)          |
-|                |                                          |
-+----------------+------------------------------------------+
-```
+> The inference provider did not return logprobs data. Ensure the model supports logprobs.
 
-### Help Panels (ADR-011)
+Branch exploration fails differently and more quietly: it returns a *successful* branch with no
+tokens in it and no perplexity, so you get an empty entry in the Branches tab rather than an
+error. If branches keep coming back empty, this is why.
 
-Each tab has a collapsible help section explaining:
-- **What** the feature does
-- **Why** it's useful for research
-- **How** to interpret the results
-- **Tip** for getting the most out of it
+LM Studio and generic OpenAI-compatible endpoints do return logprobs, but only five
+alternatives per token instead of twenty, so the ranked list will be five rows long no matter
+where you put the **Top Logprobs** slider.
 
-Collapsed by default. Toggle via chevron icon.
+One more provider caveat, and it is the subtle one. Branch exploration works by handing the
+model a partial assistant turn and asking it to keep going. vLLM supports that directly. On
+other providers the forced token is likely to be read as a finished assistant message, so the
+model replies *to* it rather than continuing *from* it — the branch will look wrong rather than
+fail, which is worse. Treat branch results from anything other than vLLM as unreliable.
 
 ---
 
-## Backend Architecture
+## The left panel
 
-### Application
+Everything on the left applies to every tab. It persists in your browser and survives a reload.
 
-| Use Case | Type | Description |
-|----------|------|-------------|
-| `PredictNextToken` | Command | Single next-token prediction with logprobs |
-| `StepThrough` | Command | Continue generation from accumulated prefix |
-| `Branch` | Command | Generate continuation from alternative token |
-| `Tokenize` | Command | Tokenize text via model tokenizer |
-| `Compare` | Command | Cross-model tokenization comparison |
+| Control | Default | What it does |
+|---|---|---|
+| **Model / Instance** | none | Which registered instance to ask. Nothing runs until this is set. |
+| **Prompt** | empty | The text the model is predicting from. **Ctrl+Enter** runs a prediction. |
+| **Temperature** | 0 | 0 is greedy and deterministic. Raising it flattens the distribution you are shown. |
+| **Top-p (visualization)** | 0.9 | Display only — see the warning below. |
+| **Top-k (visualization)** | 50 | Display only — see the warning below. |
+| **Top Logprobs** | 20 | How many candidates to request per position. vLLM caps at 20. |
+| **Enable Thinking** | off | Lets a reasoning model emit its `<think>` block before answering. Leave it off: with it on, your predictions are reasoning-scaffold tokens, not answer tokens. It is also honoured only by vLLM; on other providers the toggle does nothing at all. |
 
-### Key Technical Details
+**Predict Next Token** runs the prediction and clears any step history. **Reset All** returns
+every control to its default and wipes the selected instance, the prompt, the predictions, the
+steps and the branches.
 
-**Assistant Prefill Pattern:**
-For step-through and branch operations, the backend constructs messages as:
-```
-[User(original_prompt), Assistant(accumulated_tokens)]
-```
-
-The `VllmProvider` detects when the last message has the Assistant role and sets:
-- `continue_final_message: true` — tells vLLM to continue from the assistant prefix
-- `add_generation_prompt: false` — prevents vLLM from adding a new assistant turn marker
-
-This ensures the model continues generating from the exact token position rather than starting a new turn.
-
-**Perplexity Calculation:**
-Branch exploration calculates perplexity for each path:
-```
-perplexity = exp(-1/N * sum(log_probs))
-```
-Lower perplexity indicates the model finds the sequence more natural/likely.
+> **Top-p and Top-k do not affect generation.** The "(visualization)" in their labels is
+> literal. Neither value is sent to the model. They dim the rows that fall past the cutoff in
+> the prediction list and they feed the Sampling Analysis panel on the right — that is the whole
+> of their effect. Sliding Top-k to 1 will not make the model behave greedily, and sliding
+> Top-p to 1.0 will not widen anything. The only parameter here that changes what the model
+> actually does is **Temperature**. This catches everybody once.
 
 ---
 
-## State Management
+## Predictions: what was it about to say
 
-The `useTokenExplorerStore` (Zustand) manages:
+Set an instance, type a prompt, click **Predict Next Token**. You get the candidate tokens
+ranked by probability, each with a bar, the exact percentage and the raw log-probability.
 
-- Prompt text
-- Selected model instance ID
-- Inference parameters (temperature, topP, topK, topLogprobs)
-- Enable thinking toggle
-- Step history (for step-through mode)
-- Active tab selection
+Whitespace is made visible, because whether the model wanted `" Paris"` or `"Paris"` is
+frequently the interesting part: a space shows as `␣`, a newline as `↵`, a tab as `⇥`. Hover any
+row for the exact probability to four decimal places, the log-prob to six, the running
+cumulative total and the rank.
 
-Persisted fields configured via `partialize` — transient state like step history is excluded.
+The thin violet line running down the bars is the **cumulative probability** — where it sits on
+each row tells you how much of the mass has been accounted for by that point. Rows past your
+Top-p or Top-k cutoff are dimmed. Under the list you get the token count each cutoff would
+admit, and the total probability captured by all the candidates you asked for.
 
----
+That last number matters. If the top 20 tokens only account for 60% of the mass, 40% of what
+the model might have said is not on screen at all.
 
-## Configuration Controls
-
-All controls use the `ParamLabel` component with tooltips (ADR-012):
-
-| Control | Tooltip Summary |
-|---------|----------------|
-| Model Instance | Which model to use for predictions |
-| Top Logprobs | Number of alternative tokens shown per position |
-| Temperature | Higher = more random predictions |
-| Top P | Nucleus sampling threshold |
-| Top K | Hard limit on candidate tokens |
-| Enable Thinking | Toggle reasoning chain for supported models |
+**Clicking any row creates a branch.** There is no separate branch button, and no confirmation
+— the click sends a generation request that forces that token and continues from it, and drops
+the result in the Branches tab. Worth knowing before you click a row out of curiosity.
 
 ---
 
-## API Request/Response Types
+## Step Through: walk the generation forward
 
-### PredictRequest
-```typescript
-{
-  instanceId: string
-  prompt: string
-  topLogprobs?: number
-  temperature?: number
-  topP?: number
-  topK?: number
-  enableThinking?: boolean
-  assistantPrefix?: string
-}
-```
+The Step Through tab shows the prompt followed by whatever tokens have been committed so far,
+each coloured by its log-probability, with the ranked candidate list underneath.
 
-### StepRequest
-```typescript
-{
-  instanceId: string
-  prompt: string
-  selectedToken: string
-  previousTokens?: string
-  topLogprobs?: number
-  temperature?: number
-  enableThinking?: boolean
-}
-```
+**Step (Greedy)** commits the top-ranked token and predicts again. Do it repeatedly and you are
+watching greedy decoding happen at human speed.
 
-### TokenizeRequest
-```typescript
-{
-  instanceId: string
-  text: string
-}
-```
+Click any candidate in the list below instead and you commit *that* token — the model is forced
+down a path it would not have chosen. Forced tokens are marked with a dotted violet underline
+so you can tell your interventions from the model's own choices at a glance, and the counter
+below the sequence reads `N tokens generated` alongside `M forced`.
 
-### CompareRequest
-```typescript
-{
-  instanceIds: string[]
-  text: string
-}
-```
+**Undo** removes the last token and restores the candidate list from the position before it.
+**Clear** discards the whole sequence and leaves the prompt alone.
+
+This is the tool for the question "would it still have said that". Generate normally until the
+model produces a claim you doubt, undo back to the token where it committed, force the
+runner-up, and step forward again. If the answer survives the substitution, the claim was not
+resting on that token. If it collapses, you have found the hinge.
+
+---
+
+## Branches: the counterfactual experiment
+
+A branch is one complete answer to "what if it had picked this instead". You force a starting
+token, the model generates a continuation from there, and you keep the result next to the other
+branches for comparison.
+
+Create branches by clicking rows in the Predictions tab, or by forcing tokens in Step Through
+and branching from the resulting position. Each branch records the forced token, the full
+continuation with per-token colouring, and a perplexity figure for the branch as a whole.
+
+Three views, toggled top-right:
+
+| View | What it gives you |
+|---|---|
+| **Tree** | Every branch as one line hanging off the prompt, with the first 60 characters of its continuation and its perplexity. The fastest way to see whether two token choices actually led anywhere different. |
+| **List** | One card per branch with the continuation rendered token by token. Hover any token for its probability and the five alternatives the model preferred at that position. |
+| **Diff** | Two branches side by side, aligned by position, with differing tokens highlighted and the first divergence position called out. |
+
+**Diff** only appears once you have two or more branches, and compares exactly two at a time —
+pick which with the Left and Right dropdowns. Position 0 is the forced token, so it always
+differs; the number reported as "first divergence" is the first position after that where the
+two continuations parted company. A high divergence position is the informative case: it means
+two different starting tokens reconverged, and the choice you were worried about did not matter.
+
+**Clear All** removes every branch.
+
+> **Branches are capped at 50 tokens and there is no way to change it.** The limit is fixed on
+> the server and no control on this page exposes it. Long branches will stop mid-sentence. Plan
+> your prompts so the interesting divergence happens early.
+
+### Reading perplexity across branches
+
+Each branch carries a perplexity value — roughly, how surprised the model was by its own
+output. A forced token the model disliked usually produces a branch with visibly higher
+perplexity, because the model spends the next few tokens recovering from a start it would not
+have chosen.
+
+That recovery is the thing to look at. A model that can absorb an unwanted first token and
+arrive at the same answer was not depending on it. A model whose answer flips is telling you
+the answer was one sampling decision deep.
+
+---
+
+## Sampling Analysis
+
+The right-hand column recomputes on every prediction. It describes the distribution you are
+currently looking at.
+
+| Statistic | What it tells you |
+|---|---|
+| **Effective Vocab** | How many candidates have a probability above 1%. A small number means the model has essentially decided. |
+| **Entropy** | Shannon entropy of the returned distribution, in bits. Low is certain, high is spread out. |
+| **Top-p Coverage** | How many tokens it takes to reach your Top-p setting, and the mass they carry. |
+| **Top-k Effect** | The probability mass inside your Top-k. Near 100% means the cutoff is discarding nothing that mattered. |
+| **Max Probability** | The single most likely token and its probability. |
+| **Model Confidence** | A label derived from Max Probability: Very High above 0.8, High above 0.5, Moderate above 0.2, Low above 0.1, Very Low below that. |
+| **Distribution Shape** | A stacked bar of the top 20 candidates, with everything else in grey. One dominant block means certainty; a row of slivers means the model is genuinely torn. |
+
+> **Entropy is computed over the candidates you requested, not the full vocabulary.** At **Top
+> Logprobs** 20 the ceiling is about 4.32 bits; at 5 it is about 2.32. The numbers are
+> comparable between two prompts at the same setting and meaningless between two different
+> settings.
+
+Below the statistics the panel names the model and the input token count. Note that after an
+**Undo** the input token count reads 0 — the stored prediction is restored from history and
+that field is not part of what was kept.
+
+---
+
+## What this page will not do
+
+- **Nothing here can be exported.** No JSON, no CSV, no copy button on a prediction table or a
+  branch. Screenshots and retyping are the options.
+- **Predictions, steps and branches are lost on reload.** Only the prompt and the parameters
+  persist. A page refresh in the middle of a branching session discards the session.
+- **There is no cancel.** Once a branch request is in flight you wait for it. A 50-token
+  continuation on a large model on a busy GPU can take a while and the page gives you no way out
+  but a reload, which loses the rest of your work.
+- **Undo zeroes the input token readout.** The token itself is removed correctly; only that one
+  number in the Sampling Analysis panel is wrong until the next prediction.
+- **Enable Thinking is vLLM-only.** On every other provider the toggle changes nothing.
+- **Branch depth is fixed at 50 tokens**, and branches cannot be branched from — you cannot
+  fork a branch at position 12 and explore from there. Use Step Through if you need to control
+  the path token by token.
+- **The Diff view compares two branches, not three.**
+
+---
+
+## See also
+
+- [Tokenizer and Compare](tokenizer.md) — the other two tabs on this page
+- [Playground](playground.md) — chat with heatmaps, for reading a whole response at once
+- [History](history.md) — every prediction, step and branch is recorded there
+- [Model Management](models.md) — why this page needs vLLM

@@ -75,16 +75,22 @@ public sealed class AnalyticsAggregationTests
     {
         string tag = $"perf-{Guid.NewGuid():N}";
 
+        // The performance query filters by time and model only — it has no source-module
+        // filter — so the model name is the sole discriminator available to this test. A fixed
+        // name like "m" isolates it from nothing: a second run inside the five-minute window
+        // sees both runs' rows and counts 200. Naming it per-run is what actually isolates it.
+        string modelName = $"latency-{Guid.NewGuid():N}";
+
         // 1..100 ms, so p50 and p95 are known and far apart.
         (string Model, int Prompt, int Completion, long Latency, decimal? Cost)[] rows =
-            [.. Enumerable.Range(1, 100).Select(i => ("m", 1, 1, (long)i, (decimal?)null))];
+            [.. Enumerable.Range(1, 100).Select(i => (modelName, 1, 1, (long)i, (decimal?)null))];
 
         DateTime window = await SeedAsync(tag, rows);
 
         var handler = new GetPerformanceHandler(_fixture.CreateContext());
 
         Result<PerformanceSummaryDto> result = await handler.HandleAsync(
-            new GetPerformanceQuery(window.AddMinutes(-5), window.AddMinutes(5), "m"),
+            new GetPerformanceQuery(window.AddMinutes(-5), window.AddMinutes(5), modelName),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);

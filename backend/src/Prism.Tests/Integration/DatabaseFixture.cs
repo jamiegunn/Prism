@@ -19,10 +19,24 @@ namespace Prism.Tests.Integration;
 /// registered, pgvector type mapping enabled. Configuring a fixture differently from the
 /// application is how a suite ends up asserting against a model the application never uses.
 /// </para>
+/// <para>
+/// The external database is emptied on startup so that both paths behave the same way. A
+/// Testcontainers run gets a brand-new database every time; without truncation an external
+/// one accumulates every row every previous run wrote, and any test that asserts on an
+/// aggregate starts passing in CI while failing locally on the second run of the day. That
+/// asymmetry is worse than either behaviour on its own, because it makes the failure look
+/// like flakiness rather than a real difference in setup.
+/// </para>
 /// </remarks>
 public sealed class DatabaseFixture : IAsyncLifetime
 {
     private const string ExternalConnectionStringVariable = "PRISM_TEST_DB";
+
+    /// <summary>
+    /// The database name the application itself uses. Refusing to truncate it is the one
+    /// guard against someone exporting their development connection string by mistake.
+    /// </summary>
+    private const string ApplicationDatabaseName = "prism";
 
     private PostgreSqlContainer? _container;
     private string? _connectionString;
@@ -51,9 +65,12 @@ public sealed class DatabaseFixture : IAsyncLifetime
     {
         string? external = Environment.GetEnvironmentVariable(ExternalConnectionStringVariable);
 
-        if (!string.IsNullOrWhiteSpace(external))
+        bool isExternal = !string.IsNullOrWhiteSpace(external);
+
+        if (isExternal)
         {
             _connectionString = external;
+            GuardAgainstApplicationDatabase(external!);
         }
         else
         {
@@ -70,6 +87,58 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
         await using AppDbContext context = CreateContext();
         await context.Database.MigrateAsync();
+
+        if (isExternal)
+        {
+            await TruncateAllTablesAsync(context);
+        }
+    }
+
+    /// <summary>
+    /// Refuses to run against the application's own database.
+    /// </summary>
+    /// <param name="connectionString">The externally supplied connection string.</param>
+    internal static void GuardAgainstApplicationDatabase(string connectionString)
+    {
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+
+        if (string.Equals(builder.Database, ApplicationDatabaseName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{ExternalConnectionStringVariable} points at '{ApplicationDatabaseName}', which is the "
+                + "database the application uses. The test fixture empties whatever it is given, so it "
+                + "will not run against that. Point it at a separate database, for example 'prism_test'.");
+        }
+    }
+
+    /// <summary>
+    /// Empties every application table, leaving the schema and migration history intact.
+    /// </summary>
+    /// <param name="context">A context against the external database.</param>
+    /// <remarks>
+    /// One statement so that foreign keys never see a partially emptied graph, and
+    /// <c>RESTART IDENTITY</c> so identity columns do not drift upward run after run.
+    /// </remarks>
+    private static async Task TruncateAllTablesAsync(AppDbContext context)
+    {
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            DO $$
+            DECLARE
+                statement text;
+            BEGIN
+                SELECT 'TRUNCATE TABLE ' || string_agg(format('%I.%I', schemaname, tablename), ', ')
+                     || ' RESTART IDENTITY CASCADE'
+                INTO statement
+                FROM pg_tables
+                WHERE schemaname = 'public'
+                  AND tablename <> '__EFMigrationsHistory';
+
+                IF statement IS NOT NULL THEN
+                    EXECUTE statement;
+                END IF;
+            END $$;
+            """);
     }
 
     /// <inheritdoc />
