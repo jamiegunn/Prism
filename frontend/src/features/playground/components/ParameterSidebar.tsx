@@ -217,7 +217,8 @@ export function ParameterSidebar({ className }: ParameterSidebarProps) {
           </div>
           {caps?.supportsLogprobs === false && (
             <p className="text-[10px] text-amber-500">
-              This provider does not support logprobs. Select a vLLM or Ollama instance.
+              This provider does not return logprobs, so the heatmap, entropy and
+              surprise views will be empty. vLLM exposes them; Ollama and LM Studio do not.
             </p>
           )}
           {store.logprobs && (
