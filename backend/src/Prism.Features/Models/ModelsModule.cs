@@ -1,3 +1,4 @@
+using Prism.Features.Models.Application.DiscoverProviders;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Prism.Features.Models.Application;
@@ -34,6 +35,7 @@ public static class ModelsModule
         services.AddSingleton<InferenceProviderFactory>();
 
         // Handlers
+        services.AddScoped<DiscoverProvidersHandler>();
         services.AddScoped<RegisterInstanceHandler>();
         services.AddScoped<UnregisterInstanceHandler>();
         services.AddScoped<ListInstancesHandler>();

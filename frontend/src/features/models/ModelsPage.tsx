@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Server } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useInstances } from './api'
 import { InstanceCard } from './components/InstanceCard'
 import { InstanceDetailPanel } from './components/InstanceDetailPanel'
 import { RegisterInstanceDialog } from './components/RegisterInstanceDialog'
+import { FirstRunSetup } from './FirstRunSetup'
 import { CapabilityMatrix } from './components/CapabilityMatrix'
 import type { InferenceInstance } from './types'
 
@@ -25,19 +25,6 @@ function InstanceCardSkeleton() {
         <Skeleton className="h-5 w-14" />
         <Skeleton className="h-5 w-18" />
       </div>
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-700 py-16">
-      <Server className="h-12 w-12 text-zinc-600 mb-4" />
-      <h3 className="text-lg font-medium text-zinc-300">No inference providers registered</h3>
-      <p className="text-sm text-zinc-500 mt-1 mb-4">
-        Register an inference provider to get started.
-      </p>
-      <RegisterInstanceDialog />
     </div>
   )
 }
@@ -79,7 +66,7 @@ export function ModelsPage() {
               ))}
             </div>
           ) : !instances || instances.length === 0 ? (
-            <EmptyState />
+            <FirstRunSetup />
           ) : (
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {instances.map((instance) => (

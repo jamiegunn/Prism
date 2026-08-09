@@ -1,3 +1,4 @@
+using Prism.Features.Models.Application.DiscoverProviders;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,11 @@ public static class ModelEndpoints
             .Produces<InferenceInstanceDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        group.MapGet("/discover", DiscoverProviders)
+            .WithName("DiscoverProviders")
+            .WithSummary("Find inference servers running on this machine")
+            .Produces<ProviderDiscoveryResult>();
 
         group.MapGet("/", ListInstances)
             .WithName("ListInstances")
@@ -131,6 +137,19 @@ public static class ModelEndpoints
         return result.Match(
             dto => TypedResults.Created($"/api/v1/models/instances/{dto.Id}", dto),
             error => error.ToHttpResult());
+    }
+
+    /// <summary>
+    /// Probes the conventional local ports for a running inference server.
+    /// </summary>
+    /// <param name="handler">The discovery handler.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>What answered, and what was looked for.</returns>
+    private static async Task<IResult> DiscoverProviders(
+        DiscoverProvidersHandler handler, CancellationToken ct)
+    {
+        Result<ProviderDiscoveryResult> result = await handler.HandleAsync(ct);
+        return result.ToHttpResult();
     }
 
     private static async Task<IResult> ListInstances(

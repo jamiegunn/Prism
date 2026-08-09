@@ -127,7 +127,10 @@ Register in Prism with:
 - **Endpoint:** `http://localhost:11434`
 - **Provider Type:** Ollama
 
-Supports logprobs and streaming. No tokenization or guided decoding.
+Supports streaming and structured output (via `format`). **Does not return logprobs**, so the
+token heatmap, entropy chart, surprise highlighting and Token Explorer will be empty — those
+views need per-token probabilities that Ollama's API does not expose. Use vLLM if token-level
+introspection is the reason you are here. No tokenization endpoint either.
 
 **Option 3: LM Studio (GUI, works on CPU)**
 
@@ -136,6 +139,9 @@ Download from https://lmstudio.ai, load a model, and start the local server (def
 Register in Prism with:
 - **Endpoint:** `http://localhost:1234/v1`
 - **Provider Type:** LM Studio
+
+Note that "LM Studio" is currently an alias for the generic OpenAI-compatible provider, so
+LM Studio's own model load/unload API is not used and hot-swap is reported as unsupported.
 
 **Option 4: Any OpenAI-compatible API**
 
@@ -146,13 +152,15 @@ Any server that implements the `/v1/chat/completions` endpoint works — includi
 | Feature | vLLM | Ollama | LM Studio | OpenAI API |
 |---------|------|--------|-----------|------------|
 | Chat + Streaming | Yes | Yes | Yes | Yes |
-| Logprobs (token heatmaps) | Yes (up to 20) | Yes (up to 5) | No | Yes |
+| Logprobs (token heatmaps) | Yes (up to 20) | No | No | Yes |
 | Tokenization | Yes | No | No | No |
-| Guided Decoding | Yes | No | No | No |
+| Guided Decoding | Yes (`guided_json`) | Yes (`format`) | No | Yes (`json_schema`) |
 | GPU Metrics | Yes | No | No | No |
 | Model Hot-Swap | No | Yes | Yes | N/A |
 
-Prism automatically detects provider capabilities and disables unsupported UI controls.
+Prism probes these on registration and disables the controls a provider cannot serve, rather
+than letting them fail silently. Where a capability is unprobed the UI says so — "unprobed" and
+"unavailable" are different facts and are shown differently.
 
 ## Getting Started
 

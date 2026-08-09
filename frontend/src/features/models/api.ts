@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/apiClient'
 import type { InferenceInstance, InstanceMetrics, RegisterInstanceRequest } from './types'
 
-const MODELS_KEY = ['models', 'instances']
+export const MODELS_KEY = ['models', 'instances']
 
 export function useInstances() {
   return useQuery({
