@@ -18,84 +18,21 @@ Most AI tools show you the final output. Prism shows you *how the model got ther
 - **Inference history & replay** — every call is recorded. Replay against different models, parameters, or prompt versions. Diff the results.
 - **Provider-agnostic** — works with vLLM, Ollama, LM Studio, or any OpenAI-compatible backend. Compare the same prompt across engines.
 
-## Features
+## Getting Started
 
-Each module has a how-to guide in [docs/features/](docs/features/) covering what it is for, the
-steps to do the common jobs, what every setting means, and what it will not do.
+From a fresh clone to a model you can inspect. Four steps, and the second one
+does most of the work for you.
 
-| Module | What It Does | Guide |
-|--------|-------------|-------|
-| **Playground** | Chat with streaming, logprobs heatmaps, entropy charts, surprise highlighting | [Guide](docs/features/playground.md) |
-| **Token Explorer** | Next-token prediction, step-through generation, branch exploration, sampling visualization | [Guide](docs/features/token-explorer.md) |
-| **Tokenizer Explorer** | Visualize tokenization, compare tokenizers across models, cost estimation | [Guide](docs/features/tokenizer.md) |
-| **Model Management** | Register providers, monitor health/metrics, hot-swap models, KV cache visualization | [Guide](docs/features/models.md) |
-| **History & Replay** | Browse all inference history, tag, filter, replay with overrides, diff results | [Guide](docs/features/history.md) |
-| **Prompt Lab** | Template editor with variables, version control, few-shot management | [Guide](docs/features/prompt-lab.md) |
-| **Experiments** | Track runs, compare metrics, run parameter sweeps, export results | [Guide](docs/features/experiments.md) |
-| **Workspaces** | Group projects under a named workspace | [Guide](docs/features/workspaces.md) |
-| **Datasets** | Upload, browse, split, compute statistics, export | [Guide](docs/features/datasets.md) |
-| **Evaluation** | Scoring methods (exact match, contains, ROUGE-L, BLEU, length ratio), leaderboards | [Guide](docs/features/evaluation.md) |
-| **Batch Inference** | Run prompts at scale with progress tracking, pause and resume | [Guide](docs/features/batch-inference.md) |
-| **Analytics** | Usage, latency percentiles and token totals across every module | [Guide](docs/features/analytics.md) |
-| **RAG Workbench** | Ingest documents, chunking strategies, vector/BM25/hybrid search | [Guide](docs/features/rag-workbench.md) |
-| **Structured Output** | Guided decoding with JSON schema constraints, output validation | [Guide](docs/features/structured-output.md) |
-| **Agent Builder** | ReAct agents with tool use and step-by-step execution traces | [Guide](docs/features/agents.md) |
-| **Fine-Tuning** | Export datasets in Alpaca, ShareGPT, ChatML and OpenAI formats; register LoRA adapters | [Guide](docs/features/fine-tuning.md) |
-| **Notebooks** | Store and edit `.ipynb` research notebooks | [Guide](docs/features/notebooks.md) |
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | .NET 9 Minimal API |
-| Frontend | React + TypeScript + Vite + Tailwind + shadcn/ui |
-| Database | PostgreSQL 16 + pgvector |
-| ORM | Entity Framework Core (Npgsql) |
-| State | TanStack Query (server) + Zustand (client) |
-| Observability | Serilog + OpenTelemetry + Aspire ServiceDefaults |
-| Inference | vLLM, Ollama, LM Studio, OpenAI-compatible |
-| Streaming | Server-Sent Events (SSE) |
-
-## Architecture
-
-Prism uses **vertical slice architecture** with **clean architecture per slice**. Every feature is self-contained. Every external dependency is behind an abstraction. Errors are values, not exceptions.
-
-```
-backend/src/
-  Prism.Api/              # Startup, middleware, composition root
-  Prism.Common/           # Result<T>, provider interfaces, shared infrastructure
-  Prism.Features/         # Feature slices (Playground/, Models/, History/, ...)
-  Prism.Tests/            # Unit + integration tests
-
-frontend/src/
-  features/               # Feature modules (mirrors backend slices)
-  components/             # Shared UI (logprobs visualizations, charts, layout)
-  services/generated/     # Auto-generated API client via orval
-```
-
-Key abstractions — swap any backend without touching feature code:
-
-| Abstraction | Default | Alternatives |
-|-------------|---------|-------------|
-| `IInferenceProvider` | vLLM | Ollama, LM Studio, OpenAI-compatible |
-| `AppDbContext` (EF Core) | PostgreSQL | SQL Server, SQLite |
-| `IVectorStore` | pgvector | Qdrant, Pinecone |
-| `ICacheService` | In-Memory | Redis, None |
-| `IFileStorage` | Local filesystem | Azure Blob, S3 |
-| `IAuthProvider` | NoAuth (local) | Local JWT, Entra ID, OIDC |
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are recorded as [ADRs](docs/ADR/).
-
-## Prerequisites
+### 1. Prerequisites
 
 | Requirement | Version | Why, and how it is pinned |
 |---|---|---|
 | [.NET SDK](https://dotnet.microsoft.com/download) | **10.0.100 or later 10.0.x** | Pinned by [`global.json`](global.json). The projects target `net9.0` but do not need a 9.0 runtime — [`backend/Directory.Build.props`](backend/Directory.Build.props) sets `RollForward=Major`, so they run on the 10.0 runtime you already have. |
 | [Node.js](https://nodejs.org/) | **22** | Pinned by [`frontend/.nvmrc`](frontend/.nvmrc). `nvm use` in `frontend/` picks it up. 20 also works; 22 is what CI runs. |
 | [Docker](https://www.docker.com/) | any recent | Runs PostgreSQL 16 + pgvector on port 5438. Also the fallback the integration tests use when `PRISM_TEST_DB` is unset. |
-| An LLM inference server | — | Prism needs at least one running model to do anything. See [Setting Up an LLM](#setting-up-an-llm). |
+| An LLM inference server | — | Prism reads a model as it generates, so it needs one to read. Step 4 below sorts this out. |
 
-### Check, and fix, your machine in one command
+### 2. Check your machine — and let it fix itself
 
 ```bash
 ./scripts/doctor.sh
@@ -119,7 +56,101 @@ A missing .NET 9 runtime is **not** a problem — `RollForward=Major` covers it.
 *"You must install or update .NET to run this application"* from `dotnet test`, you are on a
 checkout from before that was set; `git pull` rather than installing anything.
 
-### Setting Up an LLM
+### 3. Start Prism
+
+**PowerShell:**
+```powershell
+.\dev.ps1              # Starts PostgreSQL + Backend API + Frontend
+```
+
+**Bash:**
+```bash
+./dev.sh               # Starts PostgreSQL + Backend API + Frontend
+```
+
+The script handles everything: starts Docker containers, waits for Postgres, builds and launches the API, installs npm packages, and starts the Vite dev server.
+
+#### Other ways to start it
+
+| Command | What it does |
+|---------|-------------|
+| `.\dev.ps1` | Start everything (Postgres + API + Frontend) |
+| `.\dev.ps1 -Gpu` | Also start vLLM inference server (requires NVIDIA GPU) |
+| `.\dev.ps1 -BackendOnly` | Just Postgres + API (no frontend) |
+| `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
+| `.\dev.ps1 -Stop` | Stop all running services |
+
+#### Starting the pieces by hand
+
+```bash
+# 1. Start PostgreSQL (port 5438)
+docker compose up -d
+
+# 2. Start backend API (port 5000) — new terminal
+cd backend
+dotnet run --project src/Prism.Api --urls http://localhost:5000
+
+# 3. Start frontend dev server (port 5173) — new terminal
+cd frontend
+npm install   # first time only
+npm run dev
+```
+
+#### What is now running
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| **Frontend** | http://localhost:5173 | Vite dev server with hot reload |
+| **Backend API** | http://localhost:5000 | .NET Minimal API |
+| **Swagger UI** | http://localhost:5000/swagger | API documentation (dev only) |
+| **Health Check** | http://localhost:5000/health | Returns `Healthy` when API is up |
+| **PostgreSQL** | localhost:5438 | pgvector-enabled, data persisted in Docker volume |
+| **vLLM** | http://localhost:8000 | Only with `--gpu` flag |
+
+### 4. Connect a model
+
+Open **http://localhost:5173/models**. With nothing registered yet, Prism looks for an
+inference server on the usual local ports, tells you which ones it checked, and offers to
+connect whatever answered — including what that provider can and cannot do before you commit
+to it.
+
+If nothing is found, you need a model server running. [Connecting an inference
+server](#connecting-an-inference-server) below covers the options; the shortest path is:
+
+```bash
+# Install from https://ollama.com/download, then
+ollama serve
+ollama pull mistral:7b-instruct
+```
+
+Then click **Search again**.
+
+> **One choice shapes everything you see next.** Prism's headline features — the token heatmap,
+> the entropy view, the Token Explorer — are built on per-token probabilities. vLLM returns
+> them; Ollama does not. Ollama is the easiest way to get chatting, and it leaves those views
+> empty. The [capability comparison](#provider-capability-comparison) spells out the trade.
+
+Once a model is connected, [docs/features/playground.md](docs/features/playground.md) is the
+shortest route to something interesting.
+
+### Configuration (optional)
+
+The defaults work for local development. To change them, copy `.env.example` to `.env`:
+
+```env
+# Database
+DATABASE__CONNECTIONSTRING=Host=localhost;Port=5438;Database=prism;Username=postgres;Password=postgres
+
+# Inference (default vLLM)
+INFERENCEPROVIDERS__0__NAME=Local vLLM
+INFERENCEPROVIDERS__0__TYPE=Vllm
+INFERENCEPROVIDERS__0__ENDPOINT=http://localhost:8000
+
+# Frontend
+VITE_API_URL=http://localhost:5000
+```
+
+## Connecting an inference server
 
 Prism connects to LLMs via their OpenAI-compatible API. You need at least one running before you can use the platform.
 
@@ -194,75 +225,73 @@ Prism probes these on registration and disables the controls a provider cannot s
 than letting them fail silently. Where a capability is unprobed the UI says so — "unprobed" and
 "unavailable" are different facts and are shown differently.
 
-## Getting Started
+## Features
 
-### Quick Start (one command)
+Each module has a how-to guide in [docs/features/](docs/features/) covering what it is for, the
+steps to do the common jobs, what every setting means, and what it will not do.
 
-**PowerShell:**
-```powershell
-.\dev.ps1              # Starts PostgreSQL + Backend API + Frontend
+| Module | What It Does | Guide |
+|--------|-------------|-------|
+| **Playground** | Chat with streaming, logprobs heatmaps, entropy charts, surprise highlighting | [Guide](docs/features/playground.md) |
+| **Token Explorer** | Next-token prediction, step-through generation, branch exploration, sampling visualization | [Guide](docs/features/token-explorer.md) |
+| **Tokenizer Explorer** | Visualize tokenization, compare tokenizers across models, cost estimation | [Guide](docs/features/tokenizer.md) |
+| **Model Management** | Register providers, monitor health/metrics, hot-swap models, KV cache visualization | [Guide](docs/features/models.md) |
+| **History & Replay** | Browse all inference history, tag, filter, replay with overrides, diff results | [Guide](docs/features/history.md) |
+| **Prompt Lab** | Template editor with variables, version control, few-shot management | [Guide](docs/features/prompt-lab.md) |
+| **Experiments** | Track runs, compare metrics, run parameter sweeps, export results | [Guide](docs/features/experiments.md) |
+| **Workspaces** | Group projects under a named workspace | [Guide](docs/features/workspaces.md) |
+| **Datasets** | Upload, browse, split, compute statistics, export | [Guide](docs/features/datasets.md) |
+| **Evaluation** | Scoring methods (exact match, contains, ROUGE-L, BLEU, length ratio), leaderboards | [Guide](docs/features/evaluation.md) |
+| **Batch Inference** | Run prompts at scale with progress tracking, pause and resume | [Guide](docs/features/batch-inference.md) |
+| **Analytics** | Usage, latency percentiles and token totals across every module | [Guide](docs/features/analytics.md) |
+| **RAG Workbench** | Ingest documents, chunking strategies, vector/BM25/hybrid search | [Guide](docs/features/rag-workbench.md) |
+| **Structured Output** | Guided decoding with JSON schema constraints, output validation | [Guide](docs/features/structured-output.md) |
+| **Agent Builder** | ReAct agents with tool use and step-by-step execution traces | [Guide](docs/features/agents.md) |
+| **Fine-Tuning** | Export datasets in Alpaca, ShareGPT, ChatML and OpenAI formats; register LoRA adapters | [Guide](docs/features/fine-tuning.md) |
+| **Notebooks** | Store and edit `.ipynb` research notebooks | [Guide](docs/features/notebooks.md) |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | .NET 9 Minimal API |
+| Frontend | React + TypeScript + Vite + Tailwind + shadcn/ui |
+| Database | PostgreSQL 16 + pgvector |
+| ORM | Entity Framework Core (Npgsql) |
+| State | TanStack Query (server) + Zustand (client) |
+| Observability | Serilog + OpenTelemetry + Aspire ServiceDefaults |
+| Inference | vLLM, Ollama, LM Studio, OpenAI-compatible |
+| Streaming | Server-Sent Events (SSE) |
+
+## Architecture
+
+Prism uses **vertical slice architecture** with **clean architecture per slice**. Every feature is self-contained. Every external dependency is behind an abstraction. Errors are values, not exceptions.
+
+```
+backend/src/
+  Prism.Api/              # Startup, middleware, composition root
+  Prism.Common/           # Result<T>, provider interfaces, shared infrastructure
+  Prism.Features/         # Feature slices (Playground/, Models/, History/, ...)
+  Prism.Tests/            # Unit + integration tests
+
+frontend/src/
+  features/               # Feature modules (mirrors backend slices)
+  components/             # Shared UI (logprobs visualizations, charts, layout)
+  services/generated/     # Auto-generated API client via orval
 ```
 
-**Bash:**
-```bash
-./dev.sh               # Starts PostgreSQL + Backend API + Frontend
-```
+Key abstractions — swap any backend without touching feature code:
 
-The script handles everything: starts Docker containers, waits for Postgres, builds and launches the API, installs npm packages, and starts the Vite dev server.
+| Abstraction | Default | Alternatives |
+|-------------|---------|-------------|
+| `IInferenceProvider` | vLLM | Ollama, LM Studio, OpenAI-compatible |
+| `AppDbContext` (EF Core) | PostgreSQL | SQL Server, SQLite |
+| `IVectorStore` | pgvector | Qdrant, Pinecone |
+| `ICacheService` | In-Memory | Redis, None |
+| `IFileStorage` | Local filesystem | Azure Blob, S3 |
+| `IAuthProvider` | NoAuth (local) | Local JWT, Entra ID, OIDC |
 
-### Quick Start Options
-
-| Command | What it does |
-|---------|-------------|
-| `.\dev.ps1` | Start everything (Postgres + API + Frontend) |
-| `.\dev.ps1 -Gpu` | Also start vLLM inference server (requires NVIDIA GPU) |
-| `.\dev.ps1 -BackendOnly` | Just Postgres + API (no frontend) |
-| `.\dev.ps1 -FrontendOnly` | Just the frontend dev server |
-| `.\dev.ps1 -Stop` | Stop all running services |
-
-### Manual Start (step by step)
-
-```bash
-# 1. Start PostgreSQL (port 5438)
-docker compose up -d
-
-# 2. Start backend API (port 5000) — new terminal
-cd backend
-dotnet run --project src/Prism.Api --urls http://localhost:5000
-
-# 3. Start frontend dev server (port 5173) — new terminal
-cd frontend
-npm install   # first time only
-npm run dev
-```
-
-### What's Running
-
-| Service | URL | Notes |
-|---------|-----|-------|
-| **Frontend** | http://localhost:5173 | Vite dev server with hot reload |
-| **Backend API** | http://localhost:5000 | .NET Minimal API |
-| **Swagger UI** | http://localhost:5000/swagger | API documentation (dev only) |
-| **Health Check** | http://localhost:5000/health | Returns `Healthy` when API is up |
-| **PostgreSQL** | localhost:5438 | pgvector-enabled, data persisted in Docker volume |
-| **vLLM** | http://localhost:8000 | Only with `--gpu` flag |
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```env
-# Database
-DATABASE__CONNECTIONSTRING=Host=localhost;Port=5438;Database=prism;Username=postgres;Password=postgres
-
-# Inference (default vLLM)
-INFERENCEPROVIDERS__0__NAME=Local vLLM
-INFERENCEPROVIDERS__0__TYPE=Vllm
-INFERENCEPROVIDERS__0__ENDPOINT=http://localhost:8000
-
-# Frontend
-VITE_API_URL=http://localhost:5000
-```
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design. Decisions are recorded as [ADRs](docs/ADR/).
 
 ## Building
 
