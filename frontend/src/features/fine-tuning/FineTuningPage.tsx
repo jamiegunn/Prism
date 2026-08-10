@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { NotImplementedOverlay } from './components/NotImplementedOverlay'
 import { Plus, Trash2, Download, Wrench } from 'lucide-react'
 import { useAdapters, useCreateAdapter, useDeleteAdapter, useExportFineTune } from './api'
 import type { LoraAdapter, ExportFineTuneResult } from './types'
@@ -22,6 +23,8 @@ export function FineTuningPage() {
           LoRA adapter management and dataset export for fine-tuning
         </p>
       </div>
+
+      <NotImplementedOverlay />
 
       <div className="flex gap-1 border-b border-zinc-700" data-tour="fine-tuning-tabs">
         {tabs.map((tab) => (

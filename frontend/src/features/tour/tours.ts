@@ -881,12 +881,12 @@ const pageTours: Tour[] = [
     steps: [
       {
         id: 'no-training-here',
-        title: 'Prism does not train anything',
+        title: 'Fine-tuning itself is not built',
         body:
-          'Worth saying plainly before you look for the button. This page converts a dataset '
-          + 'into a training file for a trainer you run elsewhere, and keeps a note of where '
-          + 'adapters you trained elsewhere ended up. Registering an adapter does not affect '
-          + 'any inference call Prism makes.',
+          'The page says so on arrival, and this is the same message: Prism trains nothing, and '
+          + 'registering an adapter records a row no inference path reads. Whether training '
+          + 'belongs here is undecided. What does work is dataset export, which is why the page '
+          + 'is still here at all.',
         route: '/fine-tuning',
         anchor: 'fine-tuning-tabs',
         side: 'bottom',

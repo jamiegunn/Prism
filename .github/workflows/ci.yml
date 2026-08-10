@@ -84,6 +84,24 @@ jobs:
       - name: Typecheck
         run: npx tsc -b --noEmit
 
+      # The Notebooks page embeds JupyterLite from /jupyterlite/lab/. The build is not in the
+      # repository — it is tens of megabytes of generated assets — so it is produced here and
+      # shipped with the bundle. Without this step the iframe requests a path Vite does not
+      # serve, and the dev server's SPA fallback answers with Prism itself rather than a 404,
+      # which is why the failure was invisible for so long.
+      - name: Set up Python for JupyterLite
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build JupyterLite
+        run: bash public/jupyterlite/setup.sh
+
+      - name: Verify the embed target exists
+        run: |
+          test -f public/jupyterlite/lab/index.html \
+            || { echo "JupyterLite build did not produce lab/index.html"; exit 1; }
+
       - name: Build
         run: npm run build
 

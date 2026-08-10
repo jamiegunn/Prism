@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** Phases 0-3 done (bar one item). Phase 4 next.
+**Status:** Phases 0-4 done. Phase 5 (tour reconciliation) is all that remains.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -149,7 +149,14 @@ forwarding Prism's own credentials. The end state proposed there is deny-by-defa
 explicit unrestricted mode that refuses to run when Prism is not bound to loopback, so a laptop
 default cannot silently become a server default.
 
-**1. Fine-Tuning — recommendation: remove the tab, keep Export, move it to Datasets.**
+**1. Fine-Tuning — decided 2026-08-09: keep the tab, mark it unimplemented.** The removal
+recommendation below was not taken; the intent for the feature is undecided, so rather than
+delete a tab that might be wanted, the page now states on arrival that fine-tuning is not
+implemented. It says which half is missing (training, and adapters that nothing reads) and which
+half works (dataset export), so it does not hide a finished tool behind a blanket notice. The
+sizing below stands for whenever the question is revisited.
+
+*Original recommendation, retained for when training is reconsidered:*
 
 The instruction was "in scope, or if it is too large we remove the tab", so here is the sizing.
 
