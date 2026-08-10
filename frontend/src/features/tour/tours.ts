@@ -368,8 +368,9 @@ const pageTours: Tour[] = [
         title: 'A prompt, and what to do with it',
         body:
           'Pick a server and write a prompt on the left. Everywhere else in Prism shows you '
-          + 'what the model did say; this page shows the distribution it was sampling from '
-          + 'when it decided.',
+          + 'what the model did say; this page shows the distribution it was sampling from when '
+          + 'it decided. It needs a server that reports token probabilities, and says so plainly '
+          + 'if the one you picked does not.',
         route: '/token-explorer',
         anchor: 'token-explorer-controls',
         side: 'right',
@@ -643,12 +644,12 @@ const pageTours: Tour[] = [
       },
       {
         id: 'how-to-start-one',
-        title: 'Starting one is an API call for now',
+        title: 'Starting one',
         body:
-          'There is no button on this page or on Datasets that creates an evaluation — the '
-          + 'endpoint exists and the UI for it does not. Post a dataset id, the models and the '
-          + 'scorers to /api/v1/evaluation and the results appear here. Better you hear that '
-          + 'now than after hunting for the button.',
+          'New Evaluation asks for a dataset, the models to compare and the scorers to apply. '
+          + 'It tells you before you commit that the run is every record through every model, '
+          + 'plus a judging call per answer if you pick the LLM judge — which is the part that '
+          + 'costs real time on a local server.',
         anchor: 'evaluation-tabs',
         side: 'bottom',
       },
@@ -688,11 +689,12 @@ const pageTours: Tour[] = [
       },
       {
         id: 'how-to-start-one',
-        title: 'Starting one is an API call for now',
+        title: 'Starting one',
         body:
-          'As with Evaluation, there is no create button in the UI yet. Post a dataset id, a '
-          + 'model and a concurrency to /api/v1/batch and the job appears here. Note the list '
-          + 'does not poll, so progress advances when you act on a job rather than on its own.',
+          'New Batch Job takes a dataset, a model and a concurrency. Token probabilities are '
+          + 'offered only when a registered server returns them, and are off by default: over a '
+          + 'whole dataset that setting is the difference between a modest result set and a very '
+          + 'large one. The list refreshes itself while anything is running.',
         anchor: 'batch-filters',
         side: 'bottom',
       },
@@ -730,11 +732,12 @@ const pageTours: Tour[] = [
       },
       {
         id: 'cost-caveat',
-        title: 'Treat the cost tab as local-only',
+        title: 'Cost distinguishes free from unknown',
         body:
-          'The cost column is currently a guess from the model name rather than the priced '
-          + 'figure the backend actually computes, so read it as confirmation that local '
-          + 'models cost nothing rather than as a bill.',
+          'The figure shown is the one the backend priced, and two different things are kept '
+          + 'apart: a zero means priced and free, while "not priced" means no pricing is '
+          + 'recorded for that model and nothing is being claimed. The window control at the top '
+          + 'changes the period all of this covers.',
         anchor: 'analytics-tabs',
         side: 'bottom',
       },
@@ -766,8 +769,9 @@ const pageTours: Tour[] = [
         body:
           'Vector search uses cosine distance, BM25 uses Postgres full-text ranking, and '
           + 'hybrid blends the two after normalising each. BM25 is computed by the database at '
-          + 'ingest, so it works even with no embedding server running — worth reaching for '
-          + 'first when a search returns nothing.',
+          + 'ingest, so it works with no embedding server running at all. A search that fails '
+          + 'now says so and points you there, and "matched nothing" is shown as its own '
+          + 'result rather than looking identical to a failure.',
         anchor: 'rag-collections',
         side: 'bottom',
       },
@@ -810,9 +814,9 @@ const pageTours: Tour[] = [
         body:
           'If the server supports guided decoding the schema is enforced during generation. If '
           + 'it does not — which includes Ollama and most OpenAI-compatible servers — Prism '
-          + 'falls back to instructing the model and validating afterwards, and says so in the '
-          + 'result. Expect that advisory even on a valid result: it is telling you which mode '
-          + 'you were in, not that something failed.',
+          + 'falls back to instructing the model and validating afterwards. Which mode you were '
+          + 'in is reported in amber beneath the result; genuine validation failures are red. '
+          + 'They are different things and no longer share a box.',
         anchor: 'structured-test',
         side: 'left',
       },
@@ -946,11 +950,12 @@ const pageTours: Tour[] = [
       },
       {
         id: 'no-execution',
-        title: 'Cells do not run in the browser',
+        title: 'Running cells needs the kernel built',
         body:
-          'The in-browser kernel is not included in this build, so treat the page as storage '
-          + 'and versioning rather than a place to execute code. Bringing an existing notebook '
-          + 'in is create-then-paste through Edit JSON; there is no upload.',
+          'The in-browser kernel is generated rather than kept in the repository, and CI builds '
+          + 'it into the deployed bundle. Running the dev server straight from a clone will not '
+          + 'have it until you run the setup script in public/jupyterlite. Editing is still by '
+          + 'raw JSON, and there is no upload — bringing a notebook in is create then paste.',
         anchor: 'notebooks-list',
         side: 'bottom',
       },

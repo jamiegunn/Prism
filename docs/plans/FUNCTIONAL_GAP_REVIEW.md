@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** Phases 0-4 done. Phase 5 (tour reconciliation) is all that remains.
+**Status:** all phases done. The per-tab requirements tables are the remaining work.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -233,9 +233,12 @@ Fine-Tuning: fold Export into Datasets, drop the adapter register and the sideba
 (decision 1, pending override). Note the tour test asserts every sidebar destination has a tour,
 so removing a tab means removing its tour in the same change — the suite will say so.
 
-**Phase 5 — tour reconciliation.** Re-read all fifteen tours against the fixed reality. Anything
-a tour apologises for that is now fixed gets rewritten; the anchor tests already fail if a
-region moves.
+**Phase 5 — tour reconciliation. DONE.** Six tours were describing gaps that phases 0-4 closed:
+Evaluation and Batch both said starting a run was an API call, Analytics warned its cost column
+was a name-based guess, Structured Output explained a green-tick-beside-red-box contradiction,
+RAG described a silent search failure, and Notebooks said the kernel was absent. All rewritten
+against what the code does now. The anchor tests catch a moved region; only reading catches a
+tour politely describing a fixed bug, which is the failure mode this phase exists for.
 
 Each phase ends with the requirements table for the affected tabs updated, and
 `product-truth.yaml` counts refreshed.
@@ -254,8 +257,21 @@ Each phase ends with the requirements table for the affected tabs updated, and
 
 ---
 
-## What this plan deliberately does not do
+## What remains
 
-It does not promise all fifteen tabs at once. The inventory above is roughly forty items, four
-of which are projects rather than fixes. Attempting them together would produce the same
-"claims outpacing reality" this repo already has a file to prevent.
+The per-tab **Functional requirements** sections. The template and the rules are set out above;
+what is not yet written is fifteen tables of falsifiable requirements with their presuppositions.
+That was deliberately left until the fixes landed — writing forty requirements against code that
+was about to change would have aged badly.
+
+The gap inventory above is now the input for those tables: most entries are closed and become
+MET with the check that proved them, a few are WITHDRAWN with a reason (Fine-Tuning's training,
+Agents' open `api_call`), and the remainder are the honest UNMET list.
+
+Still open from the inventory, none of them severe: Token Explorer's top-p/top-k sliders are
+visualisation-only with nothing on screen saying so; Prompt Lab's read-only editor and its unused
+`useAbTest`; the Experiments sweep running N calls inside one request; Datasets' unused
+`useUpdateRecord`; Evaluation's dead `CalibrationPlot` and missing per-record drill-down; Batch's
+unreachable results/download endpoints and unused cost estimator; RAG's unused `useRagPipeline`
+and unexposed `vectorWeight`; Agents' decorative `Sequential` pattern and fabricated seeded run;
+Fine-Tuning's export column mapping; Notebooks' unvalidated JSON save.
