@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** all phases done. The per-tab requirements tables are the remaining work.
+**Status:** all phases done. Requirements written for 6 of 15 tabs; the rest remain.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -259,10 +259,14 @@ Each phase ends with the requirements table for the affected tabs updated, and
 
 ## What remains
 
-The per-tab **Functional requirements** sections. The template and the rules are set out above;
-what is not yet written is fifteen tables of falsifiable requirements with their presuppositions.
-That was deliberately left until the fixes landed — writing forty requirements against code that
-was about to change would have aged badly.
+**Nine of the fifteen requirements tables.** Written so far: Models, Playground, Token Explorer,
+Evaluation, Batch Inference, Notebooks — chosen because this session produced first-hand evidence
+for each, so every MET row names a check that was actually run rather than a file that was read.
+
+Still to write: History, Prompt Lab, Experiments, Datasets, Analytics, RAG Workbench, Structured
+Output, Agents, Fine-Tuning. These need the same treatment — reading the page against its code —
+and should not be written from the gap inventory alone, which records what was broken rather than
+what the page is for.
 
 The gap inventory above is now the input for those tables: most entries are closed and become
 MET with the check that proved them, a few are WITHDRAWN with a reason (Fine-Tuning's training,

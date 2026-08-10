@@ -214,3 +214,48 @@ experiment can read the cells in the browser without installing anything.
 - [Datasets](datasets.md) — the GUIDs `get_dataset_records` wants
 - [Model Management](models.md) — the instance GUIDs `chat` and `logprobs` want
 - [History](history.md) — the record of every inference call, for offline analysis
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A JupyterLite build is being served at `/jupyterlite/lab/` | **No.** The build is generated, not committed | `frontend/.gitignore` |
+| P2 | A missing build fails visibly | **It did not.** Vite answers unknown paths with the SPA shell, so the iframe rendered Prism inside Prism | fixed 2026-08-09 |
+| P3 | CI shipping the build means users receive it | **False.** This CI has no deploy step — it retains only test results and the Playwright report | `.github/workflows/ci.yml` |
+
+P3 is why building in CI was necessary but not sufficient. Prism is a local tool; the person who
+opens this page is running `dev.sh`, and a discarded CI artifact never reaches them.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Notebooks are stored server-side and versioned on save | manual: save twice, version counter increments | MET |
+| R2 | A real `.ipynb` can be downloaded, without opening the notebook | per-card download button; `GET /notebooks/{id}/download` | MET |
+| R3 | The JupyterLite build is verified to build | CI runs `setup.sh` and asserts `lab/index.html` exists | MET |
+| R4 | The build is available to someone running locally | `npm run jupyterlite`, and `dev.sh` runs it on first start when `jupyter` is present | MET |
+| R5 | A missing build is reported, never silently substituted | browser check: the page detects the SPA shell, disables Embed, refuses to open the tab, names the command | MET |
+| R6 | A missing kernel does not imply storage is broken | same check asserts the notice says storing, versioning and downloading still work | MET |
+| R7 | Saved notebook JSON is validated before it is stored | none — invalid JSON saves, and renders identically to an empty notebook | **UNMET** |
+| R8 | An existing `.ipynb` can be uploaded | none — the only route in is create-then-paste through Edit JSON | **UNMET** |
+
+### Future options for shipping the build
+
+Recorded because R4 solves the local case only, and a deployed Prism has the same problem:
+
+1. **A deploy step.** Nothing is published today. Pages, a container image or a release artifact
+   would each let the CI build reach a user, and would make P3 true rather than false.
+2. **Ship it in a release artifact and have `dev.sh` fetch it**, avoiding a Python toolchain on
+   every developer machine. Heavier to set up, lighter for the reader.
+3. **Leave it optional and local**, which is where it now stands: the page is honest when the
+   build is absent, so a deployment without it is degraded rather than broken.
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | The notebook communicates with Prism over `postMessage` | The listener exists, nothing ever posts the message, and the received state is discarded. It is a stub, not an integration | this review |

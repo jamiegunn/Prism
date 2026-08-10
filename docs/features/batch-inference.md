@@ -238,3 +238,28 @@ instead — same shape of job, with metrics attached.
 - [History](history.md) — every individual call from a batch, inspectable
 - [Analytics](analytics.md) — aggregate tokens and latency
 - [Model Management](models.md) — which provider returns logprobs
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A dataset exists to run over | Yes — seeded | `DatasetsSeeder.cs` |
+| P2 | A model is registered and reachable | No | Models P1 |
+| P3 | A job's concurrency is a property of that job, not a global setting | True — two jobs can run at different rates by design | `CreateBatchJobRequest.Concurrency` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A batch job can be created without leaving the UI | browser check: `/batch` → New Batch Job → finished 6/6 records | MET |
+| R2 | Token-probability capture is opt-in, and only offered when a server supports it | dialog disables it when no instance reports logprobs | MET |
+| R3 | A running job's progress advances without user action | list polls at 3s while anything is Running or Queued | MET |
+| R4 | A paused job resumes from where it stopped rather than restarting | `POST /batch/{id}/resume`; `completedRecords` carries over | MET |
+| R5 | Only the failed records of a finished job can be re-run | Retry failed appears when `failedRecords > 0` | MET |
+| R6 | A job's outputs can be read after it completes | none — no detail route; the results and download endpoints have no UI | **UNMET** |
+| R7 | The cost of a job can be estimated before running it | none — `POST /batch/estimate` exists, `useEstimateBatchCost` has no callers | **UNMET** |
+| R8 | A paused job's progress is visible | none — the bar renders only for Running or Queued, so the state you most want to inspect shows none | **UNMET** |

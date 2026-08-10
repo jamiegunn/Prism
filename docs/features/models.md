@@ -222,3 +222,43 @@ flags decide silently whether perplexity and per-token traces get recorded at al
 - [Token Explorer](token-explorer.md) — the page that needs vLLM most
 - [Tokenizer and Compare](tokenizer.md) — vLLM-only, both tabs
 - [History](history.md) — where every call against every instance is recorded
+
+---
+
+## Functional requirements
+
+Falsifiable statements about this page, each with the check that decides it. Status is MET,
+UNMET or WITHDRAWN — never "partial", because that is how a gap hides.
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | An inference server is running somewhere reachable | No — nothing is started for you | `FirstRunSetup.tsx:84` names the ports it probed |
+| P2 | That server is on a conventional port | Not necessarily — discovery only probes 11434, 8000, 1234 | `DiscoverProvidersHandler.cs:56-61` |
+| P3 | A provider's capabilities do not change after registration | **False.** They are recorded once and only re-read on a health check or an explicit probe | `CheckHealthHandler.cs:81-87` |
+
+P3 is the one that bites. A server upgraded in place keeps whatever capabilities it had when it
+was registered until something asks again.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A server can be registered without leaving the UI, whether or not one is already registered | click-path: `/models` → New Instance, with zero and with one instance | MET |
+| R2 | Discovery names every port it probed, so a miss is explainable | `FirstRunSetup.test.tsx` asserts `localhost:11434` appears | MET |
+| R3 | The capability matrix reports whether each server returns per-token probabilities | `CapabilityMatrix.tsx:46`; manual read against a probed instance | MET |
+| R4 | Re-probing a server updates its stored capabilities | `POST /models/instances/{id}/probe` → row changes; observed 2026-08-09 turning `SupportsLogprobs` false → true | MET |
+| R5 | A background health check keeps capabilities current without user action | 30s loop writes them; `HealthCheckBackgroundService.cs:18` | MET |
+| R6 | Two Prism APIs cannot silently disagree about one instance's capabilities | `dev.sh` stops other Prism APIs before starting; launcher tests | MET |
+| R7 | Selecting a server shows live metrics where the provider reports them | manual: select a card; `InstanceDetailPanel.tsx:163` states when unavailable | MET |
+| R8 | The detail panel is reachable on a narrow window | none — it is `lg:block` and vanishes below that breakpoint | **UNMET** |
+
+R6 exists because it failed: four stale APIs each ran the R5 loop against one database and
+overwrote each other for an afternoon.
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Swap Model changes the model an instance serves | The control is only rendered when `SupportsModelSwap`, which no local provider sets in practice; it toggles an input that no path acts on | unreviewed — flagged for the next pass |

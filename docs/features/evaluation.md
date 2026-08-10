@@ -269,3 +269,35 @@ problem worth catching, and nothing more.
 - [Batch Inference](batch-inference.md) — the same shape of run, without scoring
 - [Analytics](analytics.md) — token and latency totals across everything, including these runs
 - [Model Management](models.md) — registering the instance the runner will pick
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A dataset exists with expected values to score against | Yes — `DatasetsSeeder` creates one with train/test/val splits | `DatasetsSeeder.cs:27-50` |
+| P2 | At least one model is reachable to run the records through | No — nothing is registered until you do it | Models P1 |
+| P3 | Scoring is string comparison unless `llm_judge` is chosen | True, and `llm_judge` costs an inference call per answer | `Domain/Scorers/LlmJudgeScorer.cs` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | An evaluation can be started without leaving the UI | browser check: `/evaluation` → New Evaluation → ran to `Completed` | MET |
+| R2 | The dataset is chosen by name, never by GUID | `DatasetPicker` lists name and record count | MET |
+| R3 | Every scorer the backend implements is offerable, not only ones already used | dialog lists all six from `Domain/Scorers` | MET |
+| R4 | The cost of the run is stated before it is started | dialog states records x models, and flags the judge's extra call | MET |
+| R5 | A running evaluation's progress advances without user action | list polls at 3s while anything is Running or Pending | MET |
+| R6 | An unloadable evaluation reports the failure rather than waiting forever | detail page renders the error and a way back; previously "Loading..." was the only branch | MET |
+| R7 | The leaderboard ranks results across evaluations, not within one | `GET /evaluation/leaderboard`; each row names its evaluation | MET |
+| R8 | Which records a model got wrong can be inspected | none — the per-record endpoint exists and no UI calls it | **UNMET** |
+| R9 | Results can be exported | none — `GET .../results/export` exists with no UI | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Calibration plots are shown for probabilistic scorers | `CalibrationPlot.tsx` is imported nowhere and no scorer emits calibration data | this review |

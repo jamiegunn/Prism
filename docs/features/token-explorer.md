@@ -210,3 +210,29 @@ that field is not part of what was kept.
 - [Playground](playground.md) — chat with heatmaps, for reading a whole response at once
 - [History](history.md) — every prediction, step and branch is recorded there
 - [Model Management](models.md) — why this page needs vLLM
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A registered server returns per-token probabilities | Depends on the server. Ollama does from **0.12.11**; vLLM always; LM Studio via the OpenAI-compatible path | `OllamaProvider.cs` `LogprobsFromVersion` |
+| P2 | The registered capability reflects the server as it is now | **False** until probed — see Models P3. An Ollama upgraded past 0.12.11 still reads as incapable until a health check or probe runs | observed 2026-08-09 |
+| P3 | Top-p and top-k as shown here are what the model used | **False.** Only temperature, top-logprobs and thinking are sent; the other two re-shade the chart already fetched | `TokenExplorerPage.tsx` predict payload |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Predicting returns a ranked candidate distribution for the next token | manual: select a server, enter a prompt, Predict | MET |
+| R2 | A prediction that fails says so, rather than leaving the empty state in place | browser check with a forced 500 — "That prediction did not run" renders | MET |
+| R3 | That message names per-token probabilities as the likely cause and where to check | same check asserts the phrase appears | MET |
+| R4 | Clicking a candidate explores that branch and files the continuation | manual: click a bar in Predictions → Branches gains an entry | MET |
+| R5 | The page never implies a slider was sent to the model when it was not | none — the labels say "(visualization)" but nothing states the parameter is not transmitted | **UNMET** |
+| R6 | Comparing tokenizers across servers is possible with one server registered | none — Compare requires two selected instances and is otherwise inert | **UNMET** |
+
+R5 is deliberately listed rather than fixed: the honest wording is a copy decision, and the
+label already hints at it.

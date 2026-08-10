@@ -191,3 +191,30 @@ Three things to know before you rely on it:
 - [Token Explorer](token-explorer.md) — step through generation and force alternative tokens
 - [History](history.md) — every Playground call is recorded there automatically
 - [Model Management](models.md) — which provider gives you which capabilities
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A server is registered and Online | No | Models P1 |
+| P2 | TTFT is measured on every response | **Only on the streaming path.** Non-streaming calls record `TtftMs = null` | `OllamaProvider.cs`, `RecordingInferenceProvider.cs` |
+| P3 | Token probabilities are returned when asked for | Only when the provider supports them and the switch is on | Token Explorer P1 |
+
+P2 matters for the comparison view: a null TTFT is excluded rather than counted as zero.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A prompt can be sent and its response streamed | manual; `useStreamChat` SSE path | MET |
+| R2 | Every response records TTFT and tokens/sec where measurable | `MessageStatsPanel` rows; `Message.ttftMs`, `tokensPerSecond` | MET |
+| R3 | Those two are reported separately, never combined into one score | `PaneComparisonSummary.test.tsx` pins the split | MET |
+| R4 | An unmeasured metric is never rendered as zero | same suite: zero and non-finite are treated as unset | MET |
+| R5 | Two servers can be compared on one prompt, sent once | `/playground/compare`, shared input broadcast | MET |
+| R6 | The comparison states how many responses each average covers | `PaneComparisonSummary` renders n per metric | MET |
+| R7 | A pane's completion tally matches the panes on screen | tracked per pane id and counted against current panes | MET |
+| R8 | Conversations survive a reload | persisted server-side; `useConversation` | MET |

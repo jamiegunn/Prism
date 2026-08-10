@@ -808,6 +808,30 @@ if ! $BACKEND_ONLY; then
     done
   fi
 
+  # The Notebooks page embeds a JupyterLite build that is generated rather than
+  # committed. CI builds it into the deployed bundle — but this CI has no deploy
+  # step, and Prism is a local tool, so a CI artifact never reaches the person
+  # who opens the page. Build it here instead, where it is actually used.
+  #
+  # Optional and quiet: it needs a Python toolchain, the rest of Prism does not,
+  # and everything except running cells works without it. The page itself now
+  # detects the absence and says so, so skipping this is not a silent failure.
+  if [ ! -f "$ROOT/frontend/public/jupyterlite/lab/index.html" ]; then
+    if command -v jupyter >/dev/null 2>&1; then
+      step "Building the JupyterLite kernel (first run only)..."
+
+      if (cd "$ROOT/frontend" && npm run jupyterlite >"$LOGS/jupyterlite.log" 2>&1); then
+        ok "JupyterLite is ready — notebook cells will run in the browser."
+      else
+        warn "JupyterLite did not build — see $LOGS/jupyterlite.log"
+        warn "Everything except running cells still works."
+      fi
+    else
+      echo "   Notebooks: cell execution needs a JupyterLite build. To enable it:"
+      echo "     pip install jupyterlite-core jupyterlite-pyodide-kernel && npm run jupyterlite"
+    fi
+  fi
+
   step "Starting frontend on http://localhost:5173 ..."
 
   prism_ensure_node_modules || {
