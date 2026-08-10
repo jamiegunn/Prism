@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { ArrowLeft, Download, ExternalLink, Save, Maximize2, Minimize2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNotebook, useUpdateNotebook } from './api'
@@ -9,6 +10,34 @@ export function NotebookDetailPage() {
   const [, setJupyterReady] = useState(false)
   const [showJsonEditor, setShowJsonEditor] = useState(false)
   const [showEmbed, setShowEmbed] = useState(false)
+
+  // Whether a JupyterLite build is actually being served here.
+  //
+  // The build is generated, not committed, so on a bare clone /jupyterlite/lab/index.html does
+  // not exist — and Vite answers unknown paths with the SPA shell rather than a 404. Embedding
+  // it therefore rendered Prism inside Prism, and "Open in JupyterLite" opened a second copy of
+  // the app, with no error anywhere. Asking the URL what it is beats trusting that it is there.
+  const [kernelPresent, setKernelPresent] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch('/jupyterlite/lab/index.html')
+      .then((response) => (response.ok ? response.text() : ''))
+      .then((html) => {
+        if (cancelled) return
+
+        // Prism's own shell is what the SPA fallback returns; JupyterLite's index names itself.
+        setKernelPresent(html.length > 0 && /jupyter/i.test(html) && !html.includes('id="root"'))
+      })
+      .catch(() => {
+        if (!cancelled) setKernelPresent(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [editContent, setEditContent] = useState('')
   const [contentInitialized, setContentInitialized] = useState(false)
@@ -50,6 +79,11 @@ export function NotebookDetailPage() {
 
   const handleOpenJupyterLite = () => {
     // Open JupyterLite in a new tab — notebooks content is loaded from the API
+    if (kernelPresent === false) {
+      toast.error('No JupyterLite build is being served here. Run: npm run jupyterlite')
+      return
+    }
+
     window.open('/jupyterlite/lab/index.html', '_blank')
   }
 
@@ -224,12 +258,33 @@ export function NotebookDetailPage() {
             <h3 className="text-sm font-medium text-zinc-50">JupyterLite Integration</h3>
             <button
               onClick={() => setShowEmbed(true)}
-              className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300"
+              disabled={kernelPresent === false}
+              className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 disabled:cursor-not-allowed disabled:text-zinc-600"
             >
               <Maximize2 className="h-3 w-3" />
               Embed
             </button>
           </div>
+          {kernelPresent === false && (
+            <div className="mb-3 rounded border border-amber-800/60 bg-amber-900/10 p-3">
+              <p className="text-xs font-medium text-amber-300">
+                No JupyterLite build is being served here.
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-200/70">
+                The kernel is generated rather than committed, and CI builds it into the deployed
+                bundle. From a clone it is absent until you build it, and the dev server answers
+                the missing path with Prism itself rather than a 404 &mdash; so embedding it
+                would show you this app again. Build it with{' '}
+                <code className="rounded bg-zinc-800 px-1 py-0.5 text-amber-300">
+                  npm run jupyterlite
+                </code>{' '}
+                (needs <code className="rounded bg-zinc-800 px-1 py-0.5">jupyterlite-core</code>{' '}
+                and <code className="rounded bg-zinc-800 px-1 py-0.5">jupyterlite-pyodide-kernel</code>).
+                Storing, versioning and downloading notebooks works either way.
+              </p>
+            </div>
+          )}
+
           <p className="text-xs text-zinc-400 mb-3">
             Click "Open in JupyterLite" above to launch in a new tab, or "Embed" to run inline.
             The <code className="px-1 py-0.5 rounded bg-zinc-700 text-violet-400">workbench</code> module
