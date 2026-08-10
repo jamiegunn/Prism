@@ -227,3 +227,47 @@ adapter loaded.
 - [Model Management](models.md) — registering the server that would actually serve an adapter
 - [Experiments](experiments.md) — for comparing a base model against a fine-tuned one once both
   are being served
+
+---
+
+## Functional requirements
+
+The page opens with an overlay stating that fine-tuning is not implemented. Each of its claims
+was checked against the code and all hold: there is no training anywhere in the backend, no
+inference path reads `LoraAdapter`, `IsActive` has no writer, and all four export formats are
+implemented.
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | Prism trains models | **No.** No training code exists; the feature is four handlers — create, list, delete adapter, and export | `Prism.Features/FineTuning/` |
+| P2 | Registering an adapter affects inference | **No.** Nothing outside the slice reads `LoraAdapter` | grep returns only the slice and migrations |
+| P3 | The default column mapping works on the dataset Prism ships | **No.** The seeded dataset's columns are `text`/`label`/`confidence`; the mapping defaults to `instruction`/`input`/`output`, so the default export yields zero records | `DatasetsSeeder.cs:47-49`; defaults at `ExportFineTuneHandler.cs:74-76` |
+| P4 | Export respects the train/test split | **No.** There is no split field on the request and no filter on the query, so a split dataset exports its test rows into the training file | `ExportFineTuneHandler.cs:65-69` |
+| P5 | The record count says how much of the dataset was exported | **No.** It counts rows that reached the file; the shortfall is visible only by counting warnings | `ExportFineTuneHandler.cs:123` |
+| P6 | A missing output column is always warned about | **No.** Alpaca warns; ShareGPT, ChatML and JSONL emit an empty assistant turn silently | `:114-118` versus `:140-144`, `:177-181`, `:211-215` |
+
+P4 is the one with teeth: exporting a split dataset and training on the result means training on
+your own test set, with nothing on screen to indicate it.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Arriving states that training is not implemented, before any form is usable | browser check: a portal overlay blocks the page until dismissed | MET |
+| R2 | The notice does not imply the working part is broken | same check asserts it names dataset export as functional | MET |
+| R3 | All four advertised formats produce output in that format | export the seeded dataset with a correct mapping; compare against the handler | MET |
+| R4 | A mapping that matches nothing reports zero records rather than appearing to succeed | leave the defaults and export; "Exported 0 records" plus a warning per row | MET |
+| R5 | Deleting an already-deleted adapter says so | 404 → the global mutation toast names it | MET |
+| R6 | A dataset is chosen from a list; no GUID is typed | none — the field is a free-text "Dataset GUID", though `DatasetPicker` exists and is used by two other pages | **UNMET** |
+| R7 | An export can be limited to one split | none — no control, no request field, no filter | **UNMET** |
+| R8 | A record missing its output column warns in every format | none — three of four formats are silent | **UNMET** |
+| R9 | Registering an adapter selects its server from a dropdown | none — free-text "vLLM instance GUID", validated only for non-emptiness | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Prism trains models | Out of scope for now; the overlay says so rather than the page implying otherwise. Sizing for reconsidering it is in `docs/plans/FUNCTIONAL_GAP_REVIEW.md` | decided 2026-08-09 |
+| W2 | An adapter can be made active | Nothing loads adapters, so `IsActive` can never become true. The badge should be removed rather than the flag implemented | this review |

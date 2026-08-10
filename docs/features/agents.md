@@ -300,3 +300,44 @@ usually the thing your edit actually changed.
 - [Model Management](models.md) — registering the instance whose GUID you need
 - [History](history.md) — each model call inside a run is recorded there, tagged `agents`
 - [Playground](playground.md) — for working out the prompt before you wrap it in a loop
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | The seeded run's trace came out of a model | **No.** Every thought, observation, token count and latency is a string literal in the seeder | `AgentsSeeder.cs:38-83` |
+| P2 | The seeded workflow can be run as shipped | **No on any machine without a GPU.** It is bound to the seeded vLLM instance on :8000, which `dev.sh` only starts under `--gpu` | `AgentsSeeder.cs:92-93`, `ModelsSeeder.cs:69-72` |
+| P3 | …and can be repointed at a different server | **No.** There is no edit UI; the only recovery is delete and recreate | `useUpdateWorkflow` has no callers |
+| P4 | Choosing "Sequential" changes how the agent runs | **No.** It is stored, echoed on the header, and never read — the executor always runs ReAct | `RunAgentHandler.cs:135`; no reader of `workflow.Pattern` |
+| P5 | A run that failed is recorded as failed | **No.** A provider failure becomes a step carrying `Error`, and only an error on a *final answer* step sets `errorMessage` — so the run is stored Completed and badged green | `ReActExecutor.cs:130-139`, `RunAgentHandler.cs:186-214` |
+| P6 | Workflows are scoped to the current project | **No.** `ProjectId` is never populated | `CreateWorkflowHandler` |
+| P7 | Each agent step is recorded in History and Analytics | Yes — every step is a real call tagged `agents` | `ReActExecutor.cs:123` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Creating a workflow never asks for a raw instance GUID | New Workflow → server dropdown | MET |
+| R2 | Create is blocked until a server and model are chosen | fill only a name; Create stays disabled | MET |
+| R3 | A finished run appears in Run History without a reload | run, switch tabs; `invalidateQueries` in `finally` | MET |
+| R4 | A failed run surfaces to the user rather than the button just stopping | run with the inference server down; a toast fires | MET |
+| R5 | Selecting a past run shows its full step trace | click the seeded run | MET |
+| R6 | The inline "The run did not finish" panel appears on failure | none — the JSX is nested inside `runResult`, which is null on failure, so it is unreachable | **UNMET** |
+| R7 | An SSE `error` event is reported | none — the endpoint answers 200 with `event: error`, so `!response.ok` never fires and the reader handles only `step` and `finished` | **UNMET** |
+| R8 | A run whose model calls all failed is not badged Completed | none — see P5 | **UNMET** |
+| R9 | A step that errored shows its error text in the trace | none — the mapper sets `type: 'error'` but never maps `s.error` into the body | **UNMET** |
+| R10 | `AgentRun.errorMessage` is shown somewhere | none — the only reference is the type declaration | **UNMET** |
+
+R6–R10 are one failure wearing five hats: the run path was hand-rolled inline rather than using
+the `useRunAgent` hook that already exists and already handles errors and cache invalidation.
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | `api_call` is restricted to an allow-list | Deliberately open for a local research tool; the risk and a staged hardening path are set out above | decided 2026-08-09 |
+| W2 | The Sequential pattern runs a different executor | The option should be removed rather than implemented — a dropdown that silently does nothing is worse than one choice | this review |

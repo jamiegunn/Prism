@@ -288,3 +288,39 @@ distinctions your study actually cares about.
 - [History](history.md) — every structured inference call is recorded there automatically
 - [Datasets](datasets.md) — where extracted records usually want to end up
 - [Playground](playground.md) — for exploring a prompt before you commit it to a schema run
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | There is a schema here to try | **No** — nothing seeds one; you author JSON first | empty state, `StructuredOutputPage.tsx:46` |
+| P2 | Only vLLM can constrain generation | **No.** `OllamaProvider` already sends the schema as Ollama's `format`, which is its grammar-constrained mode, and a test pins that payload. What stops this page using it is the capability flag, not the transport | `OllamaProvider.cs:686-689`; `GuidedDecodingPayloadTests.cs:57-65`; flag at `:93` |
+| P3 | A green "Valid JSON" means the whole schema was checked | **No.** `$ref`, `allOf`, `anyOf`, `oneOf`, `not`, `if`, `patternProperties` and `dependentSchemas` are reported as unsupported rather than evaluated | `JsonSchemaValidator.cs:26-27` |
+| P4 | A red "Validation Failed" means the model got it wrong | **Not always.** An unsupported keyword or an unparseable stored schema also lands there, though the output was never checked | `JsonSchemaValidator.cs:83-91`, `:45-48` |
+| P5 | The "v1" on a schema means schemas are versioned | **No.** `Version` defaults to 1 and there is no update path at all | `JsonSchemaEntity.cs:34`; endpoints are POST/GET/GET/DELETE only |
+| P6 | Schemas are scoped to the current project | **No.** `projectId` is never sent, so every project sees every schema | `StructuredOutputPage.tsx:235` |
+
+P2 is the notable one: Prism's own Ollama transport can do the thing this page reports it cannot.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Run cannot be pressed until a schema, prompt, server and model are all chosen | click-path with the server left unset; button stays disabled | MET |
+| R2 | The server is chosen from a dropdown; no GUID is asked for | `InstancePicker` renders a select | MET |
+| R3 | A failed inference shows a red panel naming the reason | browser check with a forced 500 | MET |
+| R4 | A server that cannot enforce the schema says so in amber, not as a validation failure | run against Ollama; the "Note:" advisory renders separately | MET |
+| R5 | A schema using `$ref` does not produce a verdict blaming the model | none — it renders "Validation Failed" in red | **UNMET** |
+| R6 | The "cannot be trusted either way" verdict is distinguishable in the API response from a normal failure | none — `SchemaError` is produced and dropped at the DTO boundary | **UNMET** |
+| R7 | Searching schemas matches regardless of case | none — `Contains` is case-sensitive under Postgres | **UNMET** |
+| R8 | A schema can be edited without deleting and recreating it | none — no PUT route, no edit affordance | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Schemas are isolated per project | The field exists and is never populated. Either scope them or drop the field; today it implies isolation that does not exist | this review — flagged, not decided |
