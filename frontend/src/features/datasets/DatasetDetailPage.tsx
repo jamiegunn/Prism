@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,28 @@ export function DatasetDetailPage() {
   const { data: dataset, isLoading } = useDataset(id ?? null)
   const deleteDataset = useDeleteDataset()
   const exportDataset = useExportDataset()
-  const { splitFilter, setSplitFilter } = useDatasetsStore()
+  const { splitFilter, setSplitFilter, setSelectedDatasetId } = useDatasetsStore()
+
+  // The split filter and the page number live in a store shared by every dataset, and the
+  // action that resets them had no callers at all. So filtering to "test" on one dataset and
+  // then opening another queried that one for a split it may not have — an empty table, with
+  // none of the filter buttons looking selected, and nothing on screen saying why.
+  //
+  // Keyed on the dataset's own splits rather than on the id: it clears when the label does not
+  // exist here, and leaves a still-valid filter alone.
+  useEffect(() => {
+    if (!id) return
+
+    setSelectedDatasetId(id)
+  }, [id, setSelectedDatasetId])
+
+  useEffect(() => {
+    if (!dataset || splitFilter === null) return
+
+    if (!dataset.splits.some((split) => split.name === splitFilter)) {
+      setSplitFilter(null)
+    }
+  }, [dataset, splitFilter, setSplitFilter])
 
   function handleDelete() {
     if (!id || !confirm('Delete this dataset and all its records?')) return

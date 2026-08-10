@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** Phases 0-2 done. Phase 3 next.
+**Status:** Phases 0-3 done (bar one item). Phase 4 next.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -211,8 +211,15 @@ finished 6/6 records.
 
 Still open in this phase: Models' "New Instance" button is hidden on an empty install.
 
-**Phase 3 — wrong or stale data.** Analytics cost, Datasets state leak, Evaluation/Batch polling,
-Fine-Tuning export mapping. These mislead quietly, which makes them worse than a crash.
+**Phase 3 — wrong or stale data. DONE except Fine-Tuning.** Analytics now renders the cost the
+backend actually priced, keeping null ("no pricing recorded") apart from zero ("priced, and
+free") instead of guessing from the model name, and gained the window control the API always
+supported. The Datasets split filter no longer follows you onto a dataset that has no such split.
+Evaluation/Batch polling landed with Phase 2. Models' register control is no longer hidden from
+the people with nothing registered.
+
+Fine-Tuning's export mapping is deliberately untouched pending decision 1 — the recommendation
+is to move Export to Datasets, and fixing it in place first would be work thrown away.
 
 **Phase 4 — scope decisions, now settled.** Notebooks: ship the JupyterLite build (decision 2).
 Fine-Tuning: fold Export into Datasets, drop the adapter register and the sidebar entry

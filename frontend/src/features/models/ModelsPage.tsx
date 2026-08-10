@@ -50,7 +50,10 @@ export function ModelsPage() {
             View connected providers, loaded models, and GPU utilization.
           </p>
         </div>
-        {instances && instances.length > 0 && <RegisterInstanceDialog />}
+        {/* Always offered. Hiding this until an instance exists withheld the one control that
+            adds an instance from precisely the people who have none — leaving discovery, which
+            only finds servers already listening on a conventional port, as the sole way in. */}
+        <RegisterInstanceDialog />
       </div>
 
       {/* Capability Matrix (shown when instances exist) */}

@@ -1,15 +1,37 @@
+import { useState } from 'react'
 import { BarChart3, Zap, Clock, DollarSign } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useUsage, usePerformance } from './api'
 
+/** Windows offered, in days. The API defaults to 30 when given nothing. */
+const WINDOWS = [7, 30, 90] as const
+
+/** Start of a window, as an ISO timestamp. Called from an event, never during render. */
+function windowStart(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
 export function AnalyticsPage() {
-  const { data: usage } = useUsage()
-  const { data: performance } = usePerformance()
+  const [days, setDays] = useState<number>(30)
+
+  // Left undefined on first load so the server applies its own 30-day default, which keeps the
+  // initial query key stable. Reading the clock during render is impure and the compiler says
+  // so, hence computing this in the handler below rather than in a memo.
+  const [from, setFrom] = useState<string | undefined>(undefined)
+
+  function selectWindow(next: number) {
+    setDays(next)
+    setFrom(windowStart(next))
+  }
+
+  const { data: usage } = useUsage(from)
+  const { data: performance } = usePerformance(from)
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -18,6 +40,20 @@ export function AnalyticsPage() {
         <p className="text-sm text-muted-foreground">
           Usage tracking, cost breakdown, and performance metrics
         </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Window</span>
+        {WINDOWS.map((window) => (
+          <Button
+            key={window}
+            variant={days === window ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => selectWindow(window)}
+          >
+            {window} days
+          </Button>
+        ))}
       </div>
 
       {/* Summary Cards */}
@@ -183,21 +219,32 @@ export function AnalyticsPage() {
                           <th className="px-4 py-2 text-right font-medium">Requests</th>
                           <th className="px-4 py-2 text-right font-medium">Tokens</th>
                           <th className="px-4 py-2 text-right font-medium">Avg Tokens/Req</th>
-                          <th className="px-4 py-2 text-right font-medium">Est. Cost</th>
+                          <th className="px-4 py-2 text-right font-medium">Cost</th>
                         </tr>
                       </thead>
                       <tbody>
                         {usage.byModel.map((m) => {
                           const avgTokens = m.requestCount > 0 ? Math.round(m.totalTokens / m.requestCount) : 0
-                          const isLocal = m.model.includes('llama') || m.model.includes('mistral') || m.model.includes('qwen')
                           return (
                             <tr key={m.model} className="border-b">
                               <td className="px-4 py-2 font-medium">{m.model}</td>
                               <td className="px-4 py-2 text-right tabular-nums">{m.requestCount.toLocaleString()}</td>
                               <td className="px-4 py-2 text-right tabular-nums">{m.totalTokens.toLocaleString()}</td>
                               <td className="px-4 py-2 text-right tabular-nums">{avgTokens.toLocaleString()}</td>
-                              <td className="px-4 py-2 text-right tabular-nums text-emerald-400">
-                                {isLocal ? '$0.00' : '—'}
+                              {/* The figure the backend priced, not a guess from the model name.
+                                  Null and zero mean different things and are kept apart: zero is
+                                  "priced, and free", null is "no price is known for this model". */}
+                              <td
+                                className={`px-4 py-2 text-right tabular-nums ${
+                                  m.totalCost === null ? 'text-zinc-500' : 'text-emerald-400'
+                                }`}
+                                title={
+                                  m.totalCost === null
+                                    ? 'No pricing is recorded for this model, so nothing is claimed.'
+                                    : undefined
+                                }
+                              >
+                                {m.totalCost === null ? 'not priced' : `$${m.totalCost.toFixed(4)}`}
                               </td>
                             </tr>
                           )
