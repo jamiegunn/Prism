@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Layers, Pause, Play, XCircle, RotateCcw } from 'lucide-react'
+import { CreateBatchJobDialog } from './components/CreateBatchJobDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -34,11 +35,14 @@ export function BatchInferencePage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Batch Inference</h1>
-        <p className="text-sm text-muted-foreground">
-          Large-scale inference processing with progress tracking and retries
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Batch Inference</h1>
+          <p className="text-sm text-muted-foreground">
+            Large-scale inference processing with progress tracking and retries
+          </p>
+        </div>
+        <CreateBatchJobDialog />
       </div>
 
       <div className="flex gap-2" data-tour="batch-filters">

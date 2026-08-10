@@ -12,6 +12,13 @@ export function useBatchJobs(status?: string) {
   return useQuery({
     queryKey: [...BATCH_KEY, { status }],
     queryFn: () => apiClient<BatchJob[]>(`/batch${query ? `?${query}` : ''}`),
+
+    // Same reasoning as the evaluation list, and more acute: there is no detail page here, so
+    // this list is the only place a running job's progress is ever visible.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((j) => j.status === 'Running' || j.status === 'Queued')
+        ? 3000
+        : false,
   })
 }
 

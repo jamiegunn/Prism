@@ -19,6 +19,13 @@ export function useEvaluations(projectId?: string, search?: string) {
   return useQuery({
     queryKey: [...EVALUATIONS_KEY, { projectId, search }],
     queryFn: () => apiClient<Evaluation[]>(`/evaluation${query ? `?${query}` : ''}`),
+
+    // The cards carry progress bars. Without this they showed whatever was true when the page
+    // loaded, so a running evaluation looked stuck — and only the detail page ever polled.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((e) => e.status === 'Running' || e.status === 'Pending')
+        ? 3000
+        : false,
   })
 }
 

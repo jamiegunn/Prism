@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** Phase 0 done, Phase 1 done. Phase 2 next.
+**Status:** Phases 0-2 done. Phase 3 next.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -199,8 +199,17 @@ Found while verifying: **`npx tsc --noEmit` checks nothing in this repo.** The r
 the real check and is what the pre-commit gate runs — which is why nothing broken was committed,
 but any typecheck claim made with the plain form was worthless.
 
-**Phase 2 — missing entry points.** Evaluation, Batch, Models' hidden button. Subject to
-decision 3.
+**Phase 2 — missing entry points. DONE for Evaluation and Batch.** Both now have a create
+dialog, built on the hooks that already existed and were called from nowhere. A shared
+`DatasetPicker` supplies dataset and split by name, so neither form needs a GUID. Both lists poll
+while anything is running, which they never did — on Batch especially, where there is no detail
+page, the list was the only place progress could be seen and it never moved. Evaluation's detail
+page no longer shows "Loading..." forever on a bad id.
+
+Verified by driving both dialogs in a browser: the evaluation ran to Completed and the batch job
+finished 6/6 records.
+
+Still open in this phase: Models' "New Instance" button is hidden on an empty install.
 
 **Phase 3 — wrong or stale data.** Analytics cost, Datasets state leak, Evaluation/Batch polling,
 Fine-Tuning export mapping. These mislead quietly, which makes them worse than a crash.

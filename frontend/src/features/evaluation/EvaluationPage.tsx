@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { StartEvaluationDialog } from './components/StartEvaluationDialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useEvaluations, useLeaderboard } from './api'
 import type { Evaluation } from './types'
@@ -32,6 +33,7 @@ export function EvaluationPage() {
             Score model outputs against datasets with pluggable metrics
           </p>
         </div>
+        <StartEvaluationDialog />
       </div>
 
       <Tabs defaultValue="evaluations">

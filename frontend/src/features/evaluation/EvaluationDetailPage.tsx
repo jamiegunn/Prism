@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, XCircle } from 'lucide-react'
+import { describeMutationError } from '@/services/mutationErrors'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,11 +12,33 @@ const COLORS = ['var(--color-primary)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf
 export function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: evaluation } = useEvaluation(id ?? null)
+  const { data: evaluation, isLoading, isError, error } = useEvaluation(id ?? null)
   const { data: summary } = useEvaluationResults(id ?? null)
   const cancel = useCancelEvaluation()
 
-  if (!evaluation) return <div className="p-6 text-muted-foreground">Loading...</div>
+  // "Loading..." used to be the only branch, so a bad id or a failed request sat there
+  // forever — indistinguishable from a slow one, and the reader had no reason to stop waiting.
+  if (isError) {
+    return (
+      <div className="p-6">
+        <button
+          onClick={() => navigate('/evaluation')}
+          className="mb-4 flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to evaluations
+        </button>
+        <div className="rounded border border-red-900/60 bg-red-950/40 p-4">
+          <p className="font-medium text-red-300">This evaluation could not be loaded.</p>
+          <p className="mt-1 text-sm text-red-200/80">{describeMutationError(error)}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading || !evaluation) {
+    return <div className="p-6 text-muted-foreground">Loading...</div>
+  }
 
   // Build chart data: one group per scoring method, one bar per model
   const chartData = summary?.modelSummaries
