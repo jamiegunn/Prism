@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** all phases done. Requirements written for 6 of 15 tabs; the rest remain.
+**Status:** all phases done. Requirements written for 12 of 15 tabs; History, Prompt Lab and Experiments remain.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -263,10 +263,15 @@ Each phase ends with the requirements table for the affected tabs updated, and
 Evaluation, Batch Inference, Notebooks — chosen because this session produced first-hand evidence
 for each, so every MET row names a check that was actually run rather than a file that was read.
 
-Still to write: History, Prompt Lab, Experiments, Datasets, Analytics, RAG Workbench, Structured
-Output, Agents, Fine-Tuning. These need the same treatment — reading the page against its code —
-and should not be written from the gap inventory alone, which records what was broken rather than
-what the page is for.
+Still to write: History, Prompt Lab, Experiments. These need the same treatment — reading the
+page against its code — and should not be written from the gap inventory alone, which records
+what was broken rather than what the page is for.
+
+Writing the tables found more than it recorded. Two findings changed the code rather than the
+docs: every `apiClient` delete reported failure after succeeding, because the client parsed a
+body that a 204 does not have; and Ollama's `format` parameter really does constrain generation
+to a schema, verified against a live server, so Structured Output's "only vLLM can enforce this"
+is a capability flag rather than a limit of the transport.
 
 The gap inventory above is now the input for those tables: most entries are closed and become
 MET with the check that proved them, a few are WITHDRAWN with a reason (Fine-Tuning's training,

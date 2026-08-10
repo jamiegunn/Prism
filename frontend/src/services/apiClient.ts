@@ -36,6 +36,14 @@ export async function apiClient<T>(url: string, config?: RequestConfig): Promise
     )
   }
 
+  // A successful response need not have a body. Every Result-returning delete in this API maps
+  // success to 204 No Content, and calling response.json() on an empty body throws — so every
+  // delete in the app reported failure immediately after succeeding: the row was gone, an error
+  // toast appeared, the list was never invalidated, and any onSuccess navigation never ran.
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as T
+  }
+
   return response.json() as Promise<T>
 }
 

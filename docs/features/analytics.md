@@ -170,3 +170,32 @@ is better served by the API than by this page.
 - [History](history.md) — the individual calls behind these aggregates
 - [Model Management](models.md) — which providers report TTFT and throughput
 - [Tokenizer](tokenizer.md) — the cost estimator with configurable pricing
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | History has seeded records, so Analytics has something to show | **No.** `HistorySeeder` writes `InferenceRecord` rows only; the sole writer of `UsageLog` is the runtime persistence service. So History shows three calls while Analytics reads zero | `HistorySeeder.cs:27-78`, `InferenceRecordPersistenceService.cs:116-118` |
+| P2 | `0 ms` means nothing was recorded | **No — it looks measured.** An empty window returns literal zeros, so no traffic renders as instantaneous inference | `GetPerformanceHandler.cs:114-117` |
+| P3 | Null and zero are consistently distinguished | **Only for cost.** Per-model rows coerce unknown TTFT and throughput to 0, while the same unknown reads "—" at summary level | `GetPerformanceHandler.cs:110` |
+| P4 | The Cost tab's prose agrees with its Cost column | **No.** The captions say local models cost $0; local models have no pricing entry, so the column correctly reads "not priced". The number is honest and the surrounding text contradicts it | `CostCalculator.cs:15-25` |
+| P5 | The window control bounds both ends | Half — only `from` is sent; the server defaults `to` to now | `analytics/api.ts` |
+| P6 | These aggregates scale | Yes — computed in SQL with `GROUPING SETS` and `percentile_cont`, with a volume test | `GetPerformanceHandler.cs:49-68`; `AnalyticsAggregationTests` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | With no usage in the window, totals read zero | `An_Empty_Window_Returns_Zeros` | MET |
+| R2 | One Playground call increases requests by exactly one and adds its tokens | `UsageLog_Projection_Carries_Tokens_And_Latency` | MET |
+| R3 | Usage is attributed to the Prism feature that made each call | run one Playground and one Prompt Lab call; read the module boxes | MET |
+| R4 | A model with no known pricing reads "not priced", never `$0.0000` | `UsageLog_Projection_Leaves_Unpriced_Models_Null_Not_Zero`; browser check | MET |
+| R5 | Choosing a window re-queries with a `from` parameter | browser check: 7 days issues a new request | MET |
+| R6 | An empty window does not assert a measured latency | none — the cards read `0ms` | **UNMET** |
+| R7 | Per-model TTFT that was never measured reads "—", not `0ms` | none — coerced at the handler | **UNMET** |
+| R8 | The Cost tab's prose agrees with its column | none — see P4 | **UNMET** |
+| R9 | A failed request says so rather than showing zeros | none — the page has no error branch | **UNMET** |

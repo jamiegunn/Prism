@@ -243,3 +243,42 @@ Set the seed, note it in the experiment's hypothesis or description on the
 
 - [Experiments](experiments.md) — where a split earns its keep
 - [Evaluation](evaluation.md) — running a dataset against a model
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | Splits are reproducible | **Not by default.** The seed field is optional and empty, and the handler falls back to an unseeded `Random`. Two splits with identical ratios differ unless you type a seed | `SplitDatasetDialog.tsx:24`; `SplitDatasetHandler.cs:60` |
+| P2 | The Statistics tab names each column and lists its top values | **No.** The backend sends `columnName` and a map of top values; the frontend reads `column` and an array — so names render blank and top values never appear. No crash; it just says less than it claims | `DatasetStatsDto.cs:22-27` vs `datasets/types.ts:60-71` |
+| P3 | The records table shows the whole record | **Not necessarily.** It renders only the columns in the schema, and the schema is inferred from row 0 alone, so later rows with extra keys are hidden | `UploadDatasetHandler.cs:55,191-198` |
+| P4 | An empty grid means there are no datasets | **Not when the API is down** — there is no error branch | `DatasetsPage.tsx:41-56` |
+| P5 | The Purpose column means something | **Not for uploads.** Schema detection never sets it, and there is no UI to set it, so every uploaded dataset shows "—" | `UploadDatasetHandler.cs:191-198` |
+| P6 | `sizeBytes` is how much storage this uses | No — it is the uploaded file's length; records live in Postgres | `UploadDatasetHandler.cs:65` |
+| P7 | A split filter follows you between datasets | No, deliberately — it is cleared on mount and again when the label does not exist here | fixed 2026-08-09 |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A cold install shows the seeded dataset with its record count and split badges | open `/datasets` | MET |
+| R2 | Searching by a case-insensitive substring narrows the grid | type `sentiment` | MET |
+| R3 | Selecting a split shows exactly the count its badge claims | click `test (2)`; read "Showing 1–2 of 2" | MET |
+| R4 | Opening another dataset while filtered to a split it lacks shows all its records | filter one, open another | MET |
+| R5 | Exporting while filtered to a split downloads only that split | filter, export, open the file | MET |
+| R6 | Deleting a dataset returns to the list without an error | trash → confirm; fixed by the 204 handling in `apiClient` | MET |
+| R7 | A column more than half null is reported as an error, 10–50% as a warning | `ValidateDatasetTests` | MET |
+| R8 | A failed dataset request says so rather than "No datasets yet" | none | **UNMET** |
+| R9 | The Statistics tab names each column and lists its top values | none — see P2 | **UNMET** |
+| R10 | A successful upload confirms on screen | none — the dialog only clears its fields and cannot close itself | **UNMET** |
+| R11 | A dataset can be renamed, or a column's purpose set | none — `useUpdateDataset` and its endpoint exist with no callers | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Records can be edited in place | `useUpdateRecord` has no callers and the table is read-only by design | this review |
+| W2 | Records can be annotated | The endpoint, handler and migration exist with no frontend at all. Either build it or drop the columns — the schema currently carries fields nothing populates | this review — flagged, not decided |

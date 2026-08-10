@@ -309,3 +309,40 @@ endpoint and looking at the generated answer.
 - [Playground](playground.md) — for testing the generation half in isolation
 - [History](history.md) — where pipeline calls and their logprobs end up
 - [Tokenizer](tokenizer.md) — real token counts, rather than characters divided by four
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | The seeded collection is searchable — it says Ready, 1 doc, 3 chunks | **Not by vector or hybrid.** Every seeded chunk has a null embedding while the collection reads Ready, and vector search filters nulls out | `RagSeeder.cs:80,94,108`; `QueryCollectionHandler.cs:89` |
+| P2 | Embeddings go to the server you are running | **No.** With nothing configured the provider picks the *oldest registered* instance, which is the seeded vLLM on :8000 | `OpenAiEmbeddingProvider.cs:59-81` |
+| P3 | …and the URL is right | **No.** The base already ends in `/v1` and `/v1/embeddings` is appended, giving `/v1/v1/embeddings` | `OpenAiEmbeddingProvider.cs:102` |
+| P4 | BM25 needs no embedding server | True for BM25; **false for hybrid**, which aborts on the vector failure instead of degrading to the half it already computed | `QueryCollectionHandler.cs:137-139` |
+| P5 | The distance metric chosen for a collection is used | **No.** Cosine/Euclidean/InnerProduct are offered, stored, and never read — search is always cosine | `QueryCollectionHandler.cs:90,97` |
+| P6 | The default new-collection settings will work here | **No.** They default to OpenAI's `text-embedding-3-small` at 1536 dims, and there is no OpenAI key path | `CreateCollectionDialog.tsx:12-13` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A cold install lists the seeded collection with its document and chunk counts | open `/rag` | MET |
+| R2 | BM25 returns a chunk with no embedding server running at all | detail → Search → BM25 → "transformer" | MET |
+| R3 | A search that could not run shows an error naming the failure | browser check with a forced failure | MET |
+| R4 | A search that ran and matched nothing shows an empty state, not an error | BM25 for a nonsense term | MET |
+| R5 | With nothing configured, embedding goes to a registered instance rather than a hardcoded address | `Embeddings_Go_To_The_Registered_Instance_When_Unconfigured` | MET |
+| R6 | Vector search returns a chunk on the seeded collection when an embedding server is available | none — the seeded chunks have no embeddings | **UNMET** |
+| R7 | Hybrid returns its BM25 half when embedding is unavailable | none — it returns the vector failure | **UNMET** |
+| R8 | The embedding URL contains exactly one `/v1` when the endpoint already ends in `/v1` | none | **UNMET** |
+| R9 | A collection created with Euclidean ranks by Euclidean distance | none — always cosine | **UNMET** |
+| R10 | An unknown collection id says the collection is missing | none — "Loading collection…" forever | **UNMET** |
+| R11 | A document whose ingest failed appears marked Failed without a manual refresh | none — the client invalidates only on success | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | This page generates an answer from the retrieved context | The pipeline endpoint and `useRagPipeline` exist and nothing calls them. The page is retrieval, deliberately — but the unused hook and the `RagTrace` table it alone writes should be removed or documented as API-only, not left as an accident | this review |
