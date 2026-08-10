@@ -66,7 +66,19 @@ public sealed class OllamaProvider : IHotReloadableProvider
     /// </remarks>
     private static readonly Version LogprobsFromVersion = new(0, 12, 11);
 
-    private ProviderCapabilities _capabilities = BuildCapabilities(supportsLogprobs: true);
+    /// <summary>
+    /// The first Ollama release that constrains generation to a JSON schema via <c>format</c>.
+    /// </summary>
+    /// <remarks>
+    /// This transport has always sent the schema, and a live server honours it — asking for a
+    /// person against a two-field schema returns exactly that object. What reported otherwise
+    /// was the capability flag, so Structured Output took the instruct-and-validate fallback on
+    /// every Ollama and told the reader the schema could not be enforced here.
+    /// </remarks>
+    private static readonly Version GuidedDecodingFromVersion = new(0, 5, 0);
+
+    private ProviderCapabilities _capabilities =
+        BuildCapabilities(supportsLogprobs: true, supportsGuidedDecoding: true);
 
     /// <summary>
     /// Gets the Ollama-specific capabilities. Ollama supports streaming and hot-reload, but no
@@ -79,39 +91,42 @@ public sealed class OllamaProvider : IHotReloadableProvider
     /// Builds the capability set, which differs only in whether logprobs are on offer.
     /// </summary>
     /// <param name="supportsLogprobs">Whether this server returns per-token probabilities.</param>
+    /// <param name="supportsGuidedDecoding">Whether this server constrains output to a schema.</param>
     /// <returns>The capabilities to advertise.</returns>
-    private static ProviderCapabilities BuildCapabilities(bool supportsLogprobs) => new()
-    {
-        SupportsChat = true,
-        SupportsStreaming = true,
-        SupportsLogprobs = supportsLogprobs,
+    private static ProviderCapabilities BuildCapabilities(
+        bool supportsLogprobs,
+        bool supportsGuidedDecoding) => new()
+        {
+            SupportsChat = true,
+            SupportsStreaming = true,
+            SupportsLogprobs = supportsLogprobs,
 
-        // Kept in step with the flag above: a top-K count without logprobs behind it is what
-        // puts a slider in the UI with nothing attached to it.
-        MaxTopLogprobs = supportsLogprobs ? 20 : 0,
-        SupportsTokenize = false,
-        SupportsGuidedDecoding = false,
-        SupportsMetrics = false,
-        SupportsHotReload = true,
-        SupportsSystemMessages = true,
-        SupportsFrequencyPenalty = true,
-        SupportsPresencePenalty = true,
-        SupportsStopSequences = true
-    };
+            // Kept in step with the flag above: a top-K count without logprobs behind it is what
+            // puts a slider in the UI with nothing attached to it.
+            MaxTopLogprobs = supportsLogprobs ? 20 : 0,
+            SupportsTokenize = false,
+            SupportsGuidedDecoding = supportsGuidedDecoding,
+            SupportsMetrics = false,
+            SupportsHotReload = true,
+            SupportsSystemMessages = true,
+            SupportsFrequencyPenalty = true,
+            SupportsPresencePenalty = true,
+            SupportsStopSequences = true
+        };
 
     /// <summary>
     /// Asks the server which Ollama it is, so the advertised capabilities describe the server
     /// in front of us rather than Ollama in general.
     /// </summary>
     /// <param name="ct">A token to cancel the operation.</param>
-    /// <returns>True when this server is new enough to return logprobs.</returns>
+    /// <returns>The server's version, or null when it could not be read.</returns>
     /// <remarks>
     /// An unreadable version is treated as capable. Every currently shipping Ollama returns
     /// logprobs, so guessing "no" over a transient failure would hide working features; the
     /// cost of guessing "yes" wrongly is an empty heatmap on a server old enough that the user
     /// can re-probe. Erring the other way is what made the product look broken before.
     /// </remarks>
-    private async Task<bool> ServerReturnsLogprobsAsync(CancellationToken ct)
+    private async Task<Version?> ReadServerVersionAsync(CancellationToken ct)
     {
         try
         {
@@ -120,9 +135,9 @@ public sealed class OllamaProvider : IHotReloadableProvider
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Ollama version check at {Endpoint} returned {StatusCode}; assuming logprobs",
+                    "Ollama version check at {Endpoint} returned {StatusCode}; assuming current",
                     Endpoint, (int)response.StatusCode);
-                return true;
+                return null;
             }
 
             string body = await response.Content.ReadAsStringAsync(ct);
@@ -131,8 +146,8 @@ public sealed class OllamaProvider : IHotReloadableProvider
             if (string.IsNullOrWhiteSpace(reported))
             {
                 _logger.LogWarning(
-                    "Ollama at {Endpoint} reported no version field; assuming logprobs", Endpoint);
-                return true;
+                    "Ollama at {Endpoint} reported no version field; assuming current", Endpoint);
+                return null;
             }
 
             // Release candidates arrive as "0.12.11-rc1", which Version cannot parse.
@@ -140,22 +155,23 @@ public sealed class OllamaProvider : IHotReloadableProvider
 
             if (!Version.TryParse(numeric, out Version? version))
             {
-                _logger.LogDebug("Could not read Ollama version {Version}; assuming logprobs", reported);
-                return true;
+                _logger.LogDebug("Could not read Ollama version {Version}; assuming current", reported);
+                return null;
             }
 
-            bool supported = version >= LogprobsFromVersion;
-
             _logger.LogInformation(
-                "Ollama at {Endpoint} reports version {Version}; logprobs {Decision} (needs {Required})",
-                Endpoint, reported, supported ? "supported" : "NOT supported", LogprobsFromVersion);
+                "Ollama at {Endpoint} reports version {Version}; logprobs {Logprobs}, guided decoding {Guided}",
+                Endpoint,
+                reported,
+                version >= LogprobsFromVersion ? "supported" : "NOT supported",
+                version >= GuidedDecodingFromVersion ? "supported" : "NOT supported");
 
-            return supported;
+            return version;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "Could not read the Ollama version; assuming logprobs are available");
-            return true;
+            _logger.LogDebug(ex, "Could not read the Ollama version; assuming a current one");
+            return null;
         }
     }
 
@@ -465,7 +481,13 @@ public sealed class OllamaProvider : IHotReloadableProvider
                 // Whether this server does logprobs is a property of its version, so settle it
                 // while we are talking to it. Registration reads Capabilities straight after
                 // a health check, which is what persists the answer.
-                _capabilities = BuildCapabilities(await ServerReturnsLogprobsAsync(ct));
+                // An unreadable version is treated as current: every shipping Ollama does both,
+                // so guessing "no" over a transient failure hides working features.
+                Version? version = await ReadServerVersionAsync(ct);
+
+                _capabilities = BuildCapabilities(
+                    supportsLogprobs: version is null || version >= LogprobsFromVersion,
+                    supportsGuidedDecoding: version is null || version >= GuidedDecodingFromVersion);
             }
 
             return new HealthStatus(

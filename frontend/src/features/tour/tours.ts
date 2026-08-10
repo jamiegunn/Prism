@@ -473,11 +473,12 @@ const pageTours: Tour[] = [
       },
       {
         id: 'tags-are-filters',
-        title: 'The tag badges are buttons',
+        title: 'Tags, and one caveat',
         body:
-          'Tag runs from the detail panel and the badges in the table filter by that tag. Tag '
-          + 'ten runs "baseline" and one click brings the cohort back. Nothing about them looks '
-          + 'clickable, which is why almost nobody finds it.',
+          'Tag runs from the detail panel to group them — "baseline", "after the rewrite". The '
+          + 'badges in the table are clickable and are meant to filter by that tag, but tag '
+          + 'filtering currently fails on the server, so use the search box for now. Dates and '
+          + 'the module filter work.',
         anchor: 'history-results',
         side: 'top',
       },
@@ -592,9 +593,9 @@ const pageTours: Tour[] = [
         id: 'splits',
         title: 'Splits are seeded, so they are reproducible',
         body:
-          'Splitting by ratio uses a fixed random seed, which means the same split comes back '
-          + 'the same way. Export honours whichever split you are filtered to, so pulling out '
-          + 'just the test set is two clicks.',
+          'Splitting by ratio is reproducible when you give it a seed — the field is optional, '
+          + 'and without one the assignment differs each time you split. Export honours whichever '
+          + 'split you are filtered to, so pulling out just the test set is two clicks.',
         anchor: 'datasets-list',
         side: 'bottom',
       },

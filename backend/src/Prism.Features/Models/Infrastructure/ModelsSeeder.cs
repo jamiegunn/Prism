@@ -101,7 +101,11 @@ public sealed class ModelsSeeder : IDataSeeder
                 SupportsStreaming = true,
                 SupportsMetrics = false,
                 SupportsTokenize = false,
-                SupportsGuidedDecoding = false,
+
+                // Ollama constrains generation to a JSON schema via `format` from 0.5.0,
+                // verified against a live server. Prism's transport has always sent it; the
+                // capability flag was what kept Structured Output on the fallback path.
+                SupportsGuidedDecoding = true,
                 SupportsMultimodal = false,
                 SupportsModelSwap = true,
                 IsDefault = false,

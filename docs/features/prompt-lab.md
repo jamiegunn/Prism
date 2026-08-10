@@ -251,3 +251,41 @@ you can only put examples into a version through the API.
 - [Experiments](experiments.md) — parameter sweeps, run comparison and export
 - [Playground](playground.md) — free-form chat with token-level confidence analysis
 - [Model Management](models.md) — registering the instances the test panel needs
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | A page called an editor lets you edit | **No.** Both editors are read-only; changes go through New Version | `TemplateEditor.tsx:144,166` |
+| P2 | Writing `{{text}}` in the create dialog declares a variable | **No.** The dialog sends no `variables` and nothing extracts them from the body, so the template saves and every test then fails with "Undeclared variables" — including for the dialog's own placeholder | `CreateTemplateDialog.tsx:58-66`; `TemplateRenderer.cs:44-55` |
+| P3 | New Version preserves what the current version declared | **No.** It pre-fills the prompt text but sends no variables or few-shot examples, so v2 of a working template is untestable | `VersionSelector.tsx:41-47`; `CreateVersionHandler.cs:51-52` |
+| P4 | Fork preserves variables | **Yes** — and it is the only UI path that keeps a parameterised template working | `ForkTemplateHandler.cs:43-56` |
+| P5 | Test uses the model named on the template | **No** — it uses the selected instance's model, so the same version tests different models depending on the dropdown. Correct, but unstated | `TestPromptHandler.cs:99` |
+| P6 | Compare (multi) runs instances in parallel | **No** — an awaited loop, one at a time | `TestPanel.tsx:133-156` |
+
+P2 and P3 together mean the variables feature is reachable only by forking something that already had them.
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Selecting a template shows its latest version's prompt, variables and examples | click a seeded template | MET |
+| R2 | Template search filters as you type, with no Apply step | type "code" | MET |
+| R3 | Testing shows output, latency, tokens and the model that produced it, and results persist for comparison | run a Quick Test | MET |
+| R4 | A failed test states why | select an offline instance and run | MET |
+| R5 | Input Sets survive a reload and reload values in one click | save a set, reload, apply | MET |
+| R6 | Fork produces a template that is immediately testable | fork a seeded template and test it | MET |
+| R7 | A template created with `{{variable}}` in its body can be tested | none — "Undeclared variables in template" | **UNMET** |
+| R8 | Creating a new version leaves a parameterised template testable | none — variables are not carried forward | **UNMET** |
+| R9 | Diff shows the differences between two versions | none — the client calls `/versions/diff`, the route is `/diff`; 404, and the panel shows its placeholder rather than an error | **UNMET** |
+| R10 | A persisted category filter can always be cleared | none — the "All" badge only renders when the filtered result yields categories, so a stale category strands the list | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Two prompt versions can be A/B tested from this page | `useAbTest` and a complete backend handler exist with no UI. Either build it or delete the hook and record the endpoint as API-only — the tour no longer claims it | this review — flagged, not decided |

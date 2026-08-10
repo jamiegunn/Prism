@@ -95,11 +95,16 @@ public sealed class GuidedDecodingPayloadTests
     /// <summary>
     /// Capability reporting must match what the providers can actually do, since the handler
     /// gates native guidance on it and falls back to instructions otherwise.
+    ///
+    /// Ollama constrains generation with `format` from 0.5.0, verified against a live server:
+    /// asking for a person against a two-field schema returns exactly that object. This test
+    /// previously asserted false, which is what kept Structured Output on the fallback path and
+    /// telling every Ollama user the schema could not be enforced.
     /// </summary>
     [Theory]
     [InlineData(InferenceProviderType.Vllm, true)]
     [InlineData(InferenceProviderType.OpenAiCompatible, false)]
-    [InlineData(InferenceProviderType.Ollama, false)]
+    [InlineData(InferenceProviderType.Ollama, true)]
     public void Guided_Decoding_Capability_Is_Reported_Honestly(
         InferenceProviderType providerType, bool expected)
     {

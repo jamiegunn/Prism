@@ -263,3 +263,44 @@ the experiment, leave it alone, and let it be wrong sometimes.
 - [Prompt Lab](prompt-lab.md) — versioned prompts to sweep against
 - [Datasets](datasets.md) — seeded, recorded train/test/val splits
 - [Model Management](models.md) — registering the instances a sweep runs on
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | The run table's own advice, "Create runs from the Prompt Lab or API", is accurate | **No.** Prompt Lab never sends `saveAsRunExperimentId`, so Sweep is the only UI path that creates runs | `RunTable.tsx:152`; `TestPanel.tsx:101-110` |
+| P2 | A sweep's completed runs survive an interruption | **No.** Runs are held in a list and saved only after the last combination returns, so a dropped request loses even the ones that succeeded | `RunSweepHandler.cs:152` |
+| P3 | "Capture logprobs" produces something readable here | **No.** It writes a token trace to History but sets neither `LogprobsData` nor `Perplexity` on the run, so the Perplexity card stays empty | `RunSweepHandler.cs:93-133` |
+| P4 | The Cost column measures something | **No.** `Run.Cost` is only ever set by an endpoint nothing calls; every row reads `-` | `CreateRunHandler.cs:57` |
+| P5 | Run selection is scoped to the experiment you are viewing | **No.** It lives in a global store and is not cleared on navigation, so the banner follows you and Compare then errors | `experiments/store.ts:34` |
+| P6 | CSV export contains what the page shows | **No.** No input, output, parameters, tags or custom metrics — a sweep's CSV does not contain its temperatures. JSON export does | `ExportRunsHandler.cs:59-78` |
+| P7 | Archiving is reversible | **No.** The endpoint accepts Active; the UI only ever sends Completed or Archived | `ExperimentDetailPage.tsx:86-118` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | A project and an experiment with a hypothesis can be created without leaving the UI | click-path from `/experiments` | MET |
+| R2 | The hypothesis is shown on the experiment it belongs to | open a seeded experiment | MET |
+| R3 | A sweep produces one recorded run per combination, named and tagged | run a 4-value temperature sweep | MET |
+| R4 | The sweep states the number of generations, and that they are sequential, before you commit | open the dialog and read the footer | MET |
+| R5 | Comparing runs shows only the parameters that differed | tick two runs, Compare | MET |
+| R6 | A metric that was not measured is drawn as absent, not as zero | compare a seeded run with a sweep run on perplexity | MET |
+| R7 | JSON export contains input, output, parameters, tags and metrics | `GET .../runs/export?format=json` | MET |
+| R8 | A bad experiment or project id says not found rather than loading forever | navigate to a zero GUID | MET |
+| R9 | Deleting a run removes its row and reports success | fixed by the 204 handling in `apiClient` | MET |
+| R10 | An interrupted sweep keeps the runs that had already completed | none — see P2 | **UNMET** |
+| R11 | Capturing logprobs makes a perplexity figure visible on the run | none — see P3 | **UNMET** |
+| R12 | CSV export contains the parameter that was swept | none — see P6 | **UNMET** |
+| R13 | Selecting runs in one experiment leaves no selection banner on another | none — see P5 | **UNMET** |
+| R14 | An archived experiment can be returned to Active | none — the endpoint supports it, the UI never sends it | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | A run carries its own token trace | The trace is already recorded against the History record for the same call; duplicating it on the run is the thing to decide against | this review |

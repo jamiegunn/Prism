@@ -208,3 +208,40 @@ retrospective version of this task is searching response text for a phrase you h
 - [Playground](playground.md) — where most records come from
 - [Token Explorer](token-explorer.md) — predictions, steps and branches all land here too
 - [Model Management](models.md) — which providers populate perplexity and TTFT
+
+---
+
+## Functional requirements
+
+### Presuppositions
+
+| # | Presupposition | Holds on a cold install? | Evidence |
+|---|---|---|---|
+| P1 | Every inference from every module is recorded | **Yes** — recording wraps the single point where providers are constructed, so no feature can bypass it | `InferenceProviderFactory.cs:73-85` |
+| P2 | Every record carries the label its Source filter uses | **No.** Batch and Evaluation set no `SourceModule` and persist as `unknown`; sweeps persist as `experiments-sweep` | `BatchJobHandler.cs:232`, `EvaluationJobHandler.cs:242`, `RunSweepHandler.cs:96` |
+| P3 | The Source dropdown's options correspond to labels that exist | **No.** Measured live: `playground` 11, `token-explorer` 32, `unknown` 12; `experiments`, `batch-inference`, `prompt-lab`, `rag` and `agents` all zero. Labels that are written have no option and vice versa | `history/utils.ts:48-57` |
+| P4 | The seeded rows are reachable through the filters | **No.** The seeder writes `Playground` and `TokenExplorer` capitalised; the filter is exact equality | `HistorySeeder.cs:42`, `SearchHistoryHandler.cs:82` |
+| P5 | The model filter matches loosely | **No** — exact equality. `mistral` returns nothing; `mistral:7b-instruct` returns rows | `SearchHistoryHandler.cs:87` |
+| P6 | Perplexity and TTFT are recorded for every call | **No** — only when the response carried logprobs | `InferenceRecordPersistenceService.cs:97-107` |
+
+### Requirements
+
+| # | Requirement | Verified by | Status |
+|---|---|---|---|
+| R1 | Unfiltered, the table lists recent calls newest-first with working pagination | `GET /history?page=2&pageSize=20` returns page 2 of 3 | MET |
+| R2 | A call made anywhere appears without having been marked as worth keeping | send a Playground message, reload | MET |
+| R3 | Search matches prompt and response text | `GET /history?search=capital` returns rows | MET |
+| R4 | Setting a date filters the table rather than erroring | `GET /history?from=2026-08-01` → 200 with 48 rows (was 500 — `DateTimeKind.Unspecified` against a timestamptz column) | MET |
+| R5 | Copy Request and Copy Response place the stored JSON on the clipboard | click either, paste | MET |
+| R6 | Reset returns to the unfiltered first page | set filters, Reset | MET |
+| R7 | Adding a tag reports success when the server stored it | fixed by the 204 handling in `apiClient` | MET |
+| R8 | Clicking a tag badge filters by that tag | none — `Tags.Contains` on a jsonb-converted list is untranslatable and returns 500 | **UNMET** |
+| R9 | Every Source option returns rows when that module has run | none — see P2/P3 | **UNMET** |
+| R10 | A failed call's error message is visible | none — stored and returned, rendered nowhere | **UNMET** |
+| R11 | Replay shows the original and the replay side by side | none — the DTO returns an object where the client's type declares a string, so the diff call fails | **UNMET** |
+
+### Withdrawn
+
+| # | Requirement | Why withdrawn | Decided by |
+|---|---|---|---|
+| W1 | Replays are themselves recorded as comparable runs | `ReplayRun` and its table exist with no writer, and `IReplayService` is a second replay implementation nothing injects. Two paths that disagree is worse than one | this review |

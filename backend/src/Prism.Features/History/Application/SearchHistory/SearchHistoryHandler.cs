@@ -87,14 +87,24 @@ public sealed class SearchHistoryHandler
             queryable = queryable.Where(r => r.Model == query.Model);
         }
 
+        // The date pickers send a bare "2026-08-09", which minimal-API binding turns into a
+        // DateTime with Kind=Unspecified — and Npgsql refuses to compare that against a
+        // `timestamp with time zone`, so every date filter returned a 500 rather than rows.
+        // The column is UTC, so an unqualified date is read as a UTC one.
         if (query.From.HasValue)
         {
-            queryable = queryable.Where(r => r.StartedAt >= query.From.Value);
+            DateTime from = DateTime.SpecifyKind(query.From.Value, DateTimeKind.Utc);
+            queryable = queryable.Where(r => r.StartedAt >= from);
         }
 
         if (query.To.HasValue)
         {
-            queryable = queryable.Where(r => r.StartedAt <= query.To.Value);
+            // Inclusive of the day chosen: a bare date binds to midnight at its start, so
+            // "To = today" would otherwise exclude everything that happened today.
+            DateTime to = DateTime.SpecifyKind(query.To.Value, DateTimeKind.Utc);
+            DateTime toEndOfDay = to.TimeOfDay == TimeSpan.Zero ? to.AddDays(1).AddTicks(-1) : to;
+
+            queryable = queryable.Where(r => r.StartedAt <= toEndOfDay);
         }
 
         if (query.Tags is { Count: > 0 })

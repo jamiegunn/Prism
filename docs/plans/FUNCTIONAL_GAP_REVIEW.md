@@ -1,6 +1,6 @@
 # Functional Gap Review — plan
 
-**Status:** all phases done. Requirements written for 12 of 15 tabs; History, Prompt Lab and Experiments remain.
+**Status:** complete. All phases done and all fifteen requirements tables written.
 **Trigger:** writing a guided tour for all fifteen tabs required reading each page against its
 code. Six tours had to be rewritten because the page did not do what its name implied, and two
 already-shipped tour steps described capabilities that do not exist. A tour is only a symptom:
@@ -258,6 +258,11 @@ Each phase ends with the requirements table for the affected tabs updated, and
 ---
 
 ## What remains
+
+**Nothing in this plan.** All fifteen tables are written. What they record is the honest UNMET
+list, which is the next body of work rather than a gap in this one.
+
+*Historical note on the original scope:*
 
 **Nine of the fifteen requirements tables.** Written so far: Models, Playground, Token Explorer,
 Evaluation, Batch Inference, Notebooks — chosen because this session produced first-hand evidence

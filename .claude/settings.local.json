@@ -103,7 +103,26 @@
       "Bash(node /private/tmp/claude-501/-Users-techdesigns-dev-Prism/a198c7e8-6ad4-41f1-9deb-e813a0d0d945/scratchpad/phase0.mjs)",
       "Bash(echo \"tsc exit=$?\")",
       "Bash(echo \"tsc -b exit=$?\")",
-      "Bash(node /private/tmp/claude-501/-Users-techdesigns-dev-Prism/a198c7e8-6ad4-41f1-9deb-e813a0d0d945/scratchpad/phase1.mjs)"
+      "Bash(node /private/tmp/claude-501/-Users-techdesigns-dev-Prism/a198c7e8-6ad4-41f1-9deb-e813a0d0d945/scratchpad/phase1.mjs)",
+      "Bash(sed -n '/useStartEvaluation/,/^}/p' frontend/src/features/evaluation/api.ts)",
+      "Bash(sed -n '/useCreateBatchJob/,/^}/p' frontend/src/features/batch-inference/api.ts)",
+      "Bash(sed -n '/export function useEvaluations/,/^}/p' src/features/evaluation/api.ts)",
+      "Bash(sed -n '/export function useBatchJobs/,/^}/p' src/features/batch-inference/api.ts)",
+      "Bash(node /private/tmp/claude-501/-Users-techdesigns-dev-Prism/a198c7e8-6ad4-41f1-9deb-e813a0d0d945/scratchpad/phase2.mjs)",
+      "Bash(chmod +x frontend/public/jupyterlite/setup.sh)",
+      "Bash(git check-ignore *)",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(python3 -c \"import sys,json;print\\(json.load\\(sys.stdin\\).get\\('totalCount'\\)\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(len\\(d\\),[t['name'] for t in d]\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(json.dumps\\(d['latestVersionContent']['variables'],indent=1\\)\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\([\\(p['name'],p['experimentCount']\\) for p in d]\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\([\\(e['id'],e['name'],e['status'],e['runCount']\\) for e in d]\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\([\\(i['name'],i['status'],i.get\\('modelId'\\)\\) for i in d]\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);[print\\(r['name'],r['status'],r['cost'],r['perplexity'],r['metrics'],r['tokensPerSecond']\\) for r in d['items']]\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d['scripts']\\)\")",
+      "Bash(python3 -c \"import sys,json;print\\(len\\(json.load\\(sys.stdin\\)\\)\\)\")",
+      "Bash(python3 -c \"import sys,json;print\\(json.load\\(sys.stdin\\)['totalCount']\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d['page'],d['totalPages'],len\\(d['items']\\)\\)\")"
     ]
   }
 }
