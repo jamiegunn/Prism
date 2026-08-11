@@ -50,6 +50,12 @@ done, regardless of whether it works.
    guards, watch it go red, restore. A test never observed failing is not known to test anything.
 5. **Requirements are updated in the same change.** The tab's `docs/features/<tab>.md`
    requirements table gains the new rows, MET with the check that proved them.
+6. **Proved in a real browser, not only in tests.** Chrome is installed and the Claude extension
+   is connected, so every capability is exercised in the running app: the working path and the
+   failure path both screenshotted, the console read rather than assumed clean, and — where the
+   request's parameters are the point — the network log cited instead of the rendered result.
+   Call `list_connected_browsers` first; an empty list means Chrome is closed, not broken.
+7. **Finish the plan.** See below.
 
 ---
 
@@ -150,6 +156,32 @@ in the API.
 
 **A new charting library.** Recharts is present and adequate. `MetricChart` already refuses to
 plot a missing value as zero, which is the behaviour that matters.
+
+---
+
+## Do not stop part-way
+
+This plan is executed to completion. Phases are an order of work, not permission to stop between
+them: a half-done plan leaves the repository in the state this whole effort exists to correct —
+capabilities that are implemented but unreachable, numbers that are computed but uncited, docs
+that describe an intent rather than the code.
+
+Concretely, while any item remains:
+
+- **Do not stop to ask whether to continue.** The decision has been taken. Ask only when blocked
+  on something genuinely outside your reach — a credential, a destructive action, or a product
+  decision the plan does not already settle.
+- **Do not stop because the session is long.** Carry on; if context runs short, commit what is
+  proven, write down precisely where you are and what remains, and continue.
+- **A phase is finished when its proof obligations are met**, not when the code compiles.
+- **If an item turns out to be wrong**, say so with evidence and amend the plan rather than
+  quietly skipping it. Withdrawing an item is a decision to record, not an omission.
+- **Report progress as you go** — after each item, state what was proved and how. Do not go quiet
+  for a phase at a time.
+
+The plan is complete when every item is either MET with the check that proved it, or WITHDRAWN
+with a reason, in the relevant `docs/features/<tab>.md` table — and `docs/product-truth.yaml`
+reflects it.
 
 ---
 

@@ -110,7 +110,39 @@ npm test
 
 **Then run it in a browser.** Unit tests here have repeatedly been green while the feature was
 broken, because the defects were in wiring, timing and rendering. Drive the real app: click the
-control, force the failure path (intercept the request and return a 500), and screenshot both.
+control, force the failure path, and screenshot both.
+
+### Use Claude in Chrome for this
+
+Chrome is installed on this machine and the Claude extension is set up, so the proving pass runs
+in a real browser rather than a headless script. Use it — it sees things a script does not.
+
+**Before you start:** call `list_connected_browsers`. An empty list means **Chrome is not
+running**, not that the extension is broken — the link exists only while Chrome is open. Start
+Chrome and call it again. Then confirm with the user which browser to use before acting, because
+these tools drive their live session, not a throwaway profile.
+
+What it gives you that a headless run does not:
+
+- **`read_console_messages`** — React warnings, key collisions, effect loops and uncaught
+  rejections that never reach the DOM. Filter with `pattern` rather than reading everything.
+  A green screenshot with a red console is not a pass.
+- **`read_network_requests`** — proof that the request carried what you think. This is how you
+  show a window control actually sent `from=`, or that an export sent `format=jsonl` and the
+  active filters. Asserting the UI changed is weaker than showing the wire.
+- **`javascript_tool`** — force state directly: seed `localStorage`, resolve a CSS variable,
+  read a computed style. The chart colours that rendered near-white were proved this way, by
+  evaluating `getComputedStyle` rather than by looking at a screenshot.
+- **Screenshots of both paths**, which the definition of done requires.
+
+**Two cautions.** Do not trigger native `alert`/`confirm`/`prompt` dialogs — they block the
+extension until dismissed by hand, and several pages here use `confirm()` for delete. And the
+first `<select>` on any page is the workspace switcher, so select by content, never by index.
+
+**Interactive proving, not permanent guard.** Claude in Chrome is how you convince yourself and
+produce the evidence. The regression that stops it breaking again belongs in a script or a spec.
+Note that `@playwright/test` is configured here but not installed and its CI job is red — an open
+decision, so check before assuming you can add a spec.
 
 ### Traps in this repository, learned the hard way
 
@@ -159,8 +191,11 @@ what you tried.
 
 ## Definition of done
 
-- [ ] Reachable in the running app, verified in a browser, with a screenshot of the working path
-      and of the failure path.
+- [ ] Reachable in the running app, verified in a real browser via Claude in Chrome, with a
+      screenshot of the working path and of the failure path.
+- [ ] The browser console is clean during that verification — checked, not assumed.
+- [ ] Where a request's parameters matter, the network log is cited as evidence rather than the
+      rendered result.
 - [ ] Reference vectors, invariants and a hand-worked example all present and passing.
 - [ ] Every new test observed failing when its subject is broken.
 - [ ] Missing data renders as absent, never as zero, and is excluded from aggregates.
@@ -170,6 +205,27 @@ what you tried.
       proved them; any presupposition discovered added, with whether it holds on a cold install.
 - [ ] Nothing new is unreachable — every export has a caller.
 - [ ] Both adversarial passes documented.
+
+---
+
+## Do not stop part-way
+
+If you were given more than one item — or the whole plan — finish it.
+
+- **Do not stop to ask whether to continue.** That decision is already taken. Ask only when
+  genuinely blocked: a credential you do not have, a destructive action, or a product decision
+  the plan does not settle.
+- **Do not stop because the session is long.** If context runs short, commit what is proven,
+  write down exactly where you are and what remains, and carry on.
+- **Do not stop at "the code compiles".** An item is finished when its proof obligations are met
+  and it is reachable in the browser.
+- **Report as you go.** After each item, say what was proved and how. Do not go silent for a
+  phase at a time and surface one large claim at the end.
+- **If an item turns out to be wrong**, say so with evidence and amend the plan. Withdrawing an
+  item is a decision to record, not something to skip quietly.
+
+Done means every item is MET with the check that proved it, or WITHDRAWN with a reason, in the
+relevant `docs/features/<tab>.md` table.
 
 ---
 
