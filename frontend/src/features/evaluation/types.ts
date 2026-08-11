@@ -41,16 +41,40 @@ export interface EvaluationResult {
 export interface EvaluationSummary {
   evaluationId: string
   modelSummaries: ModelSummary[]
+  /** Definition of every metric in the summaries, recorded when the evaluation ran. */
+  scoreDefinitions: Record<string, string>
 }
 
 export interface ModelSummary {
   model: string
   recordCount: number
+  /** Mean per-item (sentence-level) score per scoring method. */
   averageScores: Record<string, number>
-  averageLatencyMs: number
+  /** Corpus-level metrics from pooled statistics — not means of per-item scores. */
+  corpusMetrics: Record<string, number>
+  /** Mean latency over successful items; null when nothing succeeded. */
+  averageLatencyMs: number | null
   totalPromptTokens: number
   totalCompletionTokens: number
   errorCount: number
+}
+
+export interface CalibrationPrediction {
+  confidence: number
+  isCorrect: boolean
+}
+
+export interface Calibration {
+  evaluationId: string
+  model: string
+  predictions: CalibrationPrediction[]
+  ece: number | null
+  brier: number | null
+  binCount: number
+  totalResults: number
+  withLogprobs: number
+  withLabel: number
+  definition: string
 }
 
 export interface LeaderboardEntry {

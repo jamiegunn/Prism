@@ -12,6 +12,14 @@ public interface IScoringMethod
     string Name { get; }
 
     /// <summary>
+    /// Gets the human-readable definition of what this scorer computes — tokenization,
+    /// smoothing, scale, reference implementation and version where one exists. Recorded on
+    /// the evaluation at run time and shown next to the number, because a metric without its
+    /// definition is not a citable number: BLEU alone names a family of values, not a value.
+    /// </summary>
+    string Definition { get; }
+
+    /// <summary>
     /// Scores the actual output against the expected output.
     /// </summary>
     /// <param name="input">The input text sent to the model.</param>

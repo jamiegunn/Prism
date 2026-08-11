@@ -10,6 +10,10 @@ public sealed class ExactMatchScorer : IScoringMethod
     public string Name => "exact_match";
 
     /// <inheritdoc />
+    public string Definition =>
+        "Exact string equality after trimming, case-insensitive. 1.0 on match, else 0.0.";
+
+    /// <inheritdoc />
     public Task<double> ScoreAsync(string input, string expected, string actual, CancellationToken ct)
     {
         double score = string.Equals(expected.Trim(), actual.Trim(), StringComparison.OrdinalIgnoreCase)

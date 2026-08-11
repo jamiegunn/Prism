@@ -31,6 +31,7 @@ public static class EvaluationModule
         services.AddScoped<GetEvaluationHandler>();
         services.AddScoped<CancelEvaluationHandler>();
         services.AddScoped<GetEvaluationResultsHandler>();
+        services.AddScoped<Application.GetCalibration.GetCalibrationHandler>();
         services.AddScoped<GetResultRecordsHandler>();
         services.AddScoped<ExportResultsHandler>();
         services.AddScoped<GetLeaderboardHandler>();

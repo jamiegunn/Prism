@@ -10,6 +10,10 @@ public sealed class ContainsScorer : IScoringMethod
     public string Name => "contains";
 
     /// <inheritdoc />
+    public string Definition =>
+        "Substring containment: 1.0 when the output contains the trimmed expected text, case-insensitive; else 0.0.";
+
+    /// <inheritdoc />
     public Task<double> ScoreAsync(string input, string expected, string actual, CancellationToken ct)
     {
         double score = actual.Contains(expected.Trim(), StringComparison.OrdinalIgnoreCase)

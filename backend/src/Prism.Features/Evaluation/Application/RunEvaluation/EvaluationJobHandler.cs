@@ -9,6 +9,7 @@ using Prism.Common.Jobs;
 using Prism.Common.Results;
 using Prism.Features.Datasets.Domain;
 using Prism.Features.Evaluation.Domain;
+using Prism.Features.Evaluation.Domain.Scorers;
 using Prism.Features.Models.Application;
 using Prism.Features.Models.Domain;
 
@@ -89,7 +90,6 @@ public sealed class EvaluationJobHandler : IJobHandler
         await _db.SaveChangesAsync(ct);
 
         List<DatasetRecord> records = await LoadRecordsAsync(evaluation, ct);
-        Dictionary<string, IScoringMethod> scorers = ResolveScorers(evaluation);
 
         // Resuming a retried job: skip pairs already scored.
         HashSet<(Guid RecordId, string Model)> alreadyDone = (await _db.Set<EvaluationResult>()
@@ -100,8 +100,12 @@ public sealed class EvaluationJobHandler : IJobHandler
             .Select(x => (x.RecordId, x.Model))
             .ToHashSet();
 
+        // The default instance, not an arbitrary one: picking whatever row came first is
+        // how a run ended up on a dead seeded endpoint while the healthy default sat idle.
         InferenceInstance? instance = await _db.Set<InferenceInstance>()
             .AsNoTracking()
+            .OrderByDescending(i => i.IsDefault)
+            .ThenByDescending(i => i.Status == InstanceStatus.Online)
             .FirstOrDefaultAsync(ct);
 
         if (instance is null)
@@ -115,6 +119,18 @@ public sealed class EvaluationJobHandler : IJobHandler
 
         foreach (string model in evaluation.Models)
         {
+            // Resolved per model because llm_judge needs a judge model; the definitions each
+            // scorer reports are recorded on the evaluation so every number stays citable
+            // after the implementation moves on.
+            Dictionary<string, IScoringMethod> scorers = ResolveScorers(evaluation, provider, model);
+
+            foreach ((string name, IScoringMethod scorer) in scorers)
+            {
+                evaluation.ScoreDefinitions[name] = scorer.Definition;
+            }
+
+            await _db.SaveChangesAsync(ct);
+
             foreach (DatasetRecord record in records)
             {
                 ct.ThrowIfCancellationRequested();
@@ -192,7 +208,7 @@ public sealed class EvaluationJobHandler : IJobHandler
         ArgumentNullException.ThrowIfNull(record);
 
         string? input = FirstNonEmpty(record.Data, "input", "prompt", "question", "instruction", "text");
-        string? expected = FirstNonEmpty(record.Data, "expected", "output", "answer", "completion", "target", "reference");
+        string? expected = FirstNonEmpty(record.Data, "expected", "output", "answer", "completion", "target", "reference", "label");
 
         return (input ?? string.Empty, expected);
     }
@@ -238,11 +254,19 @@ public sealed class EvaluationJobHandler : IJobHandler
 
         var stopwatch = Stopwatch.StartNew();
 
+        // Logprobs are requested when the provider claims support: they cost nothing to
+        // store and are what calibration (ECE, Brier) is computed from later. Whatever comes
+        // back is stored even if the capability flag was wrong — flags here have lied before.
+        bool requestLogprobs = provider.Capabilities.SupportsLogprobs;
+
         Result<ChatResponse> response = await provider.ChatAsync(
             new ChatRequest
             {
                 Model = model,
                 Messages = [ChatMessage.User(input)],
+                Logprobs = requestLogprobs,
+                TopLogprobs = requestLogprobs ? 5 : null,
+                SourceModule = "evaluation",
             },
             ct);
 
@@ -260,6 +284,13 @@ public sealed class EvaluationJobHandler : IJobHandler
         result.ActualOutput = response.Value.Content;
         result.PromptTokens = response.Value.Usage?.PromptTokens ?? 0;
         result.CompletionTokens = response.Value.Usage?.CompletionTokens ?? 0;
+
+        if (response.Value.LogprobsData is { Tokens.Count: > 0 } logprobs)
+        {
+            result.LogprobsData = JsonSerializer.Serialize(logprobs);
+            result.Perplexity = Prism.Common.Inference.Metrics.LogprobsCalculator
+                .CalculatePerplexity(logprobs);
+        }
 
         foreach ((string name, IScoringMethod scorer) in scorers)
         {
@@ -293,7 +324,8 @@ public sealed class EvaluationJobHandler : IJobHandler
         return await query.OrderBy(r => r.OrderIndex).ToListAsync(ct);
     }
 
-    private Dictionary<string, IScoringMethod> ResolveScorers(EvaluationEntity evaluation)
+    private Dictionary<string, IScoringMethod> ResolveScorers(
+        EvaluationEntity evaluation, IInferenceProvider provider, string model)
     {
         Dictionary<string, IScoringMethod> available =
             _scorers.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
@@ -305,6 +337,12 @@ public sealed class EvaluationJobHandler : IJobHandler
             if (available.TryGetValue(requested, out IScoringMethod? scorer))
             {
                 resolved[scorer.Name] = scorer;
+            }
+            else if (string.Equals(requested, "llm_judge", StringComparison.OrdinalIgnoreCase))
+            {
+                // The judge cannot live in DI: it needs a provider and a judge model, both
+                // chosen per run. Constructed here, judging with the model under test.
+                resolved["llm_judge"] = new LlmJudgeScorer(provider, model);
             }
             else
             {

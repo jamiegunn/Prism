@@ -27,10 +27,10 @@ import { useStartEvaluation } from '../api'
 const SCORERS: { id: string; label: string; blurb: string }[] = [
   { id: 'exact_match', label: 'Exact match', blurb: 'Identical to the expected value, or not' },
   { id: 'contains', label: 'Contains', blurb: 'The expected value appears somewhere in the answer' },
-  { id: 'rouge_l', label: 'ROUGE-L', blurb: 'Longest common subsequence — overlap, order-aware' },
-  { id: 'bleu', label: 'BLEU', blurb: 'N-gram precision against the expected text' },
+  { id: 'rouge_l', label: 'ROUGE-L', blurb: 'LCS F1, rouge-score definition — overlap, order-aware' },
+  { id: 'bleu', label: 'BLEU', blurb: 'Sentence BLEU-4, sacrebleu definition (13a, exp smoothing)' },
   { id: 'length_ratio', label: 'Length ratio', blurb: 'Answer length over expected length' },
-  { id: 'llm_judge', label: 'LLM judge', blurb: 'A model grades the answer. Costs inference.' },
+  { id: 'llm_judge', label: 'LLM judge', blurb: 'The model under test grades its own answer. Costs inference.' },
 ]
 
 /**

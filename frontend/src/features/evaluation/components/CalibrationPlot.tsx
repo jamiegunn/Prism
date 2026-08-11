@@ -13,6 +13,12 @@ interface CalibrationPoint {
 interface CalibrationPlotProps {
   /** Array of results with predicted confidence and actual correctness */
   results: { confidence: number; isCorrect: boolean }[]
+  /**
+   * Server-computed ECE. When provided it is displayed instead of a client-side
+   * recomputation — the backend value is the proved one, and two computations of "the" ECE
+   * is how a UI ends up disagreeing with an export.
+   */
+  ece?: number | null
   className?: string
 }
 
@@ -21,7 +27,7 @@ interface CalibrationPlotProps {
  * A perfectly calibrated model falls on the diagonal line.
  * Points above the line = underconfident, below = overconfident.
  */
-export function CalibrationPlot({ results, className }: CalibrationPlotProps) {
+export function CalibrationPlot({ results, ece: serverEce, className }: CalibrationPlotProps) {
   if (results.length === 0) {
     return (
       <Card className={className}>
@@ -57,12 +63,14 @@ export function CalibrationPlot({ results, className }: CalibrationPlotProps) {
     }))
     .filter((p) => p.count > 0)
 
-  // Compute Expected Calibration Error (ECE)
+  // Prefer the server-computed ECE; fall back to the same 10-bin computation locally.
   const totalCount = results.length
-  const ece = points.reduce(
-    (acc, p) => acc + (p.count / totalCount) * Math.abs(p.predicted - p.actual),
-    0
-  )
+  const ece =
+    serverEce ??
+    points.reduce(
+      (acc, p) => acc + (p.count / totalCount) * Math.abs(p.predicted - p.actual),
+      0
+    )
 
   return (
     <Card className={className}>

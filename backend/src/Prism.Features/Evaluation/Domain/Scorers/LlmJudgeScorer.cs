@@ -12,18 +12,30 @@ namespace Prism.Features.Evaluation.Domain.Scorers;
 public sealed class LlmJudgeScorer : IScoringMethod
 {
     private readonly IInferenceProvider _provider;
+    private readonly string _model;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LlmJudgeScorer"/> class.
     /// </summary>
     /// <param name="provider">The inference provider to use for judging.</param>
-    public LlmJudgeScorer(IInferenceProvider provider)
+    /// <param name="model">The model that acts as the judge. Historically this scorer sent an
+    /// empty model name, which every provider rejects — the reason it could never be wired
+    /// into dependency injection.</param>
+    public LlmJudgeScorer(IInferenceProvider provider, string model)
     {
         _provider = provider;
+        _model = model;
     }
 
     /// <inheritdoc />
     public string Name => "llm_judge";
+
+    /// <inheritdoc />
+    public string Definition =>
+        $"LLM-as-judge (judge model: {_model}): rates accuracy, completeness and relevance, " +
+        "returning a number in [0, 1]; 0.0 on judge failure. Judge-model-dependent — not " +
+        "comparable across judge models, and the judge here is the model under test scoring " +
+        "its own output.";
 
     /// <inheritdoc />
     public async Task<double> ScoreAsync(string input, string expected, string actual, CancellationToken ct)
@@ -47,7 +59,7 @@ public sealed class LlmJudgeScorer : IScoringMethod
 
         var request = new ChatRequest
         {
-            Model = "",
+            Model = _model,
             Messages =
             [
                 ChatMessage.System(systemPrompt),

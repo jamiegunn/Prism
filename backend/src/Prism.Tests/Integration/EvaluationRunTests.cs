@@ -217,7 +217,10 @@ public sealed class EvaluationRunTests
         await using AppDbContext db = _fixture.CreateContext();
         Guid datasetId = await SeedDatasetAsync(db, [("q", "a")]);
 
-        var start = new StartEvaluationHandler(db, NullLogger<StartEvaluationHandler>.Instance);
+        var start = new StartEvaluationHandler(
+            db,
+            [new ExactMatchScorer(), new RougeLScorer()],
+            NullLogger<StartEvaluationHandler>.Instance);
 
         Result<EvaluationDto> created = await start.HandleAsync(
             new StartEvaluationCommand(

@@ -11,6 +11,10 @@ public sealed class LengthRatioScorer : IScoringMethod
     public string Name => "length_ratio";
 
     /// <inheritdoc />
+    public string Definition =>
+        "min(len)/max(len) of trimmed character lengths, in [0, 1]; 1.0 for equal lengths. Measures verbosity, not correctness.";
+
+    /// <inheritdoc />
     public Task<double> ScoreAsync(string input, string expected, string actual, CancellationToken ct)
     {
         int expectedLen = expected.Trim().Length;

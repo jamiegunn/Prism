@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/apiClient'
 import type {
+  Calibration,
   Evaluation,
   EvaluationSummary,
   EvaluationResult,
@@ -71,6 +72,20 @@ export function useEvaluationResults(id: string | null) {
   return useQuery({
     queryKey: [...EVALUATIONS_KEY, id, 'results'],
     queryFn: () => apiClient<EvaluationSummary>(`/evaluation/${id}/results`),
+    enabled: !!id,
+  })
+}
+
+/** Calibration (reliability points, ECE, Brier) for one model's answers in an evaluation. */
+export function useCalibration(id: string | null, model?: string) {
+  const params = new URLSearchParams()
+  if (model) params.set('model', model)
+  const query = params.toString()
+
+  return useQuery({
+    queryKey: [...EVALUATIONS_KEY, id, 'calibration', { model }],
+    queryFn: () =>
+      apiClient<Calibration>(`/evaluation/${id}/calibration${query ? `?${query}` : ''}`),
     enabled: !!id,
   })
 }

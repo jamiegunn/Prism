@@ -27,14 +27,19 @@ public sealed record StartEvaluationCommand(
 public sealed class StartEvaluationHandler
 {
     private readonly AppDbContext _db;
+    private readonly IEnumerable<IScoringMethod> _scorers;
     private readonly ILogger<StartEvaluationHandler> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StartEvaluationHandler"/> class.
     /// </summary>
-    public StartEvaluationHandler(AppDbContext db, ILogger<StartEvaluationHandler> logger)
+    public StartEvaluationHandler(
+        AppDbContext db,
+        IEnumerable<IScoringMethod> scorers,
+        ILogger<StartEvaluationHandler> logger)
     {
         _db = db;
+        _scorers = scorers;
         _logger = logger;
     }
 
@@ -56,6 +61,25 @@ public sealed class StartEvaluationHandler
         if (command.ScoringMethods.Count == 0)
         {
             return Error.Validation("At least one scoring method must be specified.");
+        }
+
+        // Reject unknown scorer names up front. The runner used to drop them silently, so a
+        // typo — or the UI offering a scorer the backend never registered — produced an
+        // evaluation that quietly computed less than it was asked to.
+        HashSet<string> known = _scorers
+            .Select(s => s.Name)
+            .Append("llm_judge")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        List<string> unknown = command.ScoringMethods
+            .Where(m => !known.Contains(m))
+            .ToList();
+
+        if (unknown.Count > 0)
+        {
+            return Error.Validation(
+                $"Unknown scoring method(s): {string.Join(", ", unknown)}. " +
+                $"Available: {string.Join(", ", known.OrderBy(k => k))}.");
         }
 
         Dataset? dataset = await _db.Set<Dataset>()

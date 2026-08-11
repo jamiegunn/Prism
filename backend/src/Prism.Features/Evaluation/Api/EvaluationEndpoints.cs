@@ -8,6 +8,7 @@ using Prism.Features.Evaluation.Api.Requests;
 using Prism.Features.Evaluation.Application.CancelEvaluation;
 using Prism.Features.Evaluation.Application.Dtos;
 using Prism.Features.Evaluation.Application.ExportResults;
+using Prism.Features.Evaluation.Application.GetCalibration;
 using Prism.Features.Evaluation.Application.GetEvaluation;
 using Prism.Features.Evaluation.Application.GetEvaluationResults;
 using Prism.Features.Evaluation.Application.GetLeaderboard;
@@ -63,6 +64,12 @@ public static class EvaluationEndpoints
             .WithName("GetResultRecords")
             .WithSummary("Gets individual evaluation result records with pagination")
             .Produces<PagedResult<EvaluationResultDto>>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}/calibration", GetCalibration)
+            .WithName("GetEvaluationCalibration")
+            .WithSummary("Gets calibration (reliability points, ECE, Brier) for a model's answers")
+            .Produces<CalibrationDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapGet("/{id:guid}/results/export", ExportResults)
@@ -163,13 +170,29 @@ public static class EvaluationEndpoints
             error => error.ToHttpResult());
     }
 
+    private static async Task<IResult> GetCalibration(
+        Guid id,
+        [FromQuery] string? model,
+        GetCalibrationHandler handler,
+        CancellationToken ct)
+    {
+        var query = new GetCalibrationQuery(id, model);
+        Result<CalibrationDto> result = await handler.HandleAsync(query, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
+    }
+
     private static async Task<IResult> ExportResults(
         Guid id,
-        [FromQuery] string format,
+        [FromQuery] string? format,
         [FromQuery] string? model,
         ExportResultsHandler handler,
         CancellationToken ct)
     {
+        // format is nullable deliberately: with a non-nullable string, omitting ?format=
+        // was a 400 from the binder and the "json" default below was unreachable.
         var query = new ExportResultsQuery(id, format ?? "json", model);
         Result<ExportResultsData> result = await handler.HandleAsync(query, ct);
 

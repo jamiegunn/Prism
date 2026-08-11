@@ -1,11 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, XCircle } from 'lucide-react'
+import { ArrowLeft, Download, XCircle } from 'lucide-react'
 import { describeMutationError } from '@/services/mutationErrors'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useEvaluation, useCancelEvaluation, useEvaluationResults } from './api'
+import { CalibrationTab } from './components/CalibrationTab'
+import { ResultRecordsTab } from './components/ResultRecordsTab'
 
 const COLORS = ['var(--color-primary)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
@@ -40,7 +42,9 @@ export function EvaluationDetailPage() {
     return <div className="p-6 text-muted-foreground">Loading...</div>
   }
 
-  // Build chart data: one group per scoring method, one bar per model
+  // Build chart data: one group per scoring method, one bar per model. A score a model does
+  // not have is left undefined so Recharts omits the bar — a missing measurement drawn as a
+  // zero-height bar reads as "scored 0", which is a different claim entirely.
   const chartData = summary?.modelSummaries
     ? (() => {
         const allMethods = new Set<string>()
@@ -48,11 +52,22 @@ export function EvaluationDetailPage() {
         return Array.from(allMethods).map((method) => {
           const entry: Record<string, unknown> = { method }
           summary.modelSummaries.forEach((m) => {
-            entry[m.model] = m.averageScores[method] ?? 0
+            entry[m.model] = m.averageScores[method] ?? undefined
           })
           return entry
         })
       })()
+    : []
+
+  const missingByModel = summary?.modelSummaries
+    ? summary.modelSummaries
+        .map((m) => {
+          const missing = chartData
+            .map((d) => d.method as string)
+            .filter((method) => m.averageScores[method] === undefined)
+          return missing.length > 0 ? `${m.model}: ${missing.join(', ')}` : null
+        })
+        .filter((s): s is string => s !== null)
     : []
 
   const models = summary?.modelSummaries.map((m) => m.model) ?? []
@@ -79,28 +94,51 @@ export function EvaluationDetailPage() {
           {(evaluation.status === 'Running' || evaluation.status === 'Pending') && (
             <div className="mt-2 w-64">
               <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${evaluation.progress * 100}%` }} />
+                {/* progress is already 0-100 from the API; multiplying by 100 again pinned
+                    the bar at full width from 1% onwards. */}
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(evaluation.progress, 100)}%` }} />
               </div>
             </div>
           )}
         </div>
-        {(evaluation.status === 'Running' || evaluation.status === 'Pending') && (
-          <Button variant="destructive" size="sm" onClick={() => cancel.mutate(evaluation.id)}>
-            <XCircle className="h-4 w-4 mr-1" />
-            Cancel
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`/api/v1/evaluation/${evaluation.id}/results/export?format=csv`, '_blank')}
+          >
+            <Download className="h-3 w-3 mr-1" />
+            CSV
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`/api/v1/evaluation/${evaluation.id}/results/export?format=json`, '_blank')}
+          >
+            <Download className="h-3 w-3 mr-1" />
+            JSON
+          </Button>
+          {(evaluation.status === 'Running' || evaluation.status === 'Pending') && (
+            <Button variant="destructive" size="sm" onClick={() => cancel.mutate(evaluation.id)}>
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue="summary">
         <TabsList>
           <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsTrigger value="records">Records</TabsTrigger>
+          <TabsTrigger value="calibration">Calibration</TabsTrigger>
           <TabsTrigger value="details">Model Details</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="mt-4">
           {chartData.length > 0 && (
-            <div className="h-72 mb-6">
+            <div className="mb-6">
+              <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -113,6 +151,11 @@ export function EvaluationDetailPage() {
                   ))}
                 </BarChart>
               </ResponsiveContainer>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Bars are means of per-item (sentence-level) scores.
+                {missingByModel.length > 0 && ` Not measured — ${missingByModel.join('; ')}.`}
+              </p>
             </div>
           )}
 
@@ -134,7 +177,9 @@ export function EvaluationDetailPage() {
                     <tr key={m.model} className="border-b">
                       <td className="px-4 py-2 font-medium">{m.model}</td>
                       <td className="px-4 py-2">{m.recordCount}</td>
-                      <td className="px-4 py-2">{m.averageLatencyMs.toFixed(0)}ms</td>
+                      <td className="px-4 py-2">
+                        {m.averageLatencyMs === null ? '—' : `${m.averageLatencyMs.toFixed(0)}ms`}
+                      </td>
                       <td className="px-4 py-2 text-xs">
                         {m.totalPromptTokens.toLocaleString()} / {m.totalCompletionTokens.toLocaleString()}
                       </td>
@@ -144,7 +189,12 @@ export function EvaluationDetailPage() {
                       <td className="px-4 py-2">
                         <div className="flex gap-1 flex-wrap">
                           {Object.entries(m.averageScores).map(([k, v]) => (
-                            <Badge key={k} variant="secondary" className="text-xs">
+                            <Badge key={k} variant="secondary" className="text-xs" title={summary.scoreDefinitions?.[k]}>
+                              {k}: {v.toFixed(3)}
+                            </Badge>
+                          ))}
+                          {Object.entries(m.corpusMetrics ?? {}).map(([k, v]) => (
+                            <Badge key={k} className="text-xs" title={summary.scoreDefinitions?.[k]}>
                               {k}: {v.toFixed(3)}
                             </Badge>
                           ))}
@@ -156,6 +206,28 @@ export function EvaluationDetailPage() {
               </table>
             </div>
           )}
+
+          {summary && Object.keys(summary.scoreDefinitions ?? {}).length > 0 && (
+            <div className="mt-4 rounded-lg border p-4">
+              <h3 className="text-sm font-medium mb-2">Metric definitions</h3>
+              <dl className="grid gap-2 text-xs text-muted-foreground">
+                {Object.entries(summary.scoreDefinitions).map(([name, definition]) => (
+                  <div key={name}>
+                    <dt className="font-mono text-foreground inline">{name}</dt>
+                    <dd className="inline ml-2">{definition}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="records" className="mt-4">
+          {id && <ResultRecordsTab evaluationId={id} models={evaluation.models} />}
+        </TabsContent>
+
+        <TabsContent value="calibration" className="mt-4">
+          {id && <CalibrationTab evaluationId={id} models={evaluation.models} />}
         </TabsContent>
 
         <TabsContent value="details" className="mt-4">
