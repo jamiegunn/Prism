@@ -50,8 +50,12 @@ export const SOURCE_MODULES = [
   { value: 'playground', label: 'Playground' },
   { value: 'token-explorer', label: 'Token Explorer' },
   { value: 'prompt-lab', label: 'Prompt Lab' },
-  { value: 'experiments', label: 'Experiments' },
+  { value: 'experiments-sweep', label: 'Experiment Sweeps' },
   { value: 'batch-inference', label: 'Batch Inference' },
+  { value: 'evaluation', label: 'Evaluation' },
+  { value: 'evaluation-judge', label: 'Evaluation (judge calls)' },
+  { value: 'structured-output', label: 'Structured Output' },
+  { value: 'history-replay', label: 'Replays' },
   { value: 'rag', label: 'RAG' },
   { value: 'agents', label: 'Agents' },
 ] as const

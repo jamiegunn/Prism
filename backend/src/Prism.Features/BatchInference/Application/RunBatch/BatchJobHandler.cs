@@ -234,6 +234,7 @@ public sealed class BatchJobHandler : IJobHandler
                 Model = batch.Model,
                 Messages = [ChatMessage.User(input)],
                 Logprobs = batch.CaptureLogprobs,
+                SourceModule = "batch-inference",
             },
             ct);
 

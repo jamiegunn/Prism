@@ -39,7 +39,7 @@ public sealed class HistorySeeder : IDataSeeder
         [
             new InferenceRecord
             {
-                SourceModule = "Playground",
+                SourceModule = "playground",
                 ProviderName = "Local vLLM",
                 ProviderType = InferenceProviderType.Vllm,
                 ProviderEndpoint = "http://localhost:8000/v1",
@@ -78,7 +78,7 @@ public sealed class HistorySeeder : IDataSeeder
             },
             new InferenceRecord
             {
-                SourceModule = "TokenExplorer",
+                SourceModule = "token-explorer",
                 ProviderName = "Local vLLM",
                 ProviderType = InferenceProviderType.Vllm,
                 ProviderEndpoint = "http://localhost:8000/v1",
@@ -115,7 +115,7 @@ public sealed class HistorySeeder : IDataSeeder
             },
             new InferenceRecord
             {
-                SourceModule = "Playground",
+                SourceModule = "playground",
                 ProviderName = "Local Ollama",
                 ProviderType = InferenceProviderType.Ollama,
                 ProviderEndpoint = "http://localhost:11434",
