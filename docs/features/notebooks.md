@@ -225,7 +225,7 @@ experiment can read the cells in the browser without installing anything.
 |---|---|---|---|
 | P1 | A JupyterLite build is being served at `/jupyterlite/lab/` | **No.** The build is generated, not committed | `frontend/.gitignore` |
 | P2 | A missing build fails visibly | **It did not.** Vite answers unknown paths with the SPA shell, so the iframe rendered Prism inside Prism | fixed 2026-08-09 |
-| P3 | CI shipping the build means users receive it | **False.** This CI has no deploy step — it retains only test results and the Playwright report | `.github/workflows/ci.yml` |
+| P3 | CI shipping the build means users receive it | **False.** This CI has no deploy step, so a CI build is discarded. `dev.sh` builds it on the machine that will use it; CI only answers "does it still build", which is why that job is path-filtered into its own workflow | `.github/workflows/jupyterlite.yml` |
 
 P3 is why building in CI was necessary but not sufficient. Prism is a local tool; the person who
 opens this page is running `dev.sh`, and a discarded CI artifact never reaches them.
@@ -236,8 +236,9 @@ opens this page is running `dev.sh`, and a discarded CI artifact never reaches t
 |---|---|---|---|
 | R1 | Notebooks are stored server-side and versioned on save | manual: save twice, version counter increments | MET |
 | R2 | A real `.ipynb` can be downloaded, without opening the notebook | per-card download button; `GET /notebooks/{id}/download` | MET |
-| R3 | The JupyterLite build is verified to build | CI runs `setup.sh` and asserts `lab/index.html` exists | MET |
-| R4 | The build is available to someone running locally | `npm run jupyterlite`, and `dev.sh` runs it on first start when `jupyter` is present | MET |
+| R3 | The JupyterLite build is verified to build | the JupyterLite workflow runs `jupyterlite/build.sh` and asserts `lab/index.html`; run locally 2026-08-10, 70 MB output | MET |
+| R4 | The build is available to someone running locally | `npm run jupyterlite`, and `dev.sh` on first start; the script makes its own venv, so python3 is the only prerequisite | MET |
+| R5b | Cells actually execute in the browser once built | verified: the Launcher offers a Python (Pyodide) kernel and `workbench.py` is present in the file browser | MET |
 | R5 | A missing build is reported, never silently substituted | browser check: the page detects the SPA shell, disables Embed, refuses to open the tab, names the command | MET |
 | R6 | A missing kernel does not imply storage is broken | same check asserts the notice says storing, versioning and downloading still work | MET |
 | R7 | Saved notebook JSON is validated before it is stored | none — invalid JSON saves, and renders identically to an empty notebook | **UNMET** |

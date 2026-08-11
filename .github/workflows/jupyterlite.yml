@@ -1,0 +1,47 @@
+# Does the JupyterLite kernel still build?
+#
+# Deliberately a separate workflow, and deliberately path-filtered. Nothing here is delivered to
+# anyone: this repository's CI has no deploy step, and Prism is a local tool — the person who
+# opens the Notebooks page runs `dev.sh`, which builds the kernel on their own machine. So the
+# only thing CI can usefully answer is "would that build still work", and paying several minutes
+# on every unrelated pull request to answer it is a bad trade.
+#
+# It runs when the build script, the shipped workbench module, or the page that embeds the result
+# changes — the three things that can break it.
+name: JupyterLite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/jupyterlite/**'
+      - 'frontend/src/features/notebooks/**'
+      - '.github/workflows/jupyterlite.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/jupyterlite/**'
+      - 'frontend/src/features/notebooks/**'
+      - '.github/workflows/jupyterlite.yml'
+
+jobs:
+  build:
+    name: Kernel builds
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the kernel
+        run: bash jupyterlite/build.sh
+
+      # The page embeds this exact path. Asserting it separately means a build that "succeeds"
+      # while producing nothing fails here rather than shipping an empty directory.
+      - name: Verify the embed target exists
+        run: test -f public/jupyterlite/lab/index.html

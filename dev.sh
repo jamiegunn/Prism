@@ -813,11 +813,12 @@ if ! $BACKEND_ONLY; then
   # step, and Prism is a local tool, so a CI artifact never reaches the person
   # who opens the page. Build it here instead, where it is actually used.
   #
-  # Optional and quiet: it needs a Python toolchain, the rest of Prism does not,
-  # and everything except running cells works without it. The page itself now
-  # detects the absence and says so, so skipping this is not a silent failure.
+  # Optional and quiet: everything except running cells works without it, and the
+  # page detects the absence and says so, so skipping this is not a silent
+  # failure. The build makes its own virtual environment, so python3 is the only
+  # prerequisite — no global pip install.
   if [ ! -f "$ROOT/frontend/public/jupyterlite/lab/index.html" ]; then
-    if command -v jupyter >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
       step "Building the JupyterLite kernel (first run only)..."
 
       if (cd "$ROOT/frontend" && npm run jupyterlite >"$LOGS/jupyterlite.log" 2>&1); then
@@ -827,8 +828,7 @@ if ! $BACKEND_ONLY; then
         warn "Everything except running cells still works."
       fi
     else
-      echo "   Notebooks: cell execution needs a JupyterLite build. To enable it:"
-      echo "     pip install jupyterlite-core jupyterlite-pyodide-kernel && npm run jupyterlite"
+      echo "   Notebooks: cell execution needs python3 to build the JupyterLite kernel."
     fi
   fi
 

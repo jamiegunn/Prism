@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "api:generate": "orval",
-    "jupyterlite": "bash public/jupyterlite/setup.sh",
+    "jupyterlite": "bash jupyterlite/build.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

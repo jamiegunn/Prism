@@ -953,10 +953,10 @@ const pageTours: Tour[] = [
         id: 'no-execution',
         title: 'Running cells needs the kernel built',
         body:
-          'The in-browser kernel is generated rather than kept in the repository, and CI builds '
-          + 'it into the deployed bundle. Running the dev server straight from a clone will not '
-          + 'have it until you run the setup script in public/jupyterlite. Editing is still by '
-          + 'raw JSON, and there is no upload — bringing a notebook in is create then paste.',
+          'The in-browser kernel is generated rather than kept in the repository, so dev.sh '
+          + 'builds it on first start — it needs python3 and nothing else, and makes its own '
+          + 'environment. If cells will not run, that build is what is missing, and the page '
+          + 'says so. Editing is still by raw JSON, and there is no upload.',
         anchor: 'notebooks-list',
         side: 'bottom',
       },
