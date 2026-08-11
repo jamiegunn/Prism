@@ -6,6 +6,7 @@ import type {
   HistoryFilterParams,
   ReplayResult,
   PagedResult,
+  TraceResponse,
 } from './types'
 
 const HISTORY_KEY = ['history']
@@ -48,6 +49,15 @@ export function useHistoryRecord(id: string | null) {
     queryKey: [...HISTORY_KEY, id],
     queryFn: () => apiClient<HistoryRecordDetail>(`/history/${id}`),
     enabled: !!id,
+  })
+}
+
+/** Fetch the per-token trace of a record (logprobs, entropy, surprise, alternatives). */
+export function useHistoryTrace(id: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...HISTORY_KEY, id, 'trace'],
+    queryFn: () => apiClient<TraceResponse>(`/history/${id}/trace`),
+    enabled: !!id && enabled,
   })
 }
 

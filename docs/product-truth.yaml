@@ -130,14 +130,18 @@ modules:
       null-preserving round-trip tests. Tags are a native text[] so the tag filter
       translates (previously 500). Every inference span carries gen_ai.* attributes and
       its trace/span ids are persisted on the record. Streamed calls now retain their
-      logprobs, so perplexity/entropy populate for streaming too.
+      logprobs, so perplexity/entropy populate for streaming too. A trace endpoint
+      (GET /history/{id}/trace) returns the recorded per-token events in position order
+      with parsed alternatives, states why a trace is absent, and 404s missing records.
       Missing: replay does not produce a linked ReplayRun entity; no trace-level diff.
     frontend_status: implemented
     frontend_notes: >
       Record list with filtering (search, source, model, date range, success, tags),
       pagination, detail panel with copyable trace/span ids and rendered failure
-      messages, tagging, replay button, and an Export control that states the row count
-      and disables at zero. Missing: side-by-side diff view, trace diff summary.
+      messages, tagging, replay button, an Export control that states the row count
+      and disables at zero, and a Tokens tab rendering the recorded per-token trace
+      (heatmap/entropy/surprise via the shared logprobs panel) with stated absence
+      reasons. Missing: side-by-side diff view, trace diff summary.
     provider_limitations: none
     tests_present: true
     release_blockers: []

@@ -8,6 +8,7 @@ using Prism.Features.History.Api.Requests;
 using Prism.Features.History.Application.Dtos;
 using Prism.Features.History.Application.ExportHistory;
 using Prism.Features.History.Application.GetRecord;
+using Prism.Features.History.Application.GetTrace;
 using Prism.Features.History.Application.ReplaySingle;
 using Prism.Features.History.Application.SearchHistory;
 using Prism.Features.History.Application.TagRecord;
@@ -44,6 +45,12 @@ public static class HistoryEndpoints
             .WithName("GetHistoryRecord")
             .WithSummary("Gets a single inference record by ID with full detail")
             .Produces<InferenceRecordDetailDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}/trace", GetTrace)
+            .WithName("GetHistoryTrace")
+            .WithSummary("Gets the per-token trace (logprobs, entropy, surprise, alternatives) of a record")
+            .Produces<TraceResponseDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPut("/{id:guid}/tags", TagRecord)
@@ -148,6 +155,21 @@ public static class HistoryEndpoints
     {
         var query = new GetRecordQuery(id);
         Result<InferenceRecordDetailDto> result = await handler.HandleAsync(query, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
+    }
+
+    /// <summary>
+    /// Handles the trace endpoint.
+    /// </summary>
+    private static async Task<IResult> GetTrace(
+        Guid id,
+        GetTraceHandler handler,
+        CancellationToken ct)
+    {
+        Result<TraceResponseDto> result = await handler.HandleAsync(new GetTraceQuery(id), ct);
 
         return result.Match(
             dto => TypedResults.Ok(dto),

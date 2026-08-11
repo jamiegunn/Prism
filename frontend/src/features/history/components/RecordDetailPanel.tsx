@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Copy, Play, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { useHistoryRecord } from '../api'
+import { useHistoryRecord, useHistoryTrace } from '../api'
+import { LogprobsPanel } from '@/features/playground/components/LogprobsPanel'
 import { TagEditor } from './TagEditor'
 import { ReplayDialog } from './ReplayDialog'
 import { getModuleBadgeColor, formatTimestamp } from '../utils'
@@ -24,6 +25,7 @@ interface RecordDetailPanelProps {
 
 export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanelProps) {
   const { data: record, isLoading } = useHistoryRecord(recordId)
+  const { data: traceResponse, isLoading: traceLoading } = useHistoryTrace(recordId, open)
   const [replayOpen, setReplayOpen] = useState(false)
 
   const copyToClipboard = (text: string) => {
@@ -156,6 +158,7 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
                   <TabsList>
                     <TabsTrigger value="request">Request</TabsTrigger>
                     <TabsTrigger value="response">Response</TabsTrigger>
+                    <TabsTrigger value="tokens">Tokens</TabsTrigger>
                   </TabsList>
                   <TabsContent value="request">
                     <div className="relative">
@@ -192,6 +195,33 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
                         <p className="font-medium text-red-300">This call failed before a response existed.</p>
                         <p className="mt-1 text-red-200/80">
                           {record.errorMessage ?? 'No error message was recorded.'}
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                  <TabsContent value="tokens">
+                    {traceLoading && (
+                      <p className="text-xs text-zinc-500 p-3">Loading token trace…</p>
+                    )}
+                    {!traceLoading && traceResponse && !traceResponse.hasTrace && (
+                      <div className="rounded border border-zinc-700 p-4 text-sm text-zinc-400">
+                        <p className="font-medium text-zinc-200 mb-1">No token trace</p>
+                        <p>{traceResponse.absenceReason}</p>
+                      </div>
+                    )}
+                    {!traceLoading && traceResponse?.trace && (
+                      <div className="space-y-2">
+                        <LogprobsPanel
+                          logprobsData={{ tokens: traceResponse.trace.tokens }}
+                          perplexity={traceResponse.trace.perplexity}
+                        />
+                        <p className="text-[11px] text-zinc-500">
+                          {traceResponse.trace.tokens.length} tokens
+                          {traceResponse.trace.meanEntropy !== null &&
+                            ` · mean entropy ${traceResponse.trace.meanEntropy.toFixed(3)} bits`}
+                          {` · ${traceResponse.trace.surpriseTokenCount} surprise token${traceResponse.trace.surpriseTokenCount === 1 ? '' : 's'}`}
+                          {` (p < ${traceResponse.trace.surpriseThreshold})`}
+                          {` · trace schema ${traceResponse.trace.schemaVersion}`}
                         </p>
                       </div>
                     )}

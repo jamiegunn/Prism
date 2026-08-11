@@ -112,9 +112,14 @@ Below that, an **Environment** block naming the provider, the model and the sour
 the full environment snapshot behind an expandable *Full environment JSON*. This is the part
 that answers "what was this actually running on".
 
-Then **Request** and **Response** tabs holding the complete JSON for each, with a copy button on
-both. The request JSON is the authoritative record of the call: every parameter as it was
-actually sent, not as the UI displayed it.
+Then **Request**, **Response** and **Tokens** tabs. The first two hold the complete JSON for
+each side of the call, with a copy button on both — the request JSON is the authoritative
+record of the call: every parameter as it was actually sent, not as the UI displayed it. The
+**Tokens** tab renders the recorded per-token trace: the same heatmap / entropy / surprise
+views the Playground uses, over the token-by-token logprobs, entropies and alternatives the
+recording spine stored, with a stats line underneath (token count, mean entropy, surprise
+count with its defining threshold, trace schema version). A record with no trace says why —
+distinguishing "the call failed before a response existed" from "no logprobs were recorded".
 
 The **Tags** editor sits under that. Type and press Enter to add, click the × on a badge to
 remove. Tags are lowercased and duplicates are dropped, and every change saves immediately —
@@ -209,9 +214,8 @@ search endpoint accepts; the row count is returned in `X-Export-Row-Count`.
 
 - **Nothing deletes.** No record deletion, no bulk selection, no retention policy, no purge.
   History grows without limit and there is no UI to trim it.
-- **Per-token traces are recorded but not viewable.** Calls that returned logprobs get a full
-  token-by-token trace written to the database. No screen in the application displays it. To
-  read one you go to the database directly.
+- ~~**Per-token traces are recorded but not viewable.**~~ No longer true: the detail sheet's
+  **Tokens** tab displays the recorded trace (`GET /history/{id}/trace`).
 - **Perplexity and TTFT are blank for providers without logprobs.** Not zero — blank. This is
   correct behaviour, not a fault.
 - **The replay comparison is broken** — see above.
@@ -259,6 +263,7 @@ search endpoint accepts; the row count is returned in `X-Export-Row-Count`.
 | R11 | Export selects exactly what the filters select, streams, and preserves null | round-trip tests for JSONL/CSV/Parquet assert every scalar field and that null survives as null (`HistoryExportTests`, 7 tests incl. multi-row-group batching); wire shows `format=` and the active filters with no page params | MET |
 | R12 | The export control states the row count before writing and cannot fire on nothing | button reads "Export N" from the live count and is disabled at 0 with the reason in its tooltip (`ExportControl.test.tsx`, 5 tests, mutation-checked); browser: download + toast on the working path, disabled state on the empty path | MET |
 | R13 | A history row can be correlated with a standard tracing tool | every inference span carries `gen_ai.*` attributes and its `traceId`/`spanId` are persisted and shown, copyable, in the detail panel (`GenAiTelemetryTests`, 5 tests); verified in the browser | MET |
+| R14 | A recorded per-token trace is viewable where the record is | the detail sheet's Tokens tab renders the trace through the same logprobs panel the Playground uses; events return in position order with parsed alternatives, absent traces state why, missing records 404 (`HistoryTraceTests`, 2 tests, 3 mutations observed red); browser-verified working and failed-call paths, console clean | MET |
 | R11 | Replay shows the original and the replay side by side | none — the DTO returns an object where the client's type declares a string, so the diff call fails | **UNMET** |
 
 ### Withdrawn

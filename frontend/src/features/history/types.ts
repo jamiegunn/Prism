@@ -77,3 +77,40 @@ export interface ReplayResult {
   replayModel: string
   diffSummary: string
 }
+
+/** One alternative the model considered at a trace position. */
+export interface TraceAlternative {
+  token: string
+  logprob: number
+  probability: number
+}
+
+/** One token of a recorded trace, in generation order. */
+export interface TraceToken {
+  position: number
+  token: string
+  logprob: number
+  probability: number
+  entropy: number
+  isSurprise: boolean
+  topLogprobs: TraceAlternative[]
+}
+
+/** A recorded per-token trace. */
+export interface InferenceTrace {
+  inferenceRecordId: string
+  perplexity: number | null
+  meanEntropy: number | null
+  averageLogprob: number | null
+  surpriseTokenCount: number
+  surpriseThreshold: number
+  schemaVersion: string
+  tokens: TraceToken[]
+}
+
+/** The trace endpoint's response: a trace, or the stated reason there is none. */
+export interface TraceResponse {
+  hasTrace: boolean
+  absenceReason: string | null
+  trace: InferenceTrace | null
+}
