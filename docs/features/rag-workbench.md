@@ -319,7 +319,7 @@ endpoint and looking at the generated answer.
 | # | Presupposition | Holds on a cold install? | Evidence |
 |---|---|---|---|
 | P1 | The seeded collection is searchable — it says Ready, 1 doc, 3 chunks | **Not by vector or hybrid.** Every seeded chunk has a null embedding while the collection reads Ready, and vector search filters nulls out | `RagSeeder.cs:80,94,108`; `QueryCollectionHandler.cs:89` |
-| P2 | Embeddings go to the server you are running | **No.** With nothing configured the provider picks the *oldest registered* instance, which is the seeded vLLM on :8000 | `OpenAiEmbeddingProvider.cs:59-81` |
+| P2 | Embeddings go to the server you are running | **Yes when a default instance is set** — the provider now prefers the default instance, then the oldest; with nothing registered it falls back to :8000 | `OpenAiEmbeddingProvider.ResolveBaseUrlAsync` |
 | P3 | …and the URL is right | **No.** The base already ends in `/v1` and `/v1/embeddings` is appended, giving `/v1/v1/embeddings` | `OpenAiEmbeddingProvider.cs:102` |
 | P4 | BM25 needs no embedding server | True for BM25; **false for hybrid**, which aborts on the vector failure instead of degrading to the half it already computed | `QueryCollectionHandler.cs:137-139` |
 | P5 | The distance metric chosen for a collection is used | **No.** Cosine/Euclidean/InnerProduct are offered, stored, and never read — search is always cosine | `QueryCollectionHandler.cs:90,97` |
@@ -340,6 +340,10 @@ endpoint and looking at the generated answer.
 | R9 | A collection created with Euclidean ranks by Euclidean distance | none — always cosine | **UNMET** |
 | R10 | An unknown collection id says the collection is missing | none — "Loading collection…" forever | **UNMET** |
 | R11 | A document whose ingest failed appears marked Failed without a manual refresh | none — the client invalidates only on success | **UNMET** |
+| R12 | Retrieval quality is measurable against ground truth | the Evaluate tab scores vector/BM25/hybrid over a labelled query set with precision@k, recall@k, MRR and nDCG@k; metrics proved by hand-worked examples (incl. both nDCG truncation directions and duplicate-id ties), invariants (recall non-decreasing in k, ideal ranking nDCG exactly 1, bounds), and a live end-to-end test against real pgvector (`RetrievalMetricsTests`, `RetrievalEvaluationTests`, mutation-checked); browser-verified | MET |
+| R13 | Labelled query sets are validated against the collection | creating a set rejects empty items, unlabelled queries, and chunk ids from another collection (`Labels_Must_Belong_To_The_Collection`) | MET |
+| R14 | A mode that cannot run reports why instead of scoring zero | vector/hybrid on an unembedded collection return "could not be evaluated" with the reason and no metrics; BM25 still evaluates (`Unembedded_Collection_Reports_Vector_Unavailable_Not_Zero`); browser-verified on the seeded collection | MET |
+| R15 | Ground truth can be built without leaving the page | the New query set flow searches (BM25 ∪ vector, deduplicated, so labelling is not biased to one mode), ticks relevant chunks, and saves — with the vector half's absence stated when embeddings are missing | MET |
 
 ### Withdrawn
 

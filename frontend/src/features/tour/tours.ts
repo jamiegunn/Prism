@@ -473,14 +473,24 @@ const pageTours: Tour[] = [
       },
       {
         id: 'tags-are-filters',
-        title: 'Tags, and one caveat',
+        title: 'Tags are filters',
         body:
-          'Tag runs from the detail panel to group them — "baseline", "after the rewrite". The '
-          + 'badges in the table are clickable and are meant to filter by that tag, but tag '
-          + 'filtering currently fails on the server, so use the search box for now. Dates and '
-          + 'the module filter work.',
+          'Tag runs from the detail panel to group them — "baseline", "after the rewrite". '
+          + 'The badges in the table are clickable and filter the list to that tag; the Tag '
+          + 'box in the filter bar does the same by hand.',
         anchor: 'history-results',
         side: 'top',
+      },
+      {
+        id: 'export',
+        title: 'The data can leave',
+        body:
+          'Export writes exactly what the current filters select — the button states the row '
+          + 'count first — as JSONL, CSV or Parquet, with full requests and responses, '
+          + 'timings, token counts and per-call trace ids. A metric that was not measured '
+          + 'exports as null, never as 0, so pandas sees missing data as missing.',
+        anchor: 'history-export',
+        side: 'bottom',
       },
     ],
   },
@@ -627,8 +637,9 @@ const pageTours: Tour[] = [
         body:
           'An evaluation runs a dataset through one or more models and scores each answer '
           + 'against the expected value. The scorers are exact match, contains, BLEU, ROUGE-L, '
-          + 'length ratio, and an LLM judge that grades with a model rather than string '
-          + 'overlap.',
+          + 'length ratio, and an LLM judge. BLEU and ROUGE-L follow the reference '
+          + 'definitions (sacrebleu and rouge-score) and every number carries its definition, '
+          + 'so it can be cited against published results.',
         route: '/evaluation',
         anchor: 'evaluation-tabs',
         side: 'bottom',
@@ -651,6 +662,18 @@ const pageTours: Tour[] = [
           + 'It tells you before you commit that the run is every record through every model, '
           + 'plus a judging call per answer if you pick the LLM judge — which is the part that '
           + 'costs real time on a local server.',
+        anchor: 'evaluation-tabs',
+        side: 'bottom',
+      },
+      {
+        id: 'calibration',
+        title: 'Does its confidence mean anything?',
+        body:
+          'Each finished evaluation\u2019s detail page has a Calibration tab: a reliability '
+          + 'diagram with ECE and Brier score, computed from the probability the model gave '
+          + 'its own chosen tokens versus whether exact match judged the answer right. It '
+          + 'needs a provider that returns logprobs and the exact_match scorer — the tab '
+          + 'says so when either is missing.',
         anchor: 'evaluation-tabs',
         side: 'bottom',
       },
@@ -784,6 +807,18 @@ const pageTours: Tour[] = [
           + 'would have been built from — rather than the answer itself. Comparing hybrid '
           + 'scores against vector scores is not meaningful, incidentally: hybrid numbers are '
           + 'normalised and blended, not cosine similarities.',
+        anchor: 'rag-collections',
+        side: 'bottom',
+      },
+      {
+        id: 'evaluate-on-evidence',
+        title: 'Settle vector vs BM25 vs hybrid with numbers',
+        body:
+          'Each collection\u2019s Evaluate tab scores all three modes against a labelled '
+          + 'query set — you search, tick the chunks that are actually relevant, and get '
+          + 'precision@k, recall@k, MRR and nDCG per mode. Rank metrics are comparable across '
+          + 'modes even though the raw scores are not; a mode that cannot run (say, vector '
+          + 'with no embeddings) says why instead of scoring zero.',
         anchor: 'rag-collections',
         side: 'bottom',
       },
@@ -943,11 +978,23 @@ const pageTours: Tour[] = [
         id: 'download',
         title: 'Download works from the card',
         body:
-          'The small download icon on each card gives you a real .ipynb without opening it. '
-          + 'Since nothing executes here, that round trip — keep it in Prism, run it in '
-          + 'Jupyter, paste the result back — is the workflow this page is for.',
+          'The small download icon on each card gives you a real .ipynb without opening it — '
+          + 'the same file desktop Jupyter opens, so notebooks move freely between Prism and '
+          + 'a full Python environment when you outgrow the browser kernel.',
         anchor: 'notebooks-list',
         side: 'bottom',
+      },
+      {
+        id: 'workbench',
+        title: 'The workbench module reaches everything',
+        body:
+          'Inside JupyterLite, import workbench and the Prism API is a set of await-able '
+          + 'calls: chat, logprobs, datasets, RAG search — and history_dataframe(), which '
+          + 'pulls every recorded inference call into pandas with its timings, token counts '
+          + 'and per-token statistics. The starter snippet below the notebook list runs as '
+          + 'pasted.',
+        anchor: 'notebooks-workbench',
+        side: 'top',
       },
       {
         id: 'no-execution',

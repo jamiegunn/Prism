@@ -277,7 +277,7 @@ the experiment, leave it alone, and let it be wrong sometimes.
 | P3 | "Capture logprobs" produces something readable here | **No.** It writes a token trace to History but sets neither `LogprobsData` nor `Perplexity` on the run, so the Perplexity card stays empty | `RunSweepHandler.cs:93-133` |
 | P4 | The Cost column measures something | **No.** `Run.Cost` is only ever set by an endpoint nothing calls; every row reads `-` | `CreateRunHandler.cs:57` |
 | P5 | Run selection is scoped to the experiment you are viewing | **No.** It lives in a global store and is not cleared on navigation, so the banner follows you and Compare then errors | `experiments/store.ts:34` |
-| P6 | CSV export contains what the page shows | **No.** No input, output, parameters, tags or custom metrics — a sweep's CSV does not contain its temperatures. JSON export does | `ExportRunsHandler.cs:59-78` |
+| P6 | CSV export contains what the page shows | **Yes** — the CSV now carries `param.*` columns, `metric.*` columns (the union across runs; a run missing a metric leaves an empty cell, never 0), tags, input, output, system prompt and error | `ExportRunsHandler.ExportCsv` |
 | P7 | Archiving is reversible | **No.** The endpoint accepts Active; the UI only ever sends Completed or Archived | `ExperimentDetailPage.tsx:86-118` |
 
 ### Requirements
@@ -295,7 +295,9 @@ the experiment, leave it alone, and let it be wrong sometimes.
 | R9 | Deleting a run removes its row and reports success | fixed by the 204 handling in `apiClient` | MET |
 | R10 | An interrupted sweep keeps the runs that had already completed | none — see P2 | **UNMET** |
 | R11 | Capturing logprobs makes a perplexity figure visible on the run | none — see P3 | **UNMET** |
-| R12 | CSV export contains the parameter that was swept | none — see P6 | **UNMET** |
+| R12 | CSV export contains the parameter that was swept | a sweep's temperatures appear as the `param.temperature` column | MET |
+| R13 | Runs export in an MLflow-compatible shape and survive MLflow's own importer | `format=mlflow` emits `Run.to_dictionary()`-shaped documents; an executed notebook replays them through `MlflowClient` into a real tracking store (mlflow 3.15.1) and reads them back, asserting params and metrics survive and an absent metric stays absent | MET |
+| R14 | Omitting `?format=` returns the JSON default rather than a 400 | the binder parameter is nullable now; the `?? "json"` default is reachable | MET |
 | R13 | Selecting runs in one experiment leaves no selection banner on another | none — see P5 | **UNMET** |
 | R14 | An archived experiment can be returned to Active | none — the endpoint supports it, the UI never sends it | **UNMET** |
 

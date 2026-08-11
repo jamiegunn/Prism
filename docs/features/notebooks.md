@@ -159,15 +159,16 @@ must be awaited.
 | `list_models()` | Every registered inference instance. This is also the easiest way to find an instance GUID from inside a notebook. |
 | `list_collections()` | Every RAG collection. |
 | `rag_query(collection_id, query, top_k=5, search_type="Hybrid")` | Matching chunks with scores. `search_type` accepts `"Vector"`, `"Bm25"` or `"Hybrid"`. |
+| `export_history(**filters)` | Full history rows (not previews) as a list of dicts, using the History page's filters (`source_module`, `model`, `tags`, `from_date`, `to_date`, `search`, `is_success`). A metric that was not measured is `None`, never 0. Unknown filter names raise. |
+| `history_dataframe(**filters)` | The same export as a pandas DataFrame: UTC datetimes, numeric dtypes, unmeasured metrics as NaN. In JupyterLite run `import micropip; await micropip.install("pandas")` first. |
 | `help()` | Prints the list above. The only synchronous function — call it without `await`. |
 
 That list is complete and accurate as of the current file.
 
-> **Known defect: `chat()` and `logprobs()` accept a `model` argument and never send it.** Both
-> build a request body containing the instance ID, the message and the sampling options, and
-> `model` is silently dropped. The call therefore runs against whatever model the instance
-> resolves by default, not the one you named. On a single-model server this is invisible; on a
-> server hosting several, you will get results from the wrong one with nothing to indicate it.
+Both `chat()` and `logprobs()` **send the `model` argument** — the playground chat endpoint
+accepts an optional model override, and a new conversation runs against it. (They used to
+accept the argument and silently drop it.) Both also raise on an HTTP error now, instead of
+returning an empty string that read like an empty answer.
 
 ---
 
@@ -239,6 +240,8 @@ opens this page is running `dev.sh`, and a discarded CI artifact never reaches t
 | R3 | The JupyterLite build is verified to build | the JupyterLite workflow runs `jupyterlite/build.sh` and asserts `lab/index.html`; run locally 2026-08-10, 70 MB output | MET |
 | R4 | The build is available to someone running locally | `npm run jupyterlite`, and `dev.sh` on first start; the script makes its own venv, so python3 is the only prerequisite | MET |
 | R5b | Cells actually execute in the browser once built | verified: the Launcher offers a Python (Pyodide) kernel and `workbench.py` is present in the file browser | MET |
+| R6 | The Notebooks page shows the available workbench calls and a copyable snippet that runs as pasted | the workbench reference table lists every function with per-call copy buttons, and the starter snippet discovers its own instance ids (no placeholder GUIDs); the same snippet replaces the stale one on the notebook detail page | MET |
+| R7 | Every documented workbench function works against the live API | the shipped `workbench.py` was executed against a running server (pyfetch shimmed to urllib, same code path): all 10 functions verified, incl. `chat` honouring `model`, `history_dataframe` dtypes (`datetime64[us, UTC]`, NaN for unmeasured), and filter-name validation | MET |
 | R5 | A missing build is reported, never silently substituted | browser check: the page detects the SPA shell, disables Embed, refuses to open the tab, names the command | MET |
 | R6 | A missing kernel does not imply storage is broken | same check asserts the notice says storing, versioning and downloading still work | MET |
 | R7 | Saved notebook JSON is validated before it is stored | none — invalid JSON saves, and renders identically to an empty notebook | **UNMET** |

@@ -251,15 +251,13 @@ problem worth catching, and nothing more.
 - **No choice of inference instance.** The runner takes an arbitrary registered one.
 - **No temperature, no sampling parameters, no prompt template.** `config` and
   `promptVersionId` are accepted and discarded.
-- **No `llm_judge`.** Implemented, not registered, silently ignored.
 - **No error surfaced when a run fails at the infrastructure level.** If no instance is
   registered, or the endpoint is unreachable in a way that breaks the whole job, the evaluation
   stays on **Running** indefinitely with an empty Error panel. Nothing in the UI will ever tell
   you it died. Check the backend logs.
 - **Cancel does not stop the run.**
-- **Progress reads 10000% when complete.**
 - **The leaderboard trophy is chronological, not a ranking.**
-- **No export button, no per-record view, no re-run, no delete.**
+- **No re-run and no delete.** Export (CSV/JSON) and the per-record view now exist.
 
 ---
 
@@ -293,11 +291,19 @@ problem worth catching, and nothing more.
 | R5 | A running evaluation's progress advances without user action | list polls at 3s while anything is Running or Pending | MET |
 | R6 | An unloadable evaluation reports the failure rather than waiting forever | detail page renders the error and a way back; previously "Loading..." was the only branch | MET |
 | R7 | The leaderboard ranks results across evaluations, not within one | `GET /evaluation/leaderboard`; each row names its evaluation | MET |
-| R8 | Which records a model got wrong can be inspected | none — the per-record endpoint exists and no UI calls it | **UNMET** |
-| R9 | Results can be exported | none — `GET .../results/export` exists with no UI | **UNMET** |
+| R8 | Which records a model got wrong can be inspected | the Records tab pages through per-record results with scores, expected/actual, and the error text for failed rows; first caller of the per-record endpoint | MET |
+| R9 | Results can be exported | CSV and JSON buttons on the detail page header; `format` omitted no longer 400s (nullable binder fix) | MET |
+| R10 | BLEU and ROUGE-L are reference-correct, citable numbers | line-by-line ports of sacrebleu 2.6.0 (13a, exp smoothing, case-sensitive) and rouge-score 0.1.2 (LCS F1); differential tests agree to 1e-9 on 29 published-reference pairs incl. empty/single-token/no-overlap/clipping/unicode/tab cases, plus invariants and hand-worked examples (`BleuRougeDifferentialTests`, mutation-checked) | MET |
+| R11 | Every score carries the definition that produced it | scorer definitions (tokeniser, smoothing, scale, reference version) are recorded on the evaluation at run time and rendered under the summary and on each badge's tooltip | MET |
+| R12 | Corpus BLEU is computed from pooled statistics, never presented as the mean of sentence scores | `corpus_bleu` badge computed by summing per-segment n-gram statistics (sacrebleu corpus definition, differential-tested incl. summed lengths and BP); the chart is labelled "means of per-item (sentence-level) scores" | MET |
+| R13 | Calibration (ECE, Brier) is computed from stored logprobs and reachable | evaluations request logprobs when the provider supports them and store them; the Calibration tab shows the reliability diagram with server-computed ECE (10 bins, stated) and Brier, from chosen-token probabilities; hand-computed fixture asserts ECE 0.055 / Brier 0.17825 exactly, invariants prove ECE 0 for perfect calibration and 1 for maximal overconfidence (`CalibrationMetricsTests`, mutation-checked); browser-verified | MET |
+| R14 | When calibration cannot be computed, the tab states which prerequisite is missing | the tab distinguishes "no successful results", "no logprobs recorded", and "no exact_match label", with counts; browser-verified on an all-failed evaluation | MET |
+| R15 | Requesting an unknown scorer fails loudly at start, not silently at run time | `StartEvaluationHandler` validates names against the registered set (+`llm_judge`) and returns 400 naming the valid ones | MET |
+| R16 | The runner uses the default instance, not an arbitrary row | selection orders by `IsDefault`, then online status — previously it took the first row and ran the whole evaluation against a dead seeded endpoint | MET |
+| R17 | `llm_judge` actually judges | constructed per run with the provider and a judge model (the model under test — stated in its recorded definition); previously unregistered and silently dropped | MET |
 
 ### Withdrawn
 
 | # | Requirement | Why withdrawn | Decided by |
 |---|---|---|---|
-| W1 | Calibration plots are shown for probabilistic scorers | `CalibrationPlot.tsx` is imported nowhere and no scorer emits calibration data | this review |
+| W1 | ~~Calibration plots are shown for probabilistic scorers~~ | **Reinstated and MET** as R13 — the runner now stores logprobs and the Calibration tab is `CalibrationPlot`'s first caller | research-capabilities change |

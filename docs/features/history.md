@@ -180,17 +180,35 @@ retrospective version of this task is searching response text for a phrase you h
 
 ---
 
+## Export
+
+The Export control sits beside the filter bar and writes **exactly what the current filters
+select** — not everything. The button states the row count before anything is written
+("Export 41"), and is disabled when nothing matches, rather than being clickable and doing
+nothing.
+
+Three formats, all streamed from the database rather than assembled in memory:
+
+| Format | Notes |
+|---|---|
+| **JSONL** | One record per line, camelCase, full request/response JSON included. A metric that was not measured is `null` — never 0. |
+| **CSV** | RFC-4180. Non-null strings are always quoted, so a null field (completely empty) is distinguishable from an empty string (`""`). |
+| **Parquet** | Snappy-compressed, 2000-row groups, schema mirroring the record field-for-field with nullability. Timestamps at millisecond precision. Tags travel as a JSON-encoded string column. |
+
+Every row carries the full scalar record: request/response JSON, token counts, timings,
+perplexity/entropy/surprise where measured, cost, tags, and the `traceId`/`spanId` of the
+span that covered the call. The same endpoint drives the notebook client's
+`workbench.export_history()` and `workbench.history_dataframe()`.
+
+The wire is `GET /api/v1/history/export?format=jsonl|csv|parquet` plus every filter the
+search endpoint accepts; the row count is returned in `X-Export-Row-Count`.
+
+---
+
 ## What this page will not do
 
-- **Nothing exports.** No CSV, no JSON download, no report. Copy Request and Copy Response put
-  one record on the clipboard at a time, and that is the entire escape route for data you may
-  well want in a paper.
 - **Nothing deletes.** No record deletion, no bulk selection, no retention policy, no purge.
   History grows without limit and there is no UI to trim it.
-- **Failed calls show no error.** A red cross in the Status column and an empty response body.
-  The message is captured *and returned by the API* — the page simply never renders it. So the
-  reason is one `curl` away (`/api/v1/history/{id}`, field `errorMessage`) even though no screen
-  will show it to you.
 - **Per-token traces are recorded but not viewable.** Calls that returned logprobs get a full
   token-by-token trace written to the database. No screen in the application displays it. To
   read one you go to the database directly.
@@ -218,9 +236,9 @@ retrospective version of this task is searching response text for a phrase you h
 | # | Presupposition | Holds on a cold install? | Evidence |
 |---|---|---|---|
 | P1 | Every inference from every module is recorded | **Yes** — recording wraps the single point where providers are constructed, so no feature can bypass it | `InferenceProviderFactory.cs:73-85` |
-| P2 | Every record carries the label its Source filter uses | **No.** Batch and Evaluation set no `SourceModule` and persist as `unknown`; sweeps persist as `experiments-sweep` | `BatchJobHandler.cs:232`, `EvaluationJobHandler.cs:242`, `RunSweepHandler.cs:96` |
-| P3 | The Source dropdown's options correspond to labels that exist | **No.** Measured live: `playground` 11, `token-explorer` 32, `unknown` 12; `experiments`, `batch-inference`, `prompt-lab`, `rag` and `agents` all zero. Labels that are written have no option and vice versa | `history/utils.ts:48-57` |
-| P4 | The seeded rows are reachable through the filters | **No.** The seeder writes `Playground` and `TokenExplorer` capitalised; the filter is exact equality | `HistorySeeder.cs:42`, `SearchHistoryHandler.cs:82` |
+| P2 | Every record carries the label its Source filter uses | **Yes** since the research-capabilities change: batch and evaluation label their requests, and the judge labels its own calls `evaluation-judge` | `BatchJobHandler.cs`, `EvaluationJobHandler.cs`, `LlmJudgeScorer.cs` |
+| P3 | The Source dropdown's options correspond to labels that exist | **Yes** — the option list was rebuilt from the labels writers actually produce (incl. `experiments-sweep`, `evaluation`, `evaluation-judge`, `structured-output`, `history-replay`) | `history/utils.ts` |
+| P4 | The seeded rows are reachable through the filters | **Yes** — the seeder now writes the lowercase labels the exact-match filter uses | `HistorySeeder.cs` |
 | P5 | The model filter matches loosely | **No** — exact equality. `mistral` returns nothing; `mistral:7b-instruct` returns rows | `SearchHistoryHandler.cs:87` |
 | P6 | Perplexity and TTFT are recorded for every call | **No** — only when the response carried logprobs | `InferenceRecordPersistenceService.cs:97-107` |
 
@@ -235,9 +253,12 @@ retrospective version of this task is searching response text for a phrase you h
 | R5 | Copy Request and Copy Response place the stored JSON on the clipboard | click either, paste | MET |
 | R6 | Reset returns to the unfiltered first page | set filters, Reset | MET |
 | R7 | Adding a tag reports success when the server stored it | fixed by the 204 handling in `apiClient` | MET |
-| R8 | Clicking a tag badge filters by that tag | none — `Tags.Contains` on a jsonb-converted list is untranslatable and returns 500 | **UNMET** |
-| R9 | Every Source option returns rows when that module has run | none — see P2/P3 | **UNMET** |
-| R10 | A failed call's error message is visible | none — stored and returned, rendered nowhere | **UNMET** |
+| R8 | Clicking a tag badge filters by that tag | `Tags` is now a native `text[]`, so the predicate translates (`@tag = ANY`); migration converts existing jsonb data in place. `HistoryExportTests.Export_Selects_Exactly_What_Search_Selects_Including_Tag_Filter`; clicked in the browser | MET |
+| R9 | Every Source option returns rows when that module has run | batch and evaluation now label their calls (`batch-inference`, `evaluation`), the seeder writes lowercase labels the filter matches, and the dropdown lists exactly the labels writers produce (`utils.ts` `SOURCE_MODULES`) | MET |
+| R10 | A failed call's error message is visible | the Response tab renders the stored `errorMessage` in a failure panel when `responseJson` is null; Copy Response disables with a reason | MET |
+| R11 | Export selects exactly what the filters select, streams, and preserves null | round-trip tests for JSONL/CSV/Parquet assert every scalar field and that null survives as null (`HistoryExportTests`, 7 tests incl. multi-row-group batching); wire shows `format=` and the active filters with no page params | MET |
+| R12 | The export control states the row count before writing and cannot fire on nothing | button reads "Export N" from the live count and is disabled at 0 with the reason in its tooltip (`ExportControl.test.tsx`, 5 tests, mutation-checked); browser: download + toast on the working path, disabled state on the empty path | MET |
+| R13 | A history row can be correlated with a standard tracing tool | every inference span carries `gen_ai.*` attributes and its `traceId`/`spanId` are persisted and shown, copyable, in the detail panel (`GenAiTelemetryTests`, 5 tests); verified in the browser | MET |
 | R11 | Replay shows the original and the replay side by side | none — the DTO returns an object where the client's type declares a string, so the diff call fails | **UNMET** |
 
 ### Withdrawn

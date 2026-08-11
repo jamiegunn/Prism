@@ -4,7 +4,7 @@
 # Update this file as tasks are completed. Never let claims outpace reality.
 
 meta:
-  last_updated: "2026-03-16"
+  last_updated: "2026-08-11"
   assessed_by: "Code audit of backend/src and frontend/src"
   notes: >
     Code exists for most modules (handlers, endpoints, UI pages), but the delivery plan's
@@ -125,19 +125,22 @@ modules:
     current_status: partial
     backend_status: implemented
     backend_notes: >
-      Inference record persistence, list/detail/tag endpoints, replay endpoint.
-      Missing: does not use standardized InferenceRun/InferenceTrace/TokenEvent
-      schemas (P1-03). Replay does not produce a linked ReplayRun entity.
-      No trace-level diff support.
+      Inference record persistence, list/detail/tag endpoints, replay endpoint, and a
+      streaming export endpoint (JSONL/CSV/Parquet) honouring every search filter with
+      null-preserving round-trip tests. Tags are a native text[] so the tag filter
+      translates (previously 500). Every inference span carries gen_ai.* attributes and
+      its trace/span ids are persisted on the record. Streamed calls now retain their
+      logprobs, so perplexity/entropy populate for streaming too.
+      Missing: replay does not produce a linked ReplayRun entity; no trace-level diff.
     frontend_status: implemented
     frontend_notes: >
       Record list with filtering (search, source, model, date range, success, tags),
-      pagination, detail panel, tagging, replay button. Missing: side-by-side diff
-      view, trace diff summary, replay with parameter override UI.
+      pagination, detail panel with copyable trace/span ids and rendered failure
+      messages, tagging, replay button, and an Export control that states the row count
+      and disables at zero. Missing: side-by-side diff view, trace diff summary.
     provider_limitations: none
-    tests_present: false
-    release_blockers:
-      - Tests needed (P1-09)
+    tests_present: true
+    release_blockers: []
 
   - id: prompt-lab
     name: Prompt Lab
@@ -167,9 +170,10 @@ modules:
     current_status: partial
     backend_status: implemented
     backend_notes: >
-      Project/experiment/run entities, CRUD handlers, comparison endpoint.
-      Missing: parameter sweep runner, aggregate metric computation,
-      statistical summary generation.
+      Project/experiment/run entities, CRUD handlers, comparison endpoint, sweep
+      runner, and run export in CSV (now incl. params/tags/custom metrics), JSON and
+      an MLflow-compatible shape proven through MLflow's own client.
+      Missing: statistical summary generation.
     frontend_status: implemented
     frontend_notes: >
       Project management, experiment list, run views, comparison layout.
@@ -212,13 +216,19 @@ modules:
     current_status: partial
     backend_status: implemented
     backend_notes: >
-      Evaluation suite/run entities, metric/criteria definitions, scoring handler.
-      Missing: actual metric implementations (ROUGE, BLEU, exact match),
-      LLM-as-judge integration, calibration computation, human review workflow.
-    frontend_status: partial
+      Evaluation entities, scoring pipeline and durable job runner. BLEU and ROUGE-L are
+      reference-correct ports (sacrebleu 2.6.0 / rouge-score 0.1.2, differential-tested
+      to 1e-9), corpus BLEU is computed from pooled statistics, scorer definitions are
+      recorded with each run, logprobs are requested and stored, and ECE/Brier
+      calibration is computed server-side with hand-proved fixtures. llm_judge runs
+      (judge = model under test, stated in its definition). Unknown scorer names are
+      rejected at start. Missing: human review workflow.
+    frontend_status: implemented
     frontend_notes: >
-      Evaluation list and detail views. Missing: leaderboard, row-level
-      inspection, calibration plots, cost-vs-quality chart, human review mode.
+      List, leaderboard, detail with Summary (definitions shown, missing scores omitted
+      rather than drawn as zero), Records (row-level inspection incl. failures),
+      Calibration (reliability diagram + ECE/Brier with prerequisites stated) and export
+      buttons. Missing: cost-vs-quality chart, human review mode.
     provider_limitations: >
       Judge-based metrics require inference provider. Cost varies.
     tests_present: false
@@ -282,13 +292,17 @@ modules:
     current_status: partial
     backend_status: implemented
     backend_notes: >
-      Collection/document/chunk entities with pgvector embeddings, search endpoint.
-      Missing: chunking strategy preview, retrieval trace entity, citation mapping,
-      BM25/hybrid search, query rewrite visibility.
-    frontend_status: partial
+      Collection/document/chunk entities with pgvector embeddings; vector, BM25 and
+      hybrid search; labelled query sets and a retrieval evaluation endpoint scoring
+      all modes with precision@k/recall@k/MRR/nDCG@k (hand-proved, mutation-checked).
+      Embeddings prefer the default instance. Missing: chunking strategy preview,
+      citation mapping, query rewrite visibility.
+    frontend_status: implemented
     frontend_notes: >
-      Collection list, document upload, search panel. Missing: chunking inspector,
-      retrieval debugger, citation view, search strategy comparison.
+      Collection list, document upload, search panel, and an Evaluate tab that builds
+      labelled query sets from search results and compares the three modes on rank
+      metrics — with per-mode unavailability stated (e.g. null embeddings) instead of
+      zero scores. Missing: chunking inspector, citation view.
     provider_limitations: >
       Requires pgvector extension. Embedding model must be available via provider.
     tests_present: false
@@ -350,15 +364,17 @@ modules:
     name: Notebooks
     phase: 5
     promise: "JupyterLite embedded, generated SDK for runs/prompts/datasets, artifact attachment"
-    current_status: minimal
+    current_status: partial
     backend_status: implemented
     backend_notes: >
-      Notebook asset entity, CRUD handlers, download endpoint.
-      Missing: JupyterLite integration, generated SDK, artifact attachment.
-    frontend_status: partial
+      Notebook asset entity, CRUD handlers, download endpoint; the workbench Python
+      client covers chat/logprobs (model argument honoured), datasets, RAG and full
+      history export into pandas, and every function is verified against the live API.
+      Missing: artifact attachment.
+    frontend_status: implemented
     frontend_notes: >
-      Notebook list page with create/download/delete. Missing: embedded
-      JupyterLite editor, SDK documentation, artifact linking.
+      Notebook list with the workbench API reference and a runnable starter snippet,
+      JupyterLite embed/open on the detail page. Missing: artifact linking.
     provider_limitations: none
     tests_present: false
     release_blockers:
