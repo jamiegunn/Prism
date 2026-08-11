@@ -24,5 +24,13 @@ dist-ssr
 *.sw?
 
 # JupyterLite build output. Sources live in frontend/jupyterlite/; the build writes the whole
-# of public/jupyterlite/ and wipes it first, so nothing hand-written may live there.
+# of public/jupyterlite/
+
+# The build's own bookkeeping: a doit state database and the virtual environment it makes.
+jupyterlite/.venv/
+jupyterlite/.jupyterlite.doit.db and wipes it first, so nothing hand-written may live there.
 public/jupyterlite/
+
+# The build's own bookkeeping: a doit state database and the virtual environment it makes.
+jupyterlite/.venv/
+jupyterlite/.jupyterlite.doit.db

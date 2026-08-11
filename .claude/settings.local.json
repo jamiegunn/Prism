@@ -137,7 +137,8 @@
       "Bash(shellcheck -S warning dev.sh frontend/jupyterlite/build.sh)",
       "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('.github/workflows/jupyterlite.yml'\\)\\); yaml.safe_load\\(open\\('.github/workflows/ci.yml'\\)\\); print\\('both workflows parse'\\)\")",
       "Bash(frontend/jupyterlite/.venv/bin/python -c ' *)",
-      "Bash(pip list *)"
+      "Bash(pip list *)",
+      "Bash(git rm *)"
     ]
   }
 }
