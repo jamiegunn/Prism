@@ -98,7 +98,8 @@ public static class PlaygroundEndpoints
                 PresencePenalty = request.PresencePenalty,
                 Logprobs = request.Logprobs,
                 TopLogprobs = request.TopLogprobs
-            });
+            },
+            request.Model);
 
         await foreach (StreamChatEvent chatEvent in handler.HandleAsync(command, ct))
         {

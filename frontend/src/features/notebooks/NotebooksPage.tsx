@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { NotebookPen, Plus, Trash2, Download, Clock } from 'lucide-react'
 import { useNotebooks, useCreateNotebook, useDeleteNotebook } from './api'
+import { WorkbenchReference } from './components/WorkbenchReference'
 import type { NotebookSummary } from './types'
 
 export function NotebooksPage() {
@@ -106,6 +107,8 @@ export function NotebooksPage() {
           </div>
         ))}
       </div>
+
+      <WorkbenchReference />
 
       {showCreate && <CreateNotebookDialog onClose={() => setShowCreate(false)} />}
     </div>

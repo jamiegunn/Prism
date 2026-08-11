@@ -101,7 +101,7 @@ public sealed class StreamChatHandler
             {
                 Title = title,
                 SystemPrompt = command.SystemPrompt,
-                ModelId = instance.ModelId ?? "unknown",
+                ModelId = command.Model ?? instance.ModelId ?? "unknown",
                 InstanceId = command.InstanceId,
                 Parameters = command.Parameters
             };

@@ -61,6 +61,7 @@ async def chat(instance_id: str, model: str, prompt: str, **kwargs) -> str:
     """
     body = {
         "instanceId": instance_id,
+        "model": model,
         "message": prompt,
         "systemPrompt": kwargs.get("system_prompt"),
         "temperature": kwargs.get("temperature"),
@@ -77,6 +78,10 @@ async def chat(instance_id: str, model: str, prompt: str, **kwargs) -> str:
         headers={"Content-Type": "application/json"},
         body=json.dumps(body),
     )
+
+    if response.status >= 400:
+        text = await response.string()
+        raise Exception(f"API error {response.status}: {text}")
 
     # Parse SSE response to extract the final content
     text = await response.string()
@@ -149,6 +154,7 @@ async def logprobs(instance_id: str, model: str, prompt: str, top_logprobs: int 
     """
     body = {
         "instanceId": instance_id,
+        "model": model,
         "message": prompt,
         "logprobs": True,
         "topLogprobs": top_logprobs,
@@ -161,6 +167,10 @@ async def logprobs(instance_id: str, model: str, prompt: str, top_logprobs: int 
         headers={"Content-Type": "application/json"},
         body=json.dumps(body),
     )
+
+    if response.status >= 400:
+        text = await response.string()
+        raise Exception(f"API error {response.status}: {text}")
 
     text = await response.string()
     logprob_data = []
@@ -217,6 +227,78 @@ async def rag_query(collection_id: str, query: str, top_k: int = 5, search_type:
     return await _fetch(f"/rag/collections/{collection_id}/query", method="POST", body=body)
 
 
+
+async def export_history(format: str = "jsonl", **filters) -> list:
+    """
+    Export inference history records — the full recording, not a preview.
+
+    Args:
+        format: Only "jsonl" is parsed here; use the History page's Export button
+            for CSV or Parquet files.
+        **filters: Any filter the History search accepts:
+            search, source_module, model, from_date, to_date, tags, is_success.
+
+    Returns:
+        List of record dicts, one per exported row. A metric that was not
+        measured is None — never 0.
+    """
+    if format != "jsonl":
+        raise ValueError("export_history parses jsonl; download csv/parquet from the History page")
+
+    params = []
+    mapping = {
+        "search": "search",
+        "source_module": "sourceModule",
+        "model": "model",
+        "from_date": "from",
+        "to_date": "to",
+        "tags": "tags",
+        "is_success": "isSuccess",
+    }
+    for key, value in filters.items():
+        if key not in mapping:
+            raise ValueError(f"Unknown filter '{key}'. Valid: {', '.join(mapping)}")
+        if value is not None:
+            text = str(value).lower() if isinstance(value, bool) else str(value)
+            params.append(f"{mapping[key]}={text}")
+
+    query = "&".join(["format=jsonl"] + params)
+    response = await pyfetch(f"{BASE_URL}/history/export?{query}")
+
+    if response.status >= 400:
+        text = await response.string()
+        raise Exception(f"API error {response.status}: {text}")
+
+    text = await response.string()
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+async def history_dataframe(**filters):
+    """
+    Export inference history as a pandas DataFrame with parsed timestamps.
+
+    In JupyterLite, run 'import micropip; await micropip.install("pandas")'
+    first if pandas is not already available.
+
+    Args:
+        **filters: Same filters as export_history.
+
+    Returns:
+        A pandas DataFrame; startedAt/completedAt are UTC datetimes, and
+        unmeasured metrics are NaN/NaT (pandas' missing), never 0.
+    """
+    import pandas as pd  # deferred: only this helper needs it
+
+    records = await export_history(**filters)
+    df = pd.DataFrame.from_records(records)
+
+    if not df.empty:
+        for column in ("startedAt", "completedAt"):
+            df[column] = pd.to_datetime(df[column], utc=True, format="ISO8601")
+
+    return df
+
+
 def help():
     """Print available workbench functions."""
     print("""
@@ -248,4 +330,10 @@ All functions are async — use 'await' to call them.
 
   await workbench.rag_query(collection_id, query, top_k=5, search_type="Hybrid")
       Search a RAG collection.
+
+  await workbench.export_history(source_module=None, model=None, tags=None, ...)
+      Export history records (full rows, JSONL-parsed) with the History filters.
+
+  await workbench.history_dataframe(**same_filters)
+      History records as a pandas DataFrame (needs pandas installed).
 """)

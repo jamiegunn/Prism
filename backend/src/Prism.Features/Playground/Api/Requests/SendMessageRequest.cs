@@ -16,6 +16,9 @@ namespace Prism.Features.Playground.Api.Requests;
 /// <param name="PresencePenalty">The presence penalty (-2.0 to 2.0).</param>
 /// <param name="Logprobs">Whether to return log probabilities.</param>
 /// <param name="TopLogprobs">The number of top log probabilities to return per token.</param>
+/// <param name="Model">An optional model override. Null uses the instance's loaded model —
+/// the previous behaviour, and the only behaviour before this field existed, which is why
+/// the notebook client's model argument silently did nothing.</param>
 public sealed record SendMessageRequest(
     Guid? ConversationId,
     Guid InstanceId,
@@ -29,4 +32,5 @@ public sealed record SendMessageRequest(
     double? FrequencyPenalty,
     double? PresencePenalty,
     bool Logprobs = false,
-    int? TopLogprobs = null);
+    int? TopLogprobs = null,
+    string? Model = null);

@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { STARTER_SNIPPET } from './components/WorkbenchReference'
 import { ArrowLeft, Download, ExternalLink, Save, Maximize2, Minimize2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNotebook, useUpdateNotebook } from './api'
@@ -291,20 +292,11 @@ export function NotebookDetailPage() {
             is available for interacting with the Prism API from Python.
           </p>
           <div className="rounded bg-zinc-900 border border-zinc-700 p-3">
-            <pre className="text-xs text-zinc-300 font-mono">
-{`import workbench
-
-# Chat with a model
-response = await workbench.chat("instance-id", "model-name", "Hello!")
-
-# Search RAG collections
-results = await workbench.rag_query("collection-id", "search query")
-
-# Get dataset records
-records = await workbench.get_dataset_records("dataset-id")
-
-# Type workbench.help() for all available functions`}
-            </pre>
+            <pre className="text-xs text-zinc-300 font-mono overflow-x-auto">{STARTER_SNIPPET}</pre>
+            <p className="text-[11px] text-zinc-500 mt-2">
+              This snippet runs as pasted — it discovers its own instance ids. The full call
+              list is on the Notebooks page, or run workbench.help() in a cell.
+            </p>
           </div>
         </div>
       )}

@@ -11,9 +11,11 @@ namespace Prism.Features.Playground.Application.StreamChat;
 /// <param name="SystemPrompt">An optional system prompt for the conversation.</param>
 /// <param name="UserMessage">The user message to send.</param>
 /// <param name="Parameters">The inference parameters for generation.</param>
+/// <param name="Model">An optional model override; null uses the instance's loaded model.</param>
 public sealed record StreamChatCommand(
     Guid? ConversationId,
     Guid InstanceId,
     string? SystemPrompt,
     string UserMessage,
-    ConversationParameters Parameters);
+    ConversationParameters Parameters,
+    string? Model = null);
