@@ -6,6 +6,21 @@ Step-by-step procedures for common development tasks. Follow these exactly.
 
 ---
 
+## Skill: Implement a Research Capability
+
+**When:** Implementing any item from `docs/plans/RESEARCH_CAPABILITIES.md`, or adding anything
+that computes a metric, statistic or aggregate a researcher would cite.
+
+**Do not improvise this one.** Follow `docs/prompts/IMPLEMENT_RESEARCH_CAPABILITY.md` exactly.
+It specifies what counts as proof for a number (reference vectors, invariants, a hand-worked
+example), requires the capability to be reachable in the UI rather than merely implemented, and
+requires two documented adversarial passes over your own work.
+
+It also lists the verification traps in this repository — including that `npx tsc --noEmit`
+checks nothing here, and that a skipped test is indistinguishable from a fast pass.
+
+---
+
 ## Skill: Create a New Feature Slice
 
 **When:** Adding a new module/feature to the platform.

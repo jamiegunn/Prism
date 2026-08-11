@@ -34,6 +34,15 @@ This is an all-in-one AI Research platform. See `DESIGN.md` for vision, `ARCHITE
 - **Structured logging.** Always use named properties: `Log.Information("Loaded {ModelName} in {DurationMs}ms", name, ms)`. Never string interpolation.
 - **TypeScript:** Strict mode. No `any`. Prefer `interface` over `type` for object shapes. Use generated API client from orval — don't hand-write fetch calls.
 
+## How to Implement a Research Capability
+
+Anything that computes a metric, statistic or aggregate a researcher would cite — BLEU, ECE,
+nDCG, perplexity, cost — follows `docs/prompts/IMPLEMENT_RESEARCH_CAPABILITY.md` exactly. It
+defines what proof means here: reference vectors from a published source, invariants that hold
+for all inputs, and a hand-worked example. A passing test only shows the code agrees with itself.
+
+The plan those capabilities come from is `docs/plans/RESEARCH_CAPABILITIES.md`.
+
 ## How to Create a New Feature Slice
 
 See `SKILLS.md` (Claude Code skills) for the step-by-step procedure. The short version:
