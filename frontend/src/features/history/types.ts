@@ -14,7 +14,8 @@ export interface HistoryRecord {
   model: string
   providerName: string
   promptPreview: string
-  responsePreview: string
+  /** Null when the call failed before producing a response. */
+  responsePreview: string | null
   promptTokens: number
   completionTokens: number
   latencyMs: number
@@ -23,14 +24,14 @@ export interface HistoryRecord {
   startedAt: string
 }
 
-/** Full detail for a single history record. */
+/** Full detail for a single history record — mirrors InferenceRecordDetailDto. */
 export interface HistoryRecordDetail {
   id: string
   sourceModule: string
   model: string
   providerName: string
-  promptPreview: string
-  responsePreview: string
+  providerEndpoint: string
+  providerType: string
   promptTokens: number
   completionTokens: number
   totalTokens: number
@@ -38,11 +39,18 @@ export interface HistoryRecordDetail {
   ttftMs: number | null
   perplexity: number | null
   isSuccess: boolean
+  errorMessage: string | null
   tags: string[]
   startedAt: string
+  completedAt: string
   requestJson: string
-  responseJson: string
-  environmentJson: string
+  /** Null when the call failed before producing a response. */
+  responseJson: string | null
+  environmentJson: string | null
+  /** W3C trace id of the span covering this call; null when tracing was not active. */
+  traceId: string | null
+  /** Span id of the inference span; null when tracing was not active. */
+  spanId: string | null
 }
 
 /** Parameters for querying history records. */

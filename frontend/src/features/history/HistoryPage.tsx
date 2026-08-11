@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { useHistoryRecords } from './api'
+import { ExportControl } from './components/ExportControl'
 import { RecordDetailPanel } from './components/RecordDetailPanel'
 import type { HistoryFilterParams } from './types'
 import {
@@ -193,6 +194,9 @@ export function HistoryPage() {
             Reset
           </Button>
         </div>
+
+        {/* Export — selects exactly what the applied filters select */}
+        <ExportControl filters={filters} totalCount={totalCount} isLoading={isLoading} />
       </div>
 
       {/* Results Table */}

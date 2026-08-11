@@ -10,8 +10,11 @@ import type {
 
 const HISTORY_KEY = ['history']
 
-/** Fetch paginated + filtered history records. */
-export function useHistoryRecords(params?: HistoryFilterParams) {
+/**
+ * Builds the filter query string shared by search and export. One builder, so an export
+ * always requests exactly what the list shows — the two cannot drift.
+ */
+export function buildHistoryFilterParams(params?: HistoryFilterParams): URLSearchParams {
   const searchParams = new URLSearchParams()
   if (params?.search) searchParams.set('search', params.search)
   if (params?.sourceModule) searchParams.set('sourceModule', params.sourceModule)
@@ -20,6 +23,12 @@ export function useHistoryRecords(params?: HistoryFilterParams) {
   if (params?.to) searchParams.set('to', params.to)
   if (params?.tags) searchParams.set('tags', params.tags)
   if (params?.isSuccess !== undefined) searchParams.set('isSuccess', String(params.isSuccess))
+  return searchParams
+}
+
+/** Fetch paginated + filtered history records. */
+export function useHistoryRecords(params?: HistoryFilterParams) {
+  const searchParams = buildHistoryFilterParams(params)
   if (params?.page) searchParams.set('page', String(params.page))
   if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize))
   const query = searchParams.toString()
@@ -52,6 +61,60 @@ export function useTagRecord() {
         body: { tags },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: HISTORY_KEY }),
+  })
+}
+
+/** The formats the history export endpoint supports. */
+export type HistoryExportFormat = 'jsonl' | 'csv' | 'parquet'
+
+/**
+ * Downloads a filtered history export. Bypasses `apiClient` deliberately: the body is a file,
+ * not JSON, and the filename comes from the Content-Disposition header. Throws with the
+ * server's problem detail when the request fails, so the caller can say what failed.
+ */
+export function useExportHistory() {
+  return useMutation({
+    mutationFn: async ({
+      filters,
+      format,
+    }: {
+      filters: HistoryFilterParams
+      format: HistoryExportFormat
+    }) => {
+      const params = buildHistoryFilterParams(filters)
+      params.set('format', format)
+
+      const response = await fetch(`/api/v1/history/export?${params.toString()}`)
+
+      if (!response.ok) {
+        let detail = `Export failed (HTTP ${response.status})`
+        try {
+          const problem = (await response.json()) as { detail?: string; title?: string }
+          detail = problem.detail ?? problem.title ?? detail
+        } catch {
+          // Body was not problem JSON; keep the status-based message.
+        }
+        throw new Error(detail)
+      }
+
+      const rowCount = response.headers.get('X-Export-Row-Count')
+      const contentDisposition = response.headers.get('Content-Disposition')
+      const fileName =
+        contentDisposition?.match(/filename="?([^";]+)"?/)?.[1] ??
+        `history-export.${format}`
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = fileName
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+
+      return { fileName, rowCount: rowCount ? Number(rowCount) : null }
+    },
   })
 }
 

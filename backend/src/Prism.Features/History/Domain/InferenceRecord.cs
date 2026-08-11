@@ -140,6 +140,19 @@ public sealed class InferenceRecord : BaseEntity
     public Guid? PromptVersionId { get; set; }
 
     /// <summary>
+    /// Gets or sets the W3C trace id (32 hex chars) of the span that covered this call, or
+    /// null when tracing was not active. The correlation key into Jaeger, Langfuse or
+    /// Phoenix.
+    /// </summary>
+    public string? TraceId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the span id (16 hex chars) of the inference span, or null when tracing
+    /// was not active.
+    /// </summary>
+    public string? SpanId { get; set; }
+
+    /// <summary>
     /// Gets or sets the trace for this record, if token-level data was captured.
     /// </summary>
     public InferenceTrace? Trace { get; set; }

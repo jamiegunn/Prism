@@ -46,6 +46,13 @@ public sealed class EvaluationEntity : BaseEntity
     public Dictionary<string, object?> Config { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the definition of each scorer that ran, keyed by scorer name, recorded at
+    /// run time. A score whose definition is not stored next to it stops being citable the
+    /// moment the implementation changes.
+    /// </summary>
+    public Dictionary<string, string> ScoreDefinitions { get; set; } = new();
+
+    /// <summary>
     /// Gets or sets the current execution status.
     /// </summary>
     public EvaluationStatus Status { get; set; } = EvaluationStatus.Pending;

@@ -6,6 +6,7 @@ using Prism.Common.Abstractions;
 using Prism.Common.Results;
 using Prism.Features.History.Api.Requests;
 using Prism.Features.History.Application.Dtos;
+using Prism.Features.History.Application.ExportHistory;
 using Prism.Features.History.Application.GetRecord;
 using Prism.Features.History.Application.ReplaySingle;
 using Prism.Features.History.Application.SearchHistory;
@@ -33,6 +34,11 @@ public static class HistoryEndpoints
             .WithName("SearchHistory")
             .WithSummary("Searches inference history with filters and pagination")
             .Produces<PagedResult<InferenceRecordSummaryDto>>();
+
+        group.MapGet("/export", ExportHistory)
+            .WithName("ExportHistory")
+            .WithSummary("Exports filtered inference history as JSONL, CSV or Parquet")
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         group.MapGet("/{id:guid}", GetRecord)
             .WithName("GetHistoryRecord")
@@ -85,6 +91,51 @@ public static class HistoryEndpoints
         return result.Match(
             pagedResult => TypedResults.Ok(pagedResult),
             error => error.ToHttpResult());
+    }
+
+    /// <summary>
+    /// Handles the export endpoint. Accepts exactly the filters <see cref="SearchHistory"/>
+    /// accepts, so an export contains what the current search selects — not everything.
+    /// Streams the file body; the row count is exposed as the <c>X-Export-Row-Count</c>
+    /// response header so a client can state it without a second request.
+    /// </summary>
+    private static async Task<IResult> ExportHistory(
+        [FromQuery] string? format,
+        [FromQuery] string? search,
+        [FromQuery] string? sourceModule,
+        [FromQuery] string? model,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? tags,
+        [FromQuery] bool? isSuccess,
+        HttpContext httpContext,
+        ExportHistoryHandler handler,
+        CancellationToken ct)
+    {
+        List<string>? tagList = !string.IsNullOrWhiteSpace(tags)
+            ? tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+            : null;
+
+        var filters = new SearchHistoryQuery(
+            search, sourceModule, model, from, to, tagList, isSuccess, 1, 1);
+
+        var query = new ExportHistoryQuery(filters, format ?? "jsonl");
+
+        Result<HistoryExport> result = await handler.HandleAsync(query, ct);
+
+        if (result.IsFailure)
+        {
+            return result.Error.ToHttpResult();
+        }
+
+        HistoryExport export = result.Value;
+        httpContext.Response.Headers["X-Export-Row-Count"] =
+            export.RowCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        return TypedResults.Stream(
+            stream => export.WriteAsync(stream, ct),
+            export.ContentType,
+            export.FileName);
     }
 
     /// <summary>

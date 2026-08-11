@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Prism.Features.History.Domain;
 
@@ -53,18 +51,22 @@ public sealed class InferenceRecordConfiguration : IEntityTypeConfiguration<Infe
         builder.Property(e => e.ErrorMessage)
             .HasMaxLength(2000);
 
+        // text[] rather than jsonb: Npgsql maps List<string> to a native array without a
+        // value converter, which is what lets `r.Tags.Contains(tag)` translate to SQL
+        // (`@tag = ANY("Tags")`). The previous jsonb + converter mapping made that predicate
+        // untranslatable, so the tag filter 500'd at runtime (R8 in docs/features/history.md).
         builder.Property(e => e.Tags)
-            .HasColumnType("jsonb")
-            .HasConversion(
-                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>(),
-                new ValueComparer<List<string>>(
-                    (c1, c2) => JsonSerializer.Serialize(c1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(c2, (JsonSerializerOptions?)null),
-                    c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-                    c => c.ToList()));
+            .HasColumnType("text[]")
+            .IsRequired();
 
         builder.Property(e => e.EnvironmentJson)
             .HasColumnType("jsonb");
+
+        builder.Property(e => e.TraceId)
+            .HasMaxLength(32);
+
+        builder.Property(e => e.SpanId)
+            .HasMaxLength(16);
 
         builder.Property(e => e.EstimatedCost)
             .HasPrecision(18, 8);

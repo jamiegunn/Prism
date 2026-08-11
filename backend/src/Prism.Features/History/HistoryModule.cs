@@ -35,6 +35,7 @@ public static class HistoryModule
 
         // Handlers
         services.AddScoped<SearchHistoryHandler>();
+        services.AddScoped<Application.ExportHistory.ExportHistoryHandler>();
         services.AddScoped<GetRecordHandler>();
         services.AddScoped<TagRecordHandler>();
         services.AddScoped<ReplaySingleHandler>();
