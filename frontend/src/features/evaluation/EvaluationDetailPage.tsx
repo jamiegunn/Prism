@@ -11,6 +11,17 @@ import { ResultRecordsTab } from './components/ResultRecordsTab'
 
 const COLORS = ['var(--color-primary)', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
 
+/**
+ * Formats a p-value without lying at the edges: tiny values display as "< 0.001" rather
+ * than a rounded 0.000 (which claims impossibility), and an undefined statistic shows as
+ * an em dash rather than a number.
+ */
+export function formatPValue(p: number | null): string {
+  if (p === null) return '—'
+  if (p < 0.001) return '< 0.001'
+  return p.toFixed(3)
+}
+
 export function EvaluationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -188,11 +199,22 @@ export function EvaluationDetailPage() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1 flex-wrap">
-                          {Object.entries(m.averageScores).map(([k, v]) => (
-                            <Badge key={k} variant="secondary" className="text-xs" title={summary.scoreDefinitions?.[k]}>
-                              {k}: {v.toFixed(3)}
-                            </Badge>
-                          ))}
+                          {Object.entries(m.averageScores).map(([k, v]) => {
+                            const ci = m.scoreIntervals?.[k]
+                            return (
+                              <Badge key={k} variant="secondary" className="text-xs" title={summary.scoreDefinitions?.[k]}>
+                                {k}: {v.toFixed(3)}
+                                {ci && (
+                                  <span
+                                    className="ml-1 font-normal text-muted-foreground"
+                                    title={`95% CI [${ci.lower.toFixed(3)}, ${ci.upper.toFixed(3)}] over ${ci.sampleCount} items — ${summary.scoreDefinitions?.['ci95'] ?? ''}`}
+                                  >
+                                    [{ci.lower.toFixed(3)}, {ci.upper.toFixed(3)}]
+                                  </span>
+                                )}
+                              </Badge>
+                            )
+                          })}
                           {Object.entries(m.corpusMetrics ?? {}).map(([k, v]) => (
                             <Badge key={k} className="text-xs" title={summary.scoreDefinitions?.[k]}>
                               {k}: {v.toFixed(3)}
@@ -200,6 +222,65 @@ export function EvaluationDetailPage() {
                           ))}
                         </div>
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {summary && (summary.comparisons?.length ?? 0) > 0 && (
+            <div className="mt-4 rounded-lg border overflow-hidden">
+              <div className="px-4 py-2 bg-muted/50 border-b">
+                <h3 className="text-sm font-medium">Model comparisons</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Paired two-sided t-test per metric, over the dataset items both models
+                  scored. A confidence interval that straddles zero means the data does not
+                  establish a difference.
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30 text-xs">
+                    <th className="px-4 py-1.5 text-left font-medium">Metric</th>
+                    <th className="px-4 py-1.5 text-left font-medium">Pair</th>
+                    <th className="px-4 py-1.5 text-right font-medium">Mean Δ (A−B)</th>
+                    <th className="px-4 py-1.5 text-right font-medium">95% CI of Δ</th>
+                    <th className="px-4 py-1.5 text-right font-medium">t</th>
+                    <th className="px-4 py-1.5 text-right font-medium">p (two-sided)</th>
+                    <th className="px-4 py-1.5 text-right font-medium">Items</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.comparisons.map((c) => (
+                    <tr key={`${c.metric}:${c.modelA}:${c.modelB}`} className="border-b text-xs">
+                      <td className="px-4 py-1.5 font-mono">{c.metric}</td>
+                      <td className="px-4 py-1.5">
+                        <span className="font-medium">{c.modelA}</span>
+                        <span className="text-muted-foreground"> vs </span>
+                        <span className="font-medium">{c.modelB}</span>
+                      </td>
+                      <td className="px-4 py-1.5 text-right font-mono">
+                        {c.meanDifference >= 0 ? '+' : ''}
+                        {c.meanDifference.toFixed(3)}
+                      </td>
+                      <td className="px-4 py-1.5 text-right font-mono">
+                        [{c.lower.toFixed(3)}, {c.upper.toFixed(3)}]
+                      </td>
+                      <td className="px-4 py-1.5 text-right font-mono">
+                        {c.tStatistic === null ? '—' : c.tStatistic.toFixed(3)}
+                      </td>
+                      <td
+                        className="px-4 py-1.5 text-right font-mono"
+                        title={
+                          c.pValue === null
+                            ? 'Undefined: every pair differed by exactly the same amount (zero variance).'
+                            : undefined
+                        }
+                      >
+                        {formatPValue(c.pValue)}
+                      </td>
+                      <td className="px-4 py-1.5 text-right">{c.pairCount}</td>
                     </tr>
                   ))}
                 </tbody>

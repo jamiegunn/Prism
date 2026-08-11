@@ -43,6 +43,32 @@ export interface EvaluationSummary {
   modelSummaries: ModelSummary[]
   /** Definition of every metric in the summaries, recorded when the evaluation ran. */
   scoreDefinitions: Record<string, string>
+  /** Paired comparisons between each model pair, per shared metric. */
+  comparisons: ModelComparison[]
+}
+
+/** A Student-t 95% confidence interval on a mean per-item score. */
+export interface ScoreInterval {
+  mean: number
+  lower: number
+  upper: number
+  stdDev: number
+  sampleCount: number
+}
+
+/** A paired two-sided t comparison of two models on one metric, paired by dataset item. */
+export interface ModelComparison {
+  metric: string
+  modelA: string
+  modelB: string
+  pairCount: number
+  meanDifference: number
+  lower: number
+  upper: number
+  /** Null when every pair differs identically — undefined, not zero. */
+  tStatistic: number | null
+  /** Two-sided p-value; null when the statistic is undefined. */
+  pValue: number | null
 }
 
 export interface ModelSummary {
@@ -50,6 +76,8 @@ export interface ModelSummary {
   recordCount: number
   /** Mean per-item (sentence-level) score per scoring method. */
   averageScores: Record<string, number>
+  /** 95% CI per scoring method; a metric with fewer than two scored items has no entry. */
+  scoreIntervals: Record<string, ScoreInterval>
   /** Corpus-level metrics from pooled statistics — not means of per-item scores. */
   corpusMetrics: Record<string, number>
   /** Mean latency over successful items; null when nothing succeeded. */

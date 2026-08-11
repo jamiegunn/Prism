@@ -226,13 +226,18 @@ modules:
       recorded with each run, logprobs are requested and stored, and ECE/Brier
       calibration is computed server-side with hand-proved fixtures. llm_judge runs
       (judge = model under test, stated in its definition). Unknown scorer names are
-      rejected at start. Missing: human review workflow.
+      rejected at start. Mean scores carry 95% Student-t CIs and model pairs get paired
+      two-sided t-tests (pairing by dataset item, failed calls excluded), both
+      differential-tested against scipy.stats to 1e-9 with undefined statistics reported
+      as absent. Missing: human review workflow.
     frontend_status: implemented
     frontend_notes: >
       List, leaderboard, detail with Summary (definitions shown, missing scores omitted
-      rather than drawn as zero), Records (row-level inspection incl. failures),
-      Calibration (reliability diagram + ECE/Brier with prerequisites stated) and export
-      buttons. Missing: cost-vs-quality chart, human review mode.
+      rather than drawn as zero, CI ranges on score badges, Model comparisons table with
+      p-values that render "< 0.001" rather than a rounded zero and a dash for undefined
+      statistics), Records (row-level inspection incl. failures), Calibration
+      (reliability diagram + ECE/Brier with prerequisites stated) and export buttons.
+      Missing: cost-vs-quality chart, human review mode.
     provider_limitations: >
       Judge-based metrics require inference provider. Cost varies.
     tests_present: false

@@ -243,6 +243,16 @@ quality.
 that has started emitting one-word answers or three-paragraph preambles, which is a real
 problem worth catching, and nothing more.
 
+The summary also says how sure it is. Every mean score with at least two items carries a 95%
+Student-t confidence interval in its badge, and with two or more models a **Model comparisons**
+table runs a paired two-sided t-test per metric over the items both models scored — mean
+difference, its 95% CI, the t statistic and p-value. Read the CI of the difference before the
+means: an interval that straddles zero means the data on hand does not establish a difference,
+however the bar chart looks. On a handful of items the intervals are wide — sometimes wider
+than the 0–1 score scale, which is the interval being honest, not broken. Two models that give
+identical answers show a dash for t and p (undefined, not zero), and the implementations are
+differential-tested against scipy.stats.
+
 ---
 
 ## What this page will not do
@@ -301,6 +311,8 @@ problem worth catching, and nothing more.
 | R15 | Requesting an unknown scorer fails loudly at start, not silently at run time | `StartEvaluationHandler` validates names against the registered set (+`llm_judge`) and returns 400 naming the valid ones | MET |
 | R16 | The runner uses the default instance, not an arbitrary row | selection orders by `IsDefault`, then online status — previously it took the first row and ran the whole evaluation against a dead seeded endpoint | MET |
 | R17 | `llm_judge` actually judges | constructed per run with the provider and a judge model (the model under test — stated in its recorded definition); previously unregistered and silently dropped | MET |
+| R18 | Mean scores state their uncertainty | 95% Student-t CI per metric per model wherever ≥2 items were scored, rendered in the score badge; absent for one item, never zero-width; differential-tested against scipy.stats.t.interval to 1e-9 incl. df=1 and df=999, invariants for symmetry/containment/nesting (`StatisticalMetricsTests`, 26 tests, mutation-checked incl. the Bessel correction); browser-verified | MET |
+| R19 | Model differences are tested, not eyeballed | paired two-sided t-test per metric over dataset items both models scored (pairing by record id, failed calls excluded — both mutation-checked); mean Δ, CI of Δ, t, p vs scipy.stats.ttest_rel to 1e-9; zero-variance pairs report undefined (dash), not p=0; deep-tail p-values computed via the survival function after an adversarial pass showed 2·(1−CDF) cancels to ~3 digits (`EvaluationStatisticsTests`); browser-verified defined and degenerate paths | MET |
 
 ### Withdrawn
 
