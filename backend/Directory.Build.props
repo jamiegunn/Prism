@@ -22,4 +22,12 @@
     -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(PRISM_TARGETING_PACK_VERSION)' != ''">
+    <!--
+      Offline-feed mode (see Directory.Build.targets for the targeting-pack pin). The native
+      apphost pack is versioned like the targeting packs; skip it — `dotnet <dll>` needs none.
+    -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
 </Project>

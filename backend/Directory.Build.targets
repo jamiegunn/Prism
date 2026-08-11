@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    Offline builds against a snapshotted NuGet feed (scripts/handoff-to-sandbox.sh) hit a
+    version skew: each SDK build pins the exact net9.0 targeting-pack version it wants, so a
+    feed restored by one SDK (say 10.0.201 wanting 9.0.14) fails NU1102 under another (say
+    Ubuntu's 10.0.110 wanting 9.0.18). Setting PRISM_TARGETING_PACK_VERSION to the version
+    the feed actually contains pins every FrameworkReference — including the one
+    Microsoft.AspNetCore.Mvc.Testing injects transitively, which is why this lives in
+    Directory.Build.targets (evaluated after package props) rather than Directory.Build.props.
+    Unset, this file does nothing.
+  -->
+  <ItemGroup Condition="'$(PRISM_TARGETING_PACK_VERSION)' != ''">
+    <FrameworkReference Update="@(FrameworkReference)"
+                        TargetingPackVersion="$(PRISM_TARGETING_PACK_VERSION)" />
+
+    <!--
+      Belt and braces: a FrameworkReference injected by a package's buildTransitive targets
+      (Microsoft.AspNetCore.Mvc.Testing does this) is added after the Update above ran, so
+      the SDK's own default-version table is pinned too.
+    -->
+    <!--
+      Every row of the table is updated (a metadata condition is not legal here); with every
+      project in this solution targeting net9.0 only the net9.0 rows are ever consulted.
+    -->
+    <KnownFrameworkReference Update="Microsoft.NETCore.App"
+                             TargetingPackVersion="$(PRISM_TARGETING_PACK_VERSION)" />
+    <KnownFrameworkReference Update="Microsoft.AspNetCore.App"
+                             TargetingPackVersion="$(PRISM_TARGETING_PACK_VERSION)" />
+  </ItemGroup>
+</Project>
