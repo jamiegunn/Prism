@@ -6,6 +6,9 @@ import type {
   ChunkSearchResult,
   RagPipelineResult,
   CollectionStats,
+  RagQuerySet,
+  RagQuerySetDetail,
+  RetrievalEvaluation,
 } from './types'
 
 const RAG_KEY = ['rag']
@@ -117,6 +120,64 @@ export function useRagPipeline(collectionId: string) {
       maxTokens?: number
     }) =>
       apiClient<RagPipelineResult>(`/rag/collections/${collectionId}/rag`, {
+        method: 'POST',
+        body: data,
+      }),
+  })
+}
+
+/** Labelled query sets of a collection. */
+export function useQuerySets(collectionId: string) {
+  return useQuery({
+    queryKey: [...RAG_KEY, 'query-sets', collectionId],
+    queryFn: () => apiClient<RagQuerySet[]>(`/rag/collections/${collectionId}/query-sets`),
+    enabled: !!collectionId,
+  })
+}
+
+/** One labelled query set with its items. */
+export function useQuerySet(querySetId: string | null) {
+  return useQuery({
+    queryKey: [...RAG_KEY, 'query-set', querySetId],
+    queryFn: () => apiClient<RagQuerySetDetail>(`/rag/query-sets/${querySetId}`),
+    enabled: !!querySetId,
+  })
+}
+
+/** Creates a labelled query set. */
+export function useCreateQuerySet(collectionId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: {
+      name: string
+      description?: string
+      items: { queryText: string; relevantChunkIds: string[] }[]
+    }) =>
+      apiClient<RagQuerySet>(`/rag/collections/${collectionId}/query-sets`, {
+        method: 'POST',
+        body: data,
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...RAG_KEY, 'query-sets', collectionId] }),
+  })
+}
+
+/** Deletes a labelled query set. */
+export function useDeleteQuerySet(collectionId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (querySetId: string) =>
+      apiClient<void>(`/rag/query-sets/${querySetId}`, { method: 'DELETE' }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [...RAG_KEY, 'query-sets', collectionId] }),
+  })
+}
+
+/** Scores retrieval modes against a labelled query set. */
+export function useEvaluateRetrieval(collectionId: string) {
+  return useMutation({
+    mutationFn: (data: { querySetId: string; topK?: number; modes?: string[] }) =>
+      apiClient<RetrievalEvaluation>(`/rag/collections/${collectionId}/evaluate`, {
         method: 'POST',
         body: data,
       }),

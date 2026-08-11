@@ -62,3 +62,43 @@ export interface CollectionStats {
   averageChunkSize: number
   documentsByStatus: Record<string, number>
 }
+
+export interface RagQuerySet {
+  id: string
+  collectionId: string
+  name: string
+  description: string | null
+  itemCount: number
+  createdAt: string
+}
+
+export interface RagQuerySetItem {
+  id: string
+  queryText: string
+  relevantChunkIds: string[]
+}
+
+export interface RagQuerySetDetail {
+  id: string
+  collectionId: string
+  name: string
+  description: string | null
+  items: RagQuerySetItem[]
+}
+
+export interface RetrievalModeResult {
+  mode: string
+  queryCount: number
+  /** Mean metric values, or null when the mode could not run at all. */
+  metrics: Record<string, number> | null
+  /** Why the mode failed, or null on success. */
+  error: string | null
+}
+
+export interface RetrievalEvaluation {
+  collectionId: string
+  querySetId: string
+  topK: number
+  modes: RetrievalModeResult[]
+  definitions: Record<string, string>
+}

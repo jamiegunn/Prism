@@ -3,10 +3,11 @@ import { ArrowLeft, FileText } from 'lucide-react'
 import { useState } from 'react'
 import { useCollection, useDocuments, useCollectionStats } from './api'
 import { DocumentUpload } from './components/DocumentUpload'
+import { EvaluatePanel } from './components/EvaluatePanel'
 import { SearchPanel } from './components/SearchPanel'
 import type { RagDocument } from './types'
 
-type Tab = 'documents' | 'search' | 'stats'
+type Tab = 'documents' | 'search' | 'evaluate' | 'stats'
 
 export function RagCollectionDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -24,6 +25,7 @@ export function RagCollectionDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'documents', label: 'Documents' },
     { key: 'search', label: 'Search & RAG' },
+    { key: 'evaluate', label: 'Evaluate' },
     { key: 'stats', label: 'Statistics' },
   ]
 
@@ -108,6 +110,8 @@ export function RagCollectionDetailPage() {
       )}
 
       {activeTab === 'search' && <SearchPanel collectionId={id!} />}
+
+      {activeTab === 'evaluate' && <EvaluatePanel collectionId={id!} />}
 
       {activeTab === 'stats' && stats && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

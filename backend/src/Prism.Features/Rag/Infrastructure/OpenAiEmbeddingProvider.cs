@@ -65,9 +65,14 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
 
         if (_db is not null)
         {
+            // The default instance first, then the oldest: "oldest" alone routed embedding
+            // calls to a dead seeded endpoint while the instance the user actually marked
+            // default sat unused — the same arbitrary-instance failure the evaluation
+            // runner had.
             string? endpoint = await _db.Set<InferenceInstance>()
                 .AsNoTracking()
-                .OrderBy(i => i.CreatedAt)
+                .OrderByDescending(i => i.IsDefault)
+                .ThenBy(i => i.CreatedAt)
                 .Select(i => i.Endpoint)
                 .FirstOrDefaultAsync(ct);
 

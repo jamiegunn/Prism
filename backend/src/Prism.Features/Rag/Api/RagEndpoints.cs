@@ -13,6 +13,7 @@ using Prism.Features.Rag.Application.IngestDocument;
 using Prism.Features.Rag.Application.ListCollections;
 using Prism.Features.Rag.Application.ListDocuments;
 using Prism.Features.Rag.Application.QueryCollection;
+using Prism.Features.Rag.Application.QuerySets;
 using Prism.Features.Rag.Application.RagPipeline;
 using Prism.Features.Rag.Domain;
 
@@ -91,7 +92,127 @@ public static class RagEndpoints
             .Produces<CollectionStatsDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        // Labelled query sets + retrieval evaluation
+        rag.MapPost("/collections/{id:guid}/query-sets", CreateQuerySet)
+            .WithName("CreateRagQuerySet")
+            .WithSummary("Creates a labelled query set (queries with relevant chunk ids)")
+            .Produces<RagQuerySetDto>(StatusCodes.Status201Created)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        rag.MapGet("/collections/{id:guid}/query-sets", ListQuerySets)
+            .WithName("ListRagQuerySets")
+            .WithSummary("Lists a collection's labelled query sets")
+            .Produces<List<RagQuerySetDto>>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        rag.MapGet("/query-sets/{querySetId:guid}", GetQuerySet)
+            .WithName("GetRagQuerySet")
+            .WithSummary("Gets a labelled query set with its items")
+            .Produces<RagQuerySetDetailDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        rag.MapDelete("/query-sets/{querySetId:guid}", DeleteQuerySet)
+            .WithName("DeleteRagQuerySet")
+            .WithSummary("Deletes a labelled query set")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        rag.MapPost("/collections/{id:guid}/evaluate", EvaluateRetrieval)
+            .WithName("EvaluateRagRetrieval")
+            .WithSummary("Scores vector, BM25 and hybrid retrieval against a labelled query set")
+            .Produces<RetrievalEvaluationDto>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    private static async Task<IResult> CreateQuerySet(
+        Guid id,
+        [FromBody] CreateQuerySetRequest request,
+        CreateQuerySetHandler handler,
+        CancellationToken ct)
+    {
+        var command = new CreateQuerySetCommand(
+            id,
+            request.Name,
+            request.Description,
+            request.Items.Select(i => (i.QueryText, i.RelevantChunkIds)).ToList());
+
+        Result<RagQuerySetDto> result = await handler.HandleAsync(command, ct);
+
+        return result.Match(
+            dto => TypedResults.Created($"/api/v1/rag/query-sets/{dto.Id}", dto),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> ListQuerySets(
+        Guid id,
+        ListQuerySetsHandler handler,
+        CancellationToken ct)
+    {
+        Result<List<RagQuerySetDto>> result = await handler.HandleAsync(id, ct);
+
+        return result.Match(
+            dtos => TypedResults.Ok(dtos),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> GetQuerySet(
+        Guid querySetId,
+        ListQuerySetsHandler handler,
+        CancellationToken ct)
+    {
+        Result<RagQuerySetDetailDto> result = await handler.GetAsync(querySetId, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
+    }
+
+    private static async Task<IResult> DeleteQuerySet(
+        Guid querySetId,
+        DeleteQuerySetHandler handler,
+        CancellationToken ct)
+    {
+        Result result = await handler.HandleAsync(querySetId, ct);
+
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> EvaluateRetrieval(
+        Guid id,
+        [FromBody] EvaluateRetrievalRequest request,
+        EvaluateRetrievalHandler handler,
+        CancellationToken ct)
+    {
+        List<SearchType>? modes = null;
+
+        if (request.Modes is { Count: > 0 })
+        {
+            modes = [];
+
+            foreach (string raw in request.Modes)
+            {
+                if (!Enum.TryParse(raw, ignoreCase: true, out SearchType parsed))
+                {
+                    return Error.Validation(
+                        $"Unknown retrieval mode '{raw}'. Valid: vector, bm25, hybrid.")
+                        .ToHttpResult();
+                }
+
+                modes.Add(parsed);
+            }
+        }
+
+        var command = new EvaluateRetrievalCommand(id, request.QuerySetId, request.TopK, modes);
+
+        Result<RetrievalEvaluationDto> result = await handler.HandleAsync(command, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
     }
 
     private static async Task<IResult> CreateCollection(

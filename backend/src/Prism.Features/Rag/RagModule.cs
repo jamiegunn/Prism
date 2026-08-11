@@ -39,6 +39,12 @@ public static class RagModule
         services.AddScoped<RagPipelineHandler>();
         services.AddScoped<GetCollectionStatsHandler>();
 
+        // Labelled query sets + retrieval evaluation
+        services.AddScoped<Application.QuerySets.CreateQuerySetHandler>();
+        services.AddScoped<Application.QuerySets.ListQuerySetsHandler>();
+        services.AddScoped<Application.QuerySets.DeleteQuerySetHandler>();
+        services.AddScoped<Application.QuerySets.EvaluateRetrievalHandler>();
+
         // Chunking strategies
         services.AddSingleton<IChunkingStrategy, FixedSizeChunker>();
         services.AddSingleton<IChunkingStrategy, SentenceChunker>();
