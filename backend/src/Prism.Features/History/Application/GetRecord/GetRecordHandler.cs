@@ -72,6 +72,8 @@ public sealed class GetRecordHandler
             record.Tags,
             record.StartedAt,
             record.CompletedAt,
-            record.EnvironmentJson);
+            record.EnvironmentJson,
+            record.TraceId,
+            record.SpanId);
     }
 }

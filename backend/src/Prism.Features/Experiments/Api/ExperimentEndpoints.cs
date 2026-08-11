@@ -138,7 +138,7 @@ public static class ExperimentEndpoints
 
         experiments.MapGet("/{id:guid}/runs/export", ExportRuns)
             .WithName("ExportRuns")
-            .WithSummary("Exports runs from an experiment in CSV or JSON format")
+            .WithSummary("Exports runs from an experiment in CSV, JSON or MLflow format")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         experiments.MapPost("/{id:guid}/sweep", RunSweep)
@@ -396,10 +396,12 @@ public static class ExperimentEndpoints
 
     private static async Task<IResult> ExportRuns(
         Guid id,
-        [FromQuery] string format,
+        [FromQuery] string? format,
         ExportRunsHandler handler,
         CancellationToken ct)
     {
+        // Nullable deliberately: with a non-nullable string, omitting ?format= was a 400
+        // from the binder and the "json" default below was unreachable.
         var query = new ExportRunsQuery(id, format ?? "json");
         Result<ExportResult> result = await handler.HandleAsync(query, ct);
 

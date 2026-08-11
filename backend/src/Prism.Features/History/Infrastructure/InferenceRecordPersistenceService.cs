@@ -247,7 +247,9 @@ public sealed class InferenceRecordPersistenceService : BackgroundService
             CompletedAt = data.CompletedAt,
             EnvironmentJson = data.Environment is not null
                 ? JsonSerializer.Serialize(data.Environment, JsonOptions)
-                : null
+                : null,
+            TraceId = data.TraceId,
+            SpanId = data.SpanId
         };
     }
 }

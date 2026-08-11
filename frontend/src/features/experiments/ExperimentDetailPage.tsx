@@ -134,6 +134,15 @@ export function ExperimentDetailPage() {
             <Download className="h-3 w-3" />
             JSON
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => handleExport('mlflow')}
+          >
+            <Download className="h-3 w-3" />
+            MLflow
+          </Button>
         </div>
       </div>
 

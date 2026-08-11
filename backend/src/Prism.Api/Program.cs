@@ -1,9 +1,11 @@
 using System.Net.Sockets;
 using Npgsql;
+using OpenTelemetry.Trace;
 using Prism.Api.Extensions;
 using Prism.Api.Middleware;
 using Prism.Common.Database;
 using Prism.Common.Database.Seeders;
+using Prism.Common.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -36,6 +38,27 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
     builder.Services.AddHealthChecks();
+
+    // Tracing: the gen_ai.* inference spans (Prism.Inference) plus inbound HTTP, in the
+    // standard OTel shape so Jaeger, Langfuse or Phoenix can read them. Registering the
+    // source is what makes ActivitySource.StartActivity return a live span — without it the
+    // trace/span ids History records would all be null. The console exporter is opt-in
+    // (Prism:Telemetry:ConsoleExporter) because it is very loud.
+    PrismTelemetry.CaptureContent =
+        builder.Configuration.GetValue<bool>("Prism:Telemetry:CaptureContent");
+
+    builder.Services.AddOpenTelemetry()
+        .WithTracing(tracing =>
+        {
+            tracing
+                .AddSource(PrismTelemetry.InferenceSourceName)
+                .AddAspNetCoreInstrumentation();
+
+            if (builder.Configuration.GetValue<bool>("Prism:Telemetry:ConsoleExporter"))
+            {
+                tracing.AddConsoleExporter();
+            }
+        });
 
     builder.Services.AddCors(options =>
     {

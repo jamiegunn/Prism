@@ -24,6 +24,9 @@ namespace Prism.Features.History.Application.Dtos;
 /// <param name="StartedAt">The UTC timestamp when the request started.</param>
 /// <param name="CompletedAt">The UTC timestamp when the request completed.</param>
 /// <param name="EnvironmentJson">The serialized EnvironmentSnapshot JSON, or null.</param>
+/// <param name="TraceId">The W3C trace id of the span covering this call, or null when
+/// tracing was not active — the id to paste into Jaeger, Langfuse or Phoenix.</param>
+/// <param name="SpanId">The span id of the inference span, or null.</param>
 public sealed record InferenceRecordDetailDto(
     Guid Id,
     string SourceModule,
@@ -44,4 +47,6 @@ public sealed record InferenceRecordDetailDto(
     List<string> Tags,
     DateTime StartedAt,
     DateTime CompletedAt,
-    string? EnvironmentJson);
+    string? EnvironmentJson,
+    string? TraceId,
+    string? SpanId);

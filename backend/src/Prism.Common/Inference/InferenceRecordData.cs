@@ -19,6 +19,9 @@ namespace Prism.Common.Inference;
 /// <param name="IsSuccess">Whether the request completed successfully.</param>
 /// <param name="ErrorMessage">The error message if the request failed.</param>
 /// <param name="Environment">The environment snapshot captured at the time of the request.</param>
+/// <param name="TraceId">The W3C trace id of the span that covered this call, or null when
+/// tracing was not active. What lets a history row be found in Jaeger, Langfuse or Phoenix.</param>
+/// <param name="SpanId">The span id of the inference span, or null when tracing was not active.</param>
 public sealed record InferenceRecordData(
     Guid Id,
     ChatRequest Request,
@@ -32,4 +35,6 @@ public sealed record InferenceRecordData(
     DateTime CompletedAt,
     bool IsSuccess,
     string? ErrorMessage,
-    EnvironmentSnapshot? Environment);
+    EnvironmentSnapshot? Environment,
+    string? TraceId = null,
+    string? SpanId = null);

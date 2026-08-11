@@ -123,6 +123,34 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
 
                 <Separator className="my-4" />
 
+                {/* Trace correlation — the ids that find this call in Jaeger/Langfuse/Phoenix */}
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium text-zinc-300 mb-2">Trace</h3>
+                  {record.traceId ? (
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <TraceIdField
+                        label="Trace ID"
+                        value={record.traceId}
+                        onCopy={copyToClipboard}
+                      />
+                      {record.spanId && (
+                        <TraceIdField
+                          label="Span ID"
+                          value={record.spanId}
+                          onCopy={copyToClipboard}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500">
+                      No trace was recorded for this call — it predates tracing, or tracing
+                      was not active when it ran.
+                    </p>
+                  )}
+                </div>
+
+                <Separator className="my-4" />
+
                 {/* Request / Response Tabs */}
                 <Tabs defaultValue="request" className="mb-4">
                   <TabsList>
@@ -145,19 +173,28 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
                     </div>
                   </TabsContent>
                   <TabsContent value="response">
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute top-2 right-2 h-7 w-7 p-0 text-zinc-500 hover:text-zinc-200"
-                        onClick={() => copyToClipboard(record.responseJson)}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <pre className="rounded bg-zinc-900 p-4 text-xs font-mono text-zinc-300 overflow-x-auto max-h-[400px] overflow-y-auto">
-                        {formatJson(record.responseJson)}
-                      </pre>
-                    </div>
+                    {record.responseJson !== null ? (
+                      <div className="relative">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-2 right-2 h-7 w-7 p-0 text-zinc-500 hover:text-zinc-200"
+                          onClick={() => copyToClipboard(record.responseJson!)}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <pre className="rounded bg-zinc-900 p-4 text-xs font-mono text-zinc-300 overflow-x-auto max-h-[400px] overflow-y-auto">
+                          {formatJson(record.responseJson)}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="rounded border border-red-900/60 bg-red-950/40 p-4 text-sm">
+                        <p className="font-medium text-red-300">This call failed before a response existed.</p>
+                        <p className="mt-1 text-red-200/80">
+                          {record.errorMessage ?? 'No error message was recorded.'}
+                        </p>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
 
@@ -192,7 +229,9 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(record.responseJson)}
+                    disabled={record.responseJson === null}
+                    title={record.responseJson === null ? 'The call failed; there is no response to copy.' : undefined}
+                    onClick={() => record.responseJson !== null && copyToClipboard(record.responseJson)}
                   >
                     <Copy className="h-3.5 w-3.5 mr-1.5" />
                     Copy Response
@@ -212,6 +251,33 @@ export function RecordDetailPanel({ recordId, open, onClose }: RecordDetailPanel
         />
       )}
     </>
+  )
+}
+
+function TraceIdField({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string
+  value: string
+  onCopy: (text: string) => void
+}) {
+  return (
+    <div>
+      <span className="text-zinc-500">{label}</span>
+      <div className="flex items-center gap-1 mt-0.5">
+        <code className="text-zinc-200 font-mono text-[11px] break-all">{value}</code>
+        <button
+          className="text-zinc-500 hover:text-zinc-200 flex-shrink-0"
+          title={`Copy ${label.toLowerCase()}`}
+          aria-label={`Copy ${label.toLowerCase()}`}
+          onClick={() => onCopy(value)}
+        >
+          <Copy className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
   )
 }
 

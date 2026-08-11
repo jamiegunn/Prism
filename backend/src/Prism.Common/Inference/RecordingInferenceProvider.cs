@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Prism.Common.Inference.Models;
 using Prism.Common.Results;
+using Prism.Common.Telemetry;
 
 namespace Prism.Common.Inference;
 
@@ -62,10 +63,28 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
         DateTime startedAt = DateTime.UtcNow;
         Stopwatch stopwatch = Stopwatch.StartNew();
 
+        // Span per call, named per the GenAI conventions ("chat {model}"). This decorator
+        // wraps the single point where providers are constructed, so every module's calls
+        // get a span — the same property that makes recording unbypassable.
+        using Activity? activity = StartInferenceActivity(request);
+
         Result<ChatResponse> result = await _inner.ChatAsync(request, ct);
 
         stopwatch.Stop();
         DateTime completedAt = DateTime.UtcNow;
+
+        if (activity is not null)
+        {
+            if (result.IsSuccess)
+            {
+                SetResponseAttributes(activity, result.Value);
+            }
+            else
+            {
+                activity.SetTag(GenAiAttributes.ErrorType, result.Error.Code);
+                activity.SetStatus(ActivityStatusCode.Error, result.Error.Message);
+            }
+        }
 
         InferenceRecordData record = new(
             Id: Guid.NewGuid(),
@@ -86,7 +105,9 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
                 Model: request.Model,
                 GpuInfo: null,
                 Quantization: null,
-                CapturedAt: startedAt));
+                CapturedAt: startedAt),
+            TraceId: activity?.TraceId.ToString(),
+            SpanId: activity?.SpanId.ToString());
 
         if (!_recordChannel.Writer.TryWrite(record))
         {
@@ -95,6 +116,97 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
 
         return result;
     }
+
+    /// <summary>
+    /// Starts the inference span and sets the request-side <c>gen_ai.*</c> attributes.
+    /// Returns null when no tracing listener is active — spans cost nothing when nobody is
+    /// collecting them.
+    /// </summary>
+    /// <param name="request">The request being sent.</param>
+    /// <returns>The started activity, or null.</returns>
+    private Activity? StartInferenceActivity(ChatRequest request)
+    {
+        Activity? activity = PrismTelemetry.InferenceSource.StartActivity(
+            $"chat {request.Model}", ActivityKind.Client);
+
+        if (activity is null)
+        {
+            return null;
+        }
+
+        activity.SetTag(GenAiAttributes.OperationName, "chat");
+        activity.SetTag(GenAiAttributes.System, ProviderSystemName(_providerType));
+        activity.SetTag(GenAiAttributes.RequestModel, request.Model);
+
+        if (request.Temperature is not null)
+        {
+            activity.SetTag(GenAiAttributes.RequestTemperature, request.Temperature.Value);
+        }
+
+        if (request.TopP is not null)
+        {
+            activity.SetTag(GenAiAttributes.RequestTopP, request.TopP.Value);
+        }
+
+        if (request.MaxTokens is not null)
+        {
+            activity.SetTag(GenAiAttributes.RequestMaxTokens, request.MaxTokens.Value);
+        }
+
+        // Content is opt-in per the convention, and off by default: prompts are sensitive,
+        // and a trace pipeline usually ships somewhere logs do not.
+        if (PrismTelemetry.CaptureContent)
+        {
+            activity.SetTag(
+                GenAiAttributes.PromptContent,
+                string.Join("\n", request.Messages.Select(m => $"{m.Role}: {m.Content}")));
+        }
+
+        return activity;
+    }
+
+    /// <summary>
+    /// Sets the response-side <c>gen_ai.*</c> attributes on a span.
+    /// </summary>
+    /// <param name="activity">The span.</param>
+    /// <param name="response">The successful response.</param>
+    private static void SetResponseAttributes(Activity activity, ChatResponse response)
+    {
+        if (!string.IsNullOrEmpty(response.ModelId))
+        {
+            activity.SetTag(GenAiAttributes.ResponseModel, response.ModelId);
+        }
+
+        if (response.FinishReason is not null)
+        {
+            activity.SetTag(
+                GenAiAttributes.ResponseFinishReasons, new[] { response.FinishReason });
+        }
+
+        if (response.Usage is not null)
+        {
+            activity.SetTag(GenAiAttributes.UsageInputTokens, response.Usage.PromptTokens);
+            activity.SetTag(GenAiAttributes.UsageOutputTokens, response.Usage.CompletionTokens);
+        }
+
+        if (PrismTelemetry.CaptureContent)
+        {
+            activity.SetTag(GenAiAttributes.CompletionContent, response.Content);
+        }
+    }
+
+    /// <summary>
+    /// Maps the provider type to the GenAI <c>gen_ai.system</c> value.
+    /// </summary>
+    /// <param name="type">The provider type.</param>
+    /// <returns>The lowercase system name.</returns>
+    internal static string ProviderSystemName(InferenceProviderType type) => type switch
+    {
+        InferenceProviderType.Ollama => "ollama",
+        InferenceProviderType.Vllm => "vllm",
+        InferenceProviderType.LmStudio => "lm_studio",
+        _ => "openai_compatible",
+    };
 
     /// <summary>
     /// Sends a streaming chat completion request and records the aggregated response.
@@ -111,6 +223,10 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
         Stopwatch stopwatch = Stopwatch.StartNew();
         List<StreamChunk> chunks = new();
 
+        // The span covers the whole stream: opened before the first token, closed after the
+        // last, so its duration is the user-visible latency.
+        using Activity? activity = StartInferenceActivity(request);
+
         await foreach (StreamChunk chunk in _inner.StreamChatAsync(request, ct))
         {
             chunks.Add(chunk);
@@ -125,11 +241,22 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
         UsageInfo? usage = lastChunk?.Usage;
         string? finishReason = lastChunk?.FinishReason;
 
+        // Streamed calls carry their logprobs one chunk at a time; dropping them here was
+        // why a streamed Playground call had no perplexity, entropy or token trace in
+        // History while the identical non-streamed call did.
+        List<TokenLogprob> streamedLogprobs = chunks
+            .Where(c => c.LogprobsEntry is not null)
+            .Select(c => c.LogprobsEntry!)
+            .ToList();
+
         ChatResponse aggregatedResponse = new()
         {
             Content = aggregatedContent,
             FinishReason = finishReason,
             Usage = usage,
+            LogprobsData = streamedLogprobs.Count > 0
+                ? new LogprobsData { Tokens = streamedLogprobs }
+                : null,
             ModelId = request.Model,
             Timing = new TimingInfo(
                 LatencyMs: stopwatch.ElapsedMilliseconds,
@@ -138,6 +265,11 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
                     ? usage.CompletionTokens / (stopwatch.ElapsedMilliseconds / 1000.0)
                     : null)
         };
+
+        if (activity is not null)
+        {
+            SetResponseAttributes(activity, aggregatedResponse);
+        }
 
         InferenceRecordData record = new(
             Id: Guid.NewGuid(),
@@ -158,7 +290,9 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
                 Model: request.Model,
                 GpuInfo: null,
                 Quantization: null,
-                CapturedAt: startedAt));
+                CapturedAt: startedAt),
+            TraceId: activity?.TraceId.ToString(),
+            SpanId: activity?.SpanId.ToString());
 
         if (!_recordChannel.Writer.TryWrite(record))
         {
