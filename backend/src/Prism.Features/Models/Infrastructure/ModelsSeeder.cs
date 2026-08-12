@@ -39,6 +39,7 @@ public sealed class ModelsSeeder : IDataSeeder
 
         if (hasInstances)
         {
+            await RepointSeededInstancesAsync(context, ct);
             return;
         }
 
@@ -46,6 +47,49 @@ public sealed class ModelsSeeder : IDataSeeder
 
         context.Set<InferenceInstance>().AddRange(instances);
         await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Corrects the seeded instances' endpoints when the API has moved across the container
+    /// boundary since they were written.
+    /// </summary>
+    /// <param name="context">The application database context.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <remarks>
+    /// A database seeded by a host-run API and then opened by a containerised one — which is
+    /// what happens the first time anyone takes the new default — holds two instances pointing
+    /// at <c>localhost</c>, meaning the container itself. They sit permanently offline next to
+    /// a working provider, and nothing in the UI can edit an endpoint. Only rows this seeder
+    /// owns are touched, and only their address: a registration someone made themselves is
+    /// theirs to keep.
+    /// </remarks>
+    private static async Task RepointSeededInstancesAsync(AppDbContext context, CancellationToken ct)
+    {
+        Guid[] seededIds = [VllmSeedInstanceId, OllamaSeedInstanceId];
+
+        List<InferenceInstance> seeded = await context.Set<InferenceInstance>()
+            .Where(i => seededIds.Contains(i.Id))
+            .ToListAsync(ct);
+
+        bool changed = false;
+
+        foreach (InferenceInstance instance in seeded)
+        {
+            string reachable = LocalEndpoint.AsReachable(instance.Endpoint);
+
+            if (!string.Equals(reachable, instance.Endpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                instance.Endpoint = reachable;
+                instance.UpdatedAt = DateTime.UtcNow;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await context.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>
@@ -66,7 +110,11 @@ public sealed class ModelsSeeder : IDataSeeder
             {
                 Id = VllmSeedInstanceId,
                 Name = "Local vLLM (Llama 3.1 8B)",
-                Endpoint = "http://localhost:8000/v1",
+
+                // Addressed for wherever the API is running. The conventional endpoint is
+                // written from the host's point of view and means the container itself when
+                // the API is containerised, which is now the default way it runs.
+                Endpoint = LocalEndpoint.AsReachable("http://localhost:8000/v1"),
                 ProviderType = InferenceProviderType.Vllm,
                 Status = InstanceStatus.Unknown,
                 ModelId = "meta-llama/Llama-3.1-8B-Instruct",
@@ -86,7 +134,7 @@ public sealed class ModelsSeeder : IDataSeeder
             {
                 Id = OllamaSeedInstanceId,
                 Name = "Local Ollama (Mistral 7B)",
-                Endpoint = "http://localhost:11434",
+                Endpoint = LocalEndpoint.AsReachable("http://localhost:11434"),
                 ProviderType = InferenceProviderType.Ollama,
                 Status = InstanceStatus.Unknown,
                 ModelId = "mistral:7b-instruct",

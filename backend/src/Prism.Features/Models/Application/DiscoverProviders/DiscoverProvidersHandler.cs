@@ -69,6 +69,21 @@ public sealed class DiscoverProvidersHandler
         (InferenceProviderType.LmStudio, "http://localhost:1234/v1", "Local LM Studio"),
     ];
 
+    /// <summary>
+    /// Inference servers this project starts as containers, addressed by their compose service
+    /// name. Probed in addition to the host's ports when the API is itself containerised.
+    /// </summary>
+    /// <remarks>
+    /// A sibling container does not publish to the API container's <c>localhost</c>, and it need
+    /// not publish to the host at all. Without these, choosing "run Ollama in a container" gave
+    /// a working server that discovery could not see.
+    /// </remarks>
+    private static readonly (InferenceProviderType Type, string Endpoint, string Name)[] SiblingCandidates =
+    [
+        (InferenceProviderType.Ollama, "http://ollama:11434", "Ollama container"),
+        (InferenceProviderType.Vllm, "http://vllm:8000", "vLLM container"),
+    ];
+
     private readonly AppDbContext _db;
     private readonly InferenceProviderFactory _providerFactory;
     private readonly ILogger<DiscoverProvidersHandler> _logger;
@@ -103,14 +118,39 @@ public sealed class DiscoverProvidersHandler
             .Select(Normalise)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        (InferenceProviderType Type, string Endpoint, string Name)[] toProbe = AddressesToProbe();
+
         // Probed together: three sequential timeouts against nothing would make an empty
         // machine feel broken rather than empty.
         DiscoveredProvider?[] results = await Task.WhenAll(
-            Candidates.Select(c => ProbeAsync(c.Type, c.Endpoint, c.Name, registered, ct)));
+            toProbe.Select(c => ProbeAsync(c.Type, c.Endpoint, c.Name, registered, ct)));
 
         return new ProviderDiscoveryResult(
             [.. results.OfType<DiscoveredProvider>()],
-            [.. Candidates.Select(c => c.Endpoint)]);
+            [.. toProbe.Select(c => c.Endpoint)]);
+    }
+
+    /// <summary>
+    /// Expands the conventional candidates into the addresses this process can actually reach.
+    /// </summary>
+    /// <returns>The candidates to probe, with the sibling containers added when relevant.</returns>
+    /// <remarks>
+    /// <see cref="Candidates"/> stays written from the host's point of view because that is the
+    /// list a person recognises, and the one <c>dev.sh</c> is held in step with. Where the probe
+    /// is sent is a separate question, answered here.
+    /// </remarks>
+    internal static (InferenceProviderType Type, string Endpoint, string Name)[] AddressesToProbe()
+    {
+        var addresses = Candidates
+            .Select(c => (c.Type, Endpoint: LocalEndpoint.AsReachable(c.Endpoint), c.Name))
+            .ToList();
+
+        if (LocalEndpoint.RunningInContainer)
+        {
+            addresses.AddRange(SiblingCandidates);
+        }
+
+        return [.. addresses];
     }
 
     /// <summary>
