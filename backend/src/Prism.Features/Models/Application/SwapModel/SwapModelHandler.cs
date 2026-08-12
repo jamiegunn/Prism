@@ -53,7 +53,11 @@ public sealed class SwapModelHandler
         IInferenceProvider provider = _providerFactory.CreateProvider(
             instance.Name, instance.Endpoint, instance.ProviderType);
 
-        if (provider is not IHotReloadableProvider hotReloadable)
+        // Asked through the decorator chain: recording wraps every provider the factory
+        // builds, and a direct type test therefore answered "no" for every provider there is.
+        IHotReloadableProvider? hotReloadable = provider.As<IHotReloadableProvider>();
+
+        if (hotReloadable is null)
         {
             return Error.Unavailable(
                 $"Provider type '{instance.ProviderType}' does not support hot-swapping models.");

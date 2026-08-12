@@ -11,7 +11,7 @@ namespace Prism.Common.Inference;
 /// Decorator that records every inference call to a <see cref="Channel{T}"/> for asynchronous
 /// persistence. Captures request, response, timing data, and environment snapshot for each call.
 /// </summary>
-public sealed class RecordingInferenceProvider : IInferenceProvider
+public sealed class RecordingInferenceProvider : IInferenceProvider, IProviderDecorator
 {
     private readonly IInferenceProvider _inner;
     private readonly Channel<InferenceRecordData> _recordChannel;
@@ -40,6 +40,10 @@ public sealed class RecordingInferenceProvider : IInferenceProvider
     /// <summary>
     /// Gets the display name of the inner provider.
     /// </summary>
+    /// <inheritdoc />
+    public IInferenceProvider Inner => _inner;
+
+    /// <inheritdoc />
     public string ProviderName => _inner.ProviderName;
 
     /// <summary>

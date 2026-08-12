@@ -41,6 +41,7 @@ public static class ModelsModule
         services.AddScoped<ListInstancesHandler>();
         services.AddScoped<GetInstanceMetricsHandler>();
         services.AddScoped<SwapModelHandler>();
+        services.AddScoped<Application.ListInstanceModels.ListInstanceModelsHandler>();
         services.AddScoped<CheckHealthHandler>();
         services.AddScoped<GetTokenizerInfoHandler>();
         services.AddScoped<ProbeCapabilitiesHandler>();

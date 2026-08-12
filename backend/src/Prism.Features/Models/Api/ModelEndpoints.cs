@@ -12,6 +12,7 @@ using Prism.Features.Models.Api.Requests;
 using Prism.Features.Models.Application.CheckHealth;
 using Prism.Features.Models.Application.Dtos;
 using Prism.Features.Models.Application.GetInstanceMetrics;
+using Prism.Features.Models.Application.ListInstanceModels;
 using Prism.Features.Models.Application.ListInstances;
 using Prism.Features.Models.Application.RegisterInstance;
 using Prism.Features.Models.Application.SwapModel;
@@ -72,6 +73,12 @@ public static class ModelEndpoints
             .WithName("GetInstanceMetrics")
             .WithSummary("Gets live performance metrics for an inference instance")
             .Produces<InstanceMetricsDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}/models", ListInstanceModels)
+            .WithName("ListInstanceModels")
+            .WithSummary("Lists the models an inference instance can currently serve")
+            .Produces<InstanceModelsDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/{id:guid}/swap-model", SwapModel)
@@ -215,6 +222,21 @@ public static class ModelEndpoints
     {
         var query = new GetInstanceMetricsQuery(id);
         Result<InstanceMetricsDto> result = await handler.HandleAsync(query, ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
+    }
+
+    /// <summary>
+    /// Handles listing the models an instance can serve.
+    /// </summary>
+    private static async Task<IResult> ListInstanceModels(
+        Guid id,
+        ListInstanceModelsHandler handler,
+        CancellationToken ct)
+    {
+        Result<InstanceModelsDto> result = await handler.HandleAsync(new ListInstanceModelsQuery(id), ct);
 
         return result.Match(
             dto => TypedResults.Ok(dto),
