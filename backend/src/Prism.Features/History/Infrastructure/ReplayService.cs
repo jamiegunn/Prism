@@ -14,6 +14,14 @@ namespace Prism.Features.History.Infrastructure;
 /// Default implementation of <see cref="IReplayService"/>.
 /// Loads the original run from history, applies overrides, and re-executes through the runtime.
 /// </summary>
+/// <remarks>
+/// Nothing injects this yet: the History endpoint replays through
+/// <see cref="Application.ReplaySingle.ReplaySingleHandler"/>, and the runtime path this belongs
+/// to (ADR 013) is not built. It is kept because that ADR still stands. Note that this path
+/// always took the model from the record — the live handler took it from the target instance and
+/// silently swapped it, and has been corrected to match this. The two now agree, which is the
+/// only condition under which keeping both is defensible.
+/// </remarks>
 public sealed class ReplayService : IReplayService
 {
     private readonly AppDbContext _context;

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Prism.Common.Inference;
 using Prism.Common.Inference.Runtime;
@@ -40,6 +41,7 @@ public static class HistoryModule
         services.AddScoped<Application.GetTrace.GetTraceHandler>();
         services.AddScoped<TagRecordHandler>();
         services.AddScoped<ReplaySingleHandler>();
+        services.AddScoped<IValidator<ReplaySingleCommand>, ReplaySingleValidator>();
 
         // Replay service (implements IReplayService from Common)
         services.AddScoped<IReplayService, ReplayService>();
