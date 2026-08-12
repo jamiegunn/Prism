@@ -1,0 +1,7 @@
+# Keep the build context small and deterministic: never ship local build
+# output or the sandbox-only NuGet config into the image.
+**/bin/
+**/obj/
+nuget.sandbox.config
+*.user
+.vs/

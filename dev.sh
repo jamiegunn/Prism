@@ -63,7 +63,10 @@ if $STOP; then
     rm -f "$pidfile"
   done
 
-  docker compose -f "$ROOT/docker-compose.yml" --profile gpu --profile ollama down 2>/dev/null || true
+  # Every profile, so a containerised API/frontend (app) and inference (ollama,
+  # gpu) come down alongside the data services, whichever way the app was run.
+  docker compose -f "$ROOT/docker-compose.yml" \
+    --profile app --profile gpu --profile ollama down 2>/dev/null || true
   ok "Stopped Docker containers"
   exit 0
 fi
@@ -156,6 +159,7 @@ _prism_ollama_container_running() {
 [ -f "$CONFIG" ] && ! $RECONFIGURE && . "$CONFIG"
 
 PRISM_SCOPE="${PRISM_SCOPE:-all}"
+PRISM_APP_RUNTIME="${PRISM_APP_RUNTIME:-containers}"
 PRISM_PROVIDER="${PRISM_PROVIDER:-later}"
 PRISM_API_PORT_PREF="${PRISM_API_PORT_PREF:-5000}"
 PRISM_MODEL="${PRISM_MODEL:-}"
@@ -228,6 +232,20 @@ configure() {
     "all:Everything — database, API and frontend" \
     "backend:Backend only — database and API" \
     "frontend:Frontend only — the Vite dev server"
+
+  # Where the app runs. Containers are the default: the API and frontend come up
+  # the same way the data services already do, with nothing to install and no
+  # stray processes on the host. Metal is the opt-out for anyone who wants to
+  # attach a debugger, edit-and-reload against native tooling, or who has no
+  # container runtime. Only worth asking when there is a runtime to say yes to —
+  # without one, metal is the only answer, so we take it silently.
+  if command -v docker >/dev/null 2>&1; then
+    ask PRISM_APP_RUNTIME "Run the app in containers or on metal?" "$PRISM_APP_RUNTIME" \
+      "containers:In containers — nothing to install, no host processes (recommended)" \
+      "metal:On metal — native dotnet and vite, for debugging or a runtime-free host"
+  else
+    PRISM_APP_RUNTIME=metal
+  fi
 
   # Only offer what this machine can actually do, and put the fastest workable
   # option first. Listing vLLM on an Apple Silicon Mac would be an invitation to
@@ -381,6 +399,7 @@ configure() {
 # Written by ./dev.sh. Delete this file or run ./dev.sh --reconfigure to change it.
 # Not tracked by git — these are your choices, not the project's.
 PRISM_SCOPE=$PRISM_SCOPE
+PRISM_APP_RUNTIME=$PRISM_APP_RUNTIME
 PRISM_PROVIDER=$PRISM_PROVIDER
 PRISM_API_PORT_PREF=$PRISM_API_PORT_PREF
 PRISM_MODEL=$PRISM_MODEL
@@ -444,6 +463,104 @@ if [ -z "${NO_DOCKER:-}" ] && ! docker info >/dev/null 2>&1; then
   warn "Run ./scripts/doctor.sh for the options on this machine."
   NO_DOCKER=true
 fi
+
+# Resolve where the app runs. Containers is the configured default, but it needs
+# a working runtime — without one we fall back to metal and say so, so a stopped
+# daemon degrades to the native path rather than failing the launch outright.
+USE_CONTAINERS=false
+if [ "$PRISM_APP_RUNTIME" = "containers" ]; then
+  if [ -z "${NO_DOCKER:-}" ]; then
+    USE_CONTAINERS=true
+  else
+    warn "Set to run the app in containers, but no container runtime is available."
+    warn "Running the API and frontend on metal instead."
+  fi
+fi
+
+# Translates a provider endpoint for use from inside the API container. A
+# containerised Ollama is on the same compose network, reachable by service name;
+# anything on localhost is on the host, reached via host.docker.internal (mapped
+# in docker-compose.yml). A remote or already-container endpoint is left alone.
+container_provider_endpoint() {
+  local endpoint="$1"
+
+  if _prism_ollama_container_running && printf '%s' "$endpoint" | grep -qE 'localhost:11434|127\.0\.0\.1:11434'; then
+    printf 'http://ollama:11434'
+    return
+  fi
+
+  printf '%s' "$endpoint" \
+    | sed -E 's#(https?://)(localhost|127\.0\.0\.1)#\1host.docker.internal#'
+}
+
+# Brings the app up in containers via the `app` compose profile and waits for the
+# API to answer. Honours scope: the API unless this is a frontend-only run, the
+# frontend unless backend-only. Registers the provider with an endpoint rewritten
+# for the container's view of the network.
+start_app_containers() {
+  local services=()
+  $FRONTEND_ONLY || services+=(api)
+  $BACKEND_ONLY  || services+=(frontend)
+  [ ${#services[@]} -gt 0 ] || return 0
+
+  step "Starting the app in containers (${services[*]})..."
+
+  # --build so a source change is picked up; the layer cache keeps an unchanged
+  # tree fast. PRISM_API_PORT is the host-side mapping the compose file reads.
+  if ! PRISM_API_PORT="$PRISM_API_PORT" docker compose -f "$ROOT/docker-compose.yml" \
+        --profile app up -d --build "${services[@]}"; then
+    warn "The app containers did not build or start."
+    warn "See: docker compose -f $ROOT/docker-compose.yml --profile app logs"
+    exit 1
+  fi
+
+  if $FRONTEND_ONLY; then
+    ok "Frontend container is up: http://localhost:5173"
+    return 0
+  fi
+
+  export PRISM_API_URL="http://localhost:$PRISM_API_PORT"
+  echo -n "   Waiting for the API..."
+  local api_up=false
+  for _ in $(seq 1 90); do
+    if curl -fsS "$PRISM_API_URL/health" >/dev/null 2>&1; then
+      api_up=true; break
+    fi
+    echo -n "."
+    sleep 1
+  done
+
+  if ! $api_up; then
+    echo ""
+    warn "The API container did not answer on $PRISM_API_URL."
+    warn "Logs: docker compose -f $ROOT/docker-compose.yml --profile app logs api"
+    exit 1
+  fi
+  ok " Ready! Swagger: $PRISM_API_URL/swagger"
+
+  # Register the provider, rewriting the endpoint to the container's view. Skip
+  # when something is already registered so relaunches do not pile up duplicates.
+  if [ -n "$PROVIDER_ENDPOINT" ]; then
+    local container_endpoint existing
+    container_endpoint="$(container_provider_endpoint "$PROVIDER_ENDPOINT")"
+    existing="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null || echo '')"
+
+    if printf '%s' "$existing" | grep -q "\"endpoint\":\"${container_endpoint}\""; then
+      ok "$container_endpoint is already registered."
+    elif curl -fsS --max-time 15 -X POST "$PRISM_API_URL/api/v1/models/instances" \
+           -H 'Content-Type: application/json' \
+           -d "{\"name\":\"Local ${PROVIDER_TYPE}\",\"endpoint\":\"${container_endpoint}\",\"providerType\":\"${PROVIDER_TYPE}\",\"isDefault\":true}" \
+           >/dev/null 2>&1; then
+      ok "Registered $container_endpoint as the default model."
+    else
+      warn "Could not register $container_endpoint automatically — add it from the Models page."
+    fi
+  fi
+
+  if ! $BACKEND_ONLY; then
+    ok "Frontend container is up: http://localhost:5173"
+  fi
+}
 
 # ── 1. PostgreSQL ────────────────────────────────────────────────────
 if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
@@ -624,10 +741,18 @@ if ! $FRONTEND_ONLY; then
   esac
 fi
 
-# ── 2. Backend API ───────────────────────────────────────────────────
+# ── 2. The app ───────────────────────────────────────────────────────
+# In containers, the API and frontend come up together through the compose
+# `app` profile; the native sections below are skipped entirely. On metal, the
+# native paths run as before.
+if $USE_CONTAINERS; then
+  start_app_containers
+fi
+
+# ── 2b. Backend API (metal) ──────────────────────────────────────────
 API_PORT="${PRISM_API_PORT:-5000}"
 
-if ! $FRONTEND_ONLY; then
+if ! $FRONTEND_ONLY && ! $USE_CONTAINERS; then
   # Another Prism API already running is not a port conflict, and moving to a free
   # port makes it worse rather than better: both connect to the same database and
   # each runs its own health-check writer, so they overwrite each other's model
@@ -802,8 +927,8 @@ if ! $FRONTEND_ONLY; then
   fi
 fi
 
-# ── 3. Frontend ──────────────────────────────────────────────────────
-if ! $BACKEND_ONLY; then
+# ── 3. Frontend (metal) ──────────────────────────────────────────────
+if ! $BACKEND_ONLY && ! $USE_CONTAINERS; then
   # A leftover dev server is worse here than a leftover API, because it keeps the
   # port and answers. Vite reads the API's address once, at launch, so an old one
   # still holding 5173 proxies to whichever API existed when *it* started — and

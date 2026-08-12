@@ -79,6 +79,10 @@ without remembering any flags. Your previous answers become the defaults, so hol
 repeats your last setup exactly:
 
 - what to start — everything, backend only, or just the frontend
+- **where the app runs** — in containers (the default: nothing to install, no stray
+  processes on your host) or on metal (native `dotnet` and `vite`, for attaching a debugger
+  or a host with no container runtime). Without a container runtime this is decided for you:
+  metal is the only answer.
 - **which model to read**, offering only what your machine can actually do (see below)
 - which port the API should use, but only when the usual one is taken
 

@@ -18,7 +18,12 @@ run_menu() {
   MENU_OUT="$(
     export FAKE_OS="$os" FAKE_ARCH="${ARCH:-arm64}" OPEN_PORTS="${OPEN_PORTS:-}" \
            PRISM_PROVIDER="$saved" STATE PATH WORK H="$HERE" P="$PREFIX"
-    printf '%s\n' "$@" | bash -c '
+    # configure() now asks scope, then app-runtime (containers/metal), then the
+    # provider. These tests drive the provider menu, so the first keystroke is the
+    # scope answer and a blank runtime answer is injected right after it to accept
+    # the default — leaving every following keystroke to reach the provider menu
+    # exactly as before the runtime question existed.
+    { printf '%s\n' "${1-}"; printf '\n'; shift || true; printf '%s\n' "$@"; } | bash -c '
       cd "$WORK"
       . "$H/harness.sh"   # stubs + PATH
       set --              # dev.sh parses "$@"; the harness must not leak args in
@@ -90,6 +95,83 @@ echo "=== 9. vLLM on 8000 still detected (no regression) ==="
 OPEN_PORTS="8000" run_menu Linux 0 0 later "" "2" "" ""
 check "vLLM detected"                          "Use the vLLM already running on port 8000" "$MENU_OUT"
 check "and selectable"                         "CHOSE=detected-vllm" "$MENU_OUT"
+
+echo ""
+echo "=== app runtime: containers by default, metal on request ==="
+
+# Drives configure() directly: scope (Enter = all), then the runtime answer.
+# Echoes the resolved PRISM_APP_RUNTIME so the choice can be asserted.
+run_runtime() {
+  local os="$1"; shift
+  world 0 0 1 1
+  rm -f "$WORK/.prism-dev.conf"
+  RUNTIME_OUT="$(
+    export FAKE_OS="$os" FAKE_ARCH="${ARCH:-arm64}" OPEN_PORTS="" \
+           PRISM_PROVIDER="later" STATE PATH WORK H="$HERE" P="$PREFIX"
+    printf '%s\n' "$@" | bash -c '
+      cd "$WORK"
+      . "$H/harness.sh"
+      set --
+      . "$P"
+      configure
+      echo "RUNTIME=$PRISM_APP_RUNTIME"
+    ' 2>&1
+  )"
+}
+
+# Docker is on PATH via the harness, so the question is asked. Enter takes the
+# default; the default is containers.
+run_runtime Linux "" "" "later" "" "" ""
+check "the runtime question is asked"          "Run the app in containers or on metal?" "$RUNTIME_OUT"
+check "containers is the default"              "RUNTIME=containers" "$RUNTIME_OUT"
+
+# Picking option 2 chooses metal.
+run_runtime Linux "" "2" "later" "" "" ""
+check "metal is selectable"                    "RUNTIME=metal" "$RUNTIME_OUT"
+
+echo ""
+echo "=== container_provider_endpoint: rewrites for the container's network view ==="
+
+# The helper lives past configure(); source the whole script body up to the
+# section marker so the function is defined, with the world faked so its
+# container check is deterministic.
+HELPER_CUT=$(( $(grep -n '^# ── 1\. PostgreSQL' "$DEVSH" | cut -d: -f1) - 1 ))
+HELPER_PREFIX="$WORK/dev_helpers.sh"
+sed -n "1,${HELPER_CUT}p" "$DEVSH" > "$HELPER_PREFIX"
+
+# No Ollama container running: a localhost endpoint maps to host.docker.internal.
+world 0 0 1 1
+XLATE_OUT="$(
+  export STATE PATH WORK H="$HERE" HP="$HELPER_PREFIX"
+  bash -c '
+    cd "$WORK"; . "$H/harness.sh"; set --
+    # Stop the prefix from running the interactive/preflight tail: source only
+    # the function definitions we need by trimming at first executable section.
+    eval "$(sed -n "/^container_provider_endpoint()/,/^}/p" "$HP")"
+    eval "$(sed -n "/^_prism_ollama_container_running()/,/^}/p" "$HP")"
+    container_provider_endpoint "http://localhost:11434"
+    echo ""
+    container_provider_endpoint "http://localhost:8000"
+    echo ""
+    container_provider_endpoint "http://remote-box:11434"
+  ' 2>&1
+)"
+check "localhost:11434 -> host.docker.internal (no ollama container)" "http://host.docker.internal:11434" "$XLATE_OUT"
+check "localhost:8000 -> host.docker.internal"                        "http://host.docker.internal:8000" "$XLATE_OUT"
+check "a remote endpoint is left unchanged"                           "http://remote-box:11434" "$XLATE_OUT"
+
+# With the Ollama container up, its localhost endpoint maps to the service name.
+world 1 0 1 1
+XLATE2_OUT="$(
+  export STATE PATH WORK H="$HERE" HP="$HELPER_PREFIX"
+  bash -c '
+    cd "$WORK"; . "$H/harness.sh"; set --
+    eval "$(sed -n "/^container_provider_endpoint()/,/^}/p" "$HP")"
+    eval "$(sed -n "/^_prism_ollama_container_running()/,/^}/p" "$HP")"
+    container_provider_endpoint "http://localhost:11434"
+  ' 2>&1
+)"
+check "ollama container endpoint -> ollama:11434" "http://ollama:11434" "$XLATE2_OUT"
 
 echo ""
 echo "-------------------------------------------"

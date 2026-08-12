@@ -1,0 +1,6 @@
+# node_modules is reinstalled inside the image from the lockfile; copying the
+# host's (possibly platform-specific) copy in would both bloat the context and
+# risk native-module mismatches. dist/ is build output.
+node_modules/
+dist/
+.vite/
