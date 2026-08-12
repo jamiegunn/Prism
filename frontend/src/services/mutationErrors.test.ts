@@ -37,6 +37,16 @@ describe('describeMutationError', () => {
     expect(message).not.toContain('Object reference')
   })
 
+  it('passes a 503 through, because it names the dependency that failed', () => {
+    // A replay against a model the instance does not serve comes back as 503 with the reason.
+    // Hiding it behind "check the API log" costs the reader the one fact they needed.
+    const message = describeMutationError(
+      new ApiError(503, "Replay of model 'no-such-model' on instance 'Local Ollama' failed: model not found"))
+
+    expect(message).toContain('no-such-model')
+    expect(message).toContain('Local Ollama')
+  })
+
   it('distinguishes an unreachable API from a server error', () => {
     // fetch rejects with a TypeError when it cannot connect at all, which is what a restarting
     // API looks like — a completely different thing to do about it than a 500.

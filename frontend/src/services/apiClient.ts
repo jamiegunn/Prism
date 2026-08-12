@@ -29,9 +29,12 @@ export async function apiClient<T>(url: string, config?: RequestConfig): Promise
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText })) as Record<string, unknown>
+    // ProblemDetails puts the sentence a person can act on in `detail`; `title` is the error
+    // category ("Validation", "Unavailable"). Preferring the title meant every failed write in
+    // the app reported its own error class back at the reader instead of the reason.
     throw new ApiError(
       response.status,
-      (error.title as string) ?? (error.message as string) ?? 'Request failed',
+      (error.detail as string) ?? (error.title as string) ?? (error.message as string) ?? 'Request failed',
       error
     )
   }

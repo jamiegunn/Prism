@@ -69,7 +69,8 @@ export interface HistoryFilterParams {
 /** Response from the replay endpoint. */
 export interface ReplayResult {
   originalRecordId: string
-  original: string
+  /** The original call's response text; null when it failed before producing one. */
+  originalResponseContent: string | null
   replayResponseContent: string
   replayPromptTokens: number
   replayCompletionTokens: number

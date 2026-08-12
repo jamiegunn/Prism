@@ -137,13 +137,31 @@ export interface ReplayRequest {
   overrideTopP?: number
 }
 
-/** Replay a history record against a given instance with optional parameter overrides. */
+/**
+ * Replay a history record against a given instance with optional parameter overrides.
+ *
+ * A replay is itself an inference call and is recorded like any other, so the list is
+ * invalidated on success — otherwise the run you just made is missing from the table behind
+ * the dialog. Records are persisted on a background channel rather than in the request, so an
+ * immediate refetch can arrive before the row exists; the second pass a moment later is what
+ * makes the replay appear without the reader having to reload the page to find their own run.
+ */
+const RECORD_PERSISTENCE_GRACE_MS = 2000
+
 export function useReplayRecord() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, ...body }: ReplayRequest) =>
       apiClient<ReplayResult>(`/history/${id}/replay`, {
         method: 'POST',
         body,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+      setTimeout(
+        () => queryClient.invalidateQueries({ queryKey: HISTORY_KEY }),
+        RECORD_PERSISTENCE_GRACE_MS
+      )
+    },
   })
 }

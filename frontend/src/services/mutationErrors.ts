@@ -25,6 +25,14 @@ export function describeMutationError(error: unknown): string {
       return `${error.message} (409 — something else changed it first)`
     }
 
+    // 503 is this API's "a dependency did not answer" — an inference server that is down, or one
+    // that refused the model asked of it. The detail names which, and it is the whole diagnosis,
+    // so swallowing it into "check the API log" sends the reader to a log to re-read a sentence
+    // they were already holding.
+    if (error.status === 503) {
+      return error.message
+    }
+
     if (error.status >= 500) {
       return `The server failed on that request (${error.status}). Check the API log.`
     }

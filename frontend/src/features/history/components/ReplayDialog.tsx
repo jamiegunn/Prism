@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,10 +13,12 @@ import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { Play, Loader2, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Play, Loader2, Settings2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useInstances } from '@/features/playground/api'
 import { useReplayRecord } from '../api'
+import { diffWords } from '../diff'
+import { describeMutationError } from '@/services/mutationErrors'
 import type { HistoryRecordDetail, ReplayResult } from '../types'
 
 interface ReplayDialogProps {
@@ -31,6 +33,7 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
   const [overrideTemperature, setOverrideTemperature] = useState<number | undefined>(undefined)
   const [overrideMaxTokens, setOverrideMaxTokens] = useState<string>('')
   const [overrideTopP, setOverrideTopP] = useState<number | undefined>(undefined)
+  const [overrideModel, setOverrideModel] = useState<string>('')
   const { data: instances } = useInstances()
   const replayMutation = useReplayRecord()
   const [result, setResult] = useState<ReplayResult | null>(null)
@@ -41,6 +44,7 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
       {
         id: record.id,
         instanceId: selectedInstance,
+        overrideModel: overrideModel.trim() || undefined,
         overrideTemperature,
         overrideMaxTokens: overrideMaxTokens ? Number(overrideMaxTokens) : undefined,
         overrideTopP,
@@ -56,12 +60,48 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
     setOverrideTemperature(undefined)
     setOverrideMaxTokens('')
     setOverrideTopP(undefined)
+    setOverrideModel('')
     replayMutation.reset()
     onClose()
   }
 
   const onlineInstances = instances?.filter((i) => i.status === 'Online') ?? []
-  const hasOverrides = overrideTemperature !== undefined || overrideMaxTokens !== '' || overrideTopP !== undefined
+  const hasOverrides =
+    overrideTemperature !== undefined ||
+    overrideMaxTokens !== '' ||
+    overrideTopP !== undefined ||
+    overrideModel.trim() !== ''
+
+  // The replay runs the model the record names. When the chosen instance is serving a different
+  // one, saying so before the run beats a "model not found" afterwards — and the override below
+  // is how you deliberately compare models rather than accidentally swap them.
+  const targetInstance = onlineInstances.find((i) => i.id === selectedInstance)
+  const modelMismatch =
+    targetInstance?.modelId != null &&
+    record.model.length > 0 &&
+    targetInstance.modelId !== record.model &&
+    overrideModel.trim() === ''
+
+  // What temperature the replay actually ran at decides whether a difference means anything.
+  // The recorded request is the source for it, since that is what the replay re-sends.
+  const originalTemperature = useMemo(() => {
+    try {
+      const parsed: unknown = JSON.parse(record.requestJson)
+      const value = (parsed as { temperature?: unknown } | null)?.temperature
+      return typeof value === 'number' ? value : null
+    } catch {
+      return null
+    }
+  }, [record.requestJson])
+  const effectiveTemperature = overrideTemperature ?? originalTemperature
+
+  // Max tokens is a free-text number field, so it can hold something the API will reject.
+  // Catching it here means the reader is told before a request is spent finding out.
+  const maxTokensValue = overrideMaxTokens === '' ? null : Number(overrideMaxTokens)
+  const maxTokensError =
+    maxTokensValue !== null && (!Number.isInteger(maxTokensValue) || maxTokensValue < 1)
+      ? 'Max tokens must be a whole number of 1 or more.'
+      : null
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -85,6 +125,18 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
                 </Select>
                 {onlineInstances.length === 0 && (
                   <p className="text-xs text-zinc-500 mt-1">No online instances available.</p>
+                )}
+                {modelMismatch && (
+                  <div className="mt-2 flex gap-2 rounded border border-amber-800/60 bg-amber-950/30 px-2.5 py-2 text-xs text-amber-200/90">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-400 mt-0.5" />
+                    <span>
+                      This instance reports{' '}
+                      <span className="font-mono">{targetInstance?.modelId}</span>, but the record ran on{' '}
+                      <span className="font-mono">{record.model}</span>. The replay asks for{' '}
+                      <span className="font-mono">{record.model}</span> — override the model below to
+                      compare against a different one.
+                    </span>
+                  </div>
                 )}
               </div>
 
@@ -157,11 +209,28 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
                       <label className="text-xs text-zinc-400">Max Tokens</label>
                       <Input
                         type="number"
+                        min={1}
+                        step={1}
                         placeholder="original"
                         value={overrideMaxTokens}
                         onChange={(e) => setOverrideMaxTokens(e.target.value)}
                         className="h-7 text-xs bg-zinc-800"
                       />
+                      {maxTokensError && (
+                        <p className="text-[11px] text-red-400">{maxTokensError}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400">Model</label>
+                      <Input
+                        placeholder={record.model || 'original'}
+                        value={overrideModel}
+                        onChange={(e) => setOverrideModel(e.target.value)}
+                        className="h-7 text-xs bg-zinc-800 font-mono"
+                      />
+                      <p className="text-[11px] text-zinc-600">
+                        Leave blank to run the model the record was made with.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -178,7 +247,7 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
                 size="sm"
                 className="bg-violet-600 hover:bg-violet-700 text-white"
                 onClick={handleReplay}
-                disabled={!selectedInstance || replayMutation.isPending}
+                disabled={!selectedInstance || maxTokensError !== null || replayMutation.isPending}
               >
                 {replayMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -196,23 +265,44 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
               <div>
                 <h4 className="text-xs font-medium text-zinc-400 mb-1.5">Original Response</h4>
                 <ScrollArea className="rounded bg-zinc-900 p-3 max-h-[300px]">
-                  <DiffText original={result.original ?? ''} replay={result.replayResponseContent} side="original" />
+                  {result.originalResponseContent === null ? (
+                    <p className="text-xs text-zinc-500 italic">
+                      The original call failed before it produced a response, so there is nothing to
+                      compare against.
+                    </p>
+                  ) : (
+                    <DiffText
+                      original={result.originalResponseContent}
+                      replay={result.replayResponseContent}
+                      side="original"
+                    />
+                  )}
                 </ScrollArea>
               </div>
               <div>
                 <h4 className="text-xs font-medium text-zinc-400 mb-1.5">Replay Response</h4>
                 <ScrollArea className="rounded bg-zinc-900 p-3 max-h-[300px]">
-                  <DiffText original={result.original ?? ''} replay={result.replayResponseContent} side="replay" />
+                  <DiffText
+                    original={result.originalResponseContent ?? ''}
+                    replay={result.replayResponseContent}
+                    side="replay"
+                  />
                 </ScrollArea>
               </div>
             </div>
 
-            {/* Diff summary */}
-            {result.diffSummary && (
-              <div className="rounded bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-400">
-                {result.diffSummary}
-              </div>
-            )}
+            {/* Diff summary, and what the sampling settings let you conclude from it */}
+            <div className="space-y-1.5">
+              {result.diffSummary && (
+                <div className="rounded bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-400">
+                  {result.diffSummary}
+                </div>
+              )}
+              <SamplingCaveat
+                temperature={effectiveTemperature}
+                identical={result.originalResponseContent === result.replayResponseContent}
+              />
+            </div>
 
             <Separator />
 
@@ -261,7 +351,7 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
 
         {replayMutation.isError && (
           <p className="text-xs text-red-400 mt-2">
-            Replay failed: {replayMutation.error?.message ?? 'Unknown error'}
+            Replay failed: {describeMutationError(replayMutation.error)}
           </p>
         )}
       </DialogContent>
@@ -269,45 +359,86 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
   )
 }
 
-/** Simple word-level diff highlighting */
+/**
+ * Says what the sampling settings allow the reader to conclude from the comparison.
+ *
+ * Without this the screen shows a red-and-green diff and a character count for a replay that
+ * sampled, which reads as a finding. It is not one: at any temperature above zero two runs of
+ * an unchanged model on unchanged hardware differ, and a researcher who takes that as drift has
+ * been misled by the presentation rather than by the data.
+ */
+function SamplingCaveat({ temperature, identical }: { temperature: number | null; identical: boolean }) {
+  if (temperature === null) {
+    return (
+      <p className="text-[11px] text-zinc-500">
+        The recorded request did not state a temperature, so whether the server sampled — and
+        therefore whether a difference means anything — is not known from here.
+      </p>
+    )
+  }
+
+  if (temperature > 0) {
+    return (
+      <p className="text-[11px] text-amber-300/80">
+        Sampling was on (temperature {temperature}). Two runs differ under sampling even when
+        nothing has changed, so a difference here is not by itself evidence of drift — replay at
+        temperature 0 to compare deterministically.
+      </p>
+    )
+  }
+
+  return (
+    <p className="text-[11px] text-zinc-500">
+      {identical
+        ? 'Temperature 0: greedy decoding reproduced the original exactly.'
+        : 'Temperature 0: with greedy decoding a difference points at something real — the model, the server or the parameters.'}
+    </p>
+  )
+}
+
+/** Word-level diff highlighting, aligned by longest common subsequence. */
 function DiffText({ original, replay, side }: { original: string; replay: string; side: 'original' | 'replay' }) {
   const text = side === 'original' ? original : replay
-  const other = side === 'original' ? replay : original
 
   if (original === replay) {
     return <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap">{text}</pre>
   }
 
-  const textWords = text.split(/(\s+)/)
-  const otherWords = other.split(/(\s+)/)
+  const diff = diffWords(original, replay)
+  const segments = side === 'original' ? diff.original : diff.replay
 
   return (
     <pre className="text-xs font-mono whitespace-pre-wrap">
-      {textWords.map((word, i) => {
-        const isDiff = otherWords[i] !== word
-        return (
-          <span
-            key={i}
-            className={cn(
-              isDiff && word.trim() && (side === 'original'
+      {segments.map((segment, i) => (
+        <span
+          key={i}
+          className={cn(
+            segment.changed && segment.text.trim()
+              ? side === 'original'
                 ? 'bg-red-900/30 text-red-300'
-                : 'bg-emerald-900/30 text-emerald-300'),
-              !isDiff && 'text-zinc-300'
-            )}
-          >
-            {word}
-          </span>
-        )
-      })}
+                : 'bg-emerald-900/30 text-emerald-300'
+              : 'text-zinc-300'
+          )}
+        >
+          {segment.text}
+        </span>
+      ))}
     </pre>
   )
 }
 
+/**
+ * One delta in the metrics table.
+ *
+ * `lowerIsBetter` opts a row into good/bad colouring. Rows that leave it unset are shown in
+ * neutral grey, because for a token count neither direction is an improvement — colouring
+ * "+15 prompt tokens" green claimed a verdict the number does not support.
+ */
 function DeltaCell({
   original,
   replay,
   suffix = '',
-  lowerIsBetter = false,
+  lowerIsBetter,
 }: {
   original: number
   replay: number
@@ -318,8 +449,12 @@ function DeltaCell({
   if (delta === 0) {
     return <div className="px-3 py-2 text-zinc-500 border-t border-zinc-800 font-mono">0{suffix}</div>
   }
-  const isGood = lowerIsBetter ? delta < 0 : delta > 0
-  const color = isGood ? 'text-emerald-400' : 'text-red-400'
+  const color =
+    lowerIsBetter === undefined
+      ? 'text-zinc-300'
+      : (lowerIsBetter ? delta < 0 : delta > 0)
+        ? 'text-emerald-400'
+        : 'text-red-400'
   const sign = delta > 0 ? '+' : ''
   return (
     <div className={`px-3 py-2 border-t border-zinc-800 font-mono ${color}`}>

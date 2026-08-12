@@ -48,4 +48,14 @@ describe('apiClient', () => {
     await expect(apiClient('/datasets/missing')).rejects.toBeInstanceOf(ApiError)
     await expect(apiClient('/datasets/missing')).rejects.toMatchObject({ status: 404 })
   })
+
+  it('reports the problem detail rather than the error category', async () => {
+    // ProblemDetails names the category in `title` ("Validation") and the reason in `detail`.
+    // Preferring the title told every reader what kind of error it was and never why.
+    respond(400, '{"title":"Validation","detail":"Temperature override must be between 0 and 2."}')
+
+    await expect(apiClient('/history/abc/replay', { method: 'POST' })).rejects.toMatchObject({
+      message: 'Temperature override must be between 0 and 2.',
+    })
+  })
 })
