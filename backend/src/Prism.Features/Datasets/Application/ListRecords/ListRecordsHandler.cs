@@ -53,16 +53,18 @@ public sealed class ListRecordsHandler
 
         int totalCount = await q.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<DatasetRecord> records = await q
             .OrderBy(r => r.OrderIndex)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         return new PagedResult<DatasetRecordDto>(
             records.Select(DatasetRecordDto.FromEntity).ToList(),
             totalCount,
-            query.Page,
-            query.PageSize);
+            page,
+            pageSize);
     }
 }

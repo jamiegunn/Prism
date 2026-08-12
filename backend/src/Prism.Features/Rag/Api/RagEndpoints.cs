@@ -315,6 +315,17 @@ public static class RagEndpoints
         QueryCollectionHandler handler,
         CancellationToken ct)
     {
+        // An unknown mode is rejected rather than silently treated as vector — the sibling
+        // retrieval-evaluation endpoint already does this, and a caller who asked for "bm25"
+        // and got dense-vector results would have no way to know they were misheard.
+        if (!string.IsNullOrWhiteSpace(request.SearchType)
+            && !Enum.TryParse<SearchType>(request.SearchType, true, out _))
+        {
+            return Error.Validation(
+                $"Unknown retrieval mode '{request.SearchType}'. Valid: vector, bm25, hybrid.")
+                .ToHttpResult();
+        }
+
         SearchType searchType = Enum.TryParse<SearchType>(request.SearchType, true, out SearchType parsed)
             ? parsed
             : SearchType.Vector;

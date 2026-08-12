@@ -81,6 +81,43 @@ public sealed class RagSearchTests
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : $"Hybrid search failed: {result.Error.Message}");
     }
 
+    /// <summary>
+    /// An empty or whitespace query is a validation error, caught before any embedding call —
+    /// it used to reach the provider and surface as a 503, reading as a server outage for what
+    /// is really an empty search box. A provider that would throw proves the guard runs first.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public async Task Empty_Query_Is_Rejected_Before_Embedding(string queryText)
+    {
+        await using AppDbContext db = _fixture.CreateContext();
+        Guid collectionId = await SeedCollectionAsync(db);
+
+        var handler = new QueryCollectionHandler(
+            db,
+            new ThrowingEmbeddingProvider(),
+            NullLogger<QueryCollectionHandler>.Instance);
+
+        Result<List<ChunkSearchResultDto>> result = await handler.HandleAsync(
+            new QueryCollectionQuery(collectionId, queryText, TopK: 3, SearchType.Vector),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+    }
+
+    private sealed class ThrowingEmbeddingProvider : IEmbeddingProvider
+    {
+        public Task<Result<float[]>> EmbedAsync(string text, string model, CancellationToken ct) =>
+            throw new InvalidOperationException("The empty-query guard should run before embedding.");
+
+        public Task<Result<IReadOnlyList<float[]>>> EmbedBatchAsync(
+            IReadOnlyList<string> texts, string model, CancellationToken ct) =>
+            throw new InvalidOperationException("The empty-query guard should run before embedding.");
+    }
+
     private static async Task<Guid> SeedCollectionAsync(AppDbContext db)
     {
         var collection = new RagCollection

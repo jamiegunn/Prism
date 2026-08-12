@@ -46,10 +46,19 @@ public sealed class CreateSchemaHandler
         if (string.IsNullOrWhiteSpace(command.Name))
             return Error.Validation("Schema name is required.");
 
-        // Validate the schema is valid JSON
+        // A missing or blank schema is a validation error, not a crash. JsonDocument.Parse
+        // throws ArgumentNullException (not JsonException) on null, so an omitted schemaJson
+        // field slipped past the catch below and became a 500.
+        if (string.IsNullOrWhiteSpace(command.SchemaJson))
+            return Error.Validation("A JSON schema is required.");
+
+        // Validate the schema is valid JSON, and that it is an object — a bare `"hi"` or
+        // `42` parses fine but is not a usable schema for guided decoding.
         try
         {
-            JsonDocument.Parse(command.SchemaJson);
+            using JsonDocument document = JsonDocument.Parse(command.SchemaJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return Error.Validation("A JSON schema must be a JSON object.");
         }
         catch (JsonException ex)
         {

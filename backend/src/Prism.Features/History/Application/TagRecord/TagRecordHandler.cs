@@ -39,10 +39,49 @@ public sealed class TagRecordHandler
             return Result.Failure(Error.NotFound($"Inference record '{command.Id}' was not found."));
         }
 
-        record.Tags = command.Tags;
+        // Normalize server-side rather than trusting the client. A null list (JSON
+        // `{"tags":null}`) reached a required non-nullable column and threw a 500; null,
+        // blank, and duplicate entries slipped past the frontend's own trim/lowercase/dedupe
+        // whenever the caller was not the UI. The API is the source of truth for what a valid
+        // tag set is, so it enforces the same contract the tag filter depends on.
+        record.Tags = NormalizeTags(command.Tags);
         await _db.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Updated tags on inference record {RecordId} to {Tags}", command.Id, command.Tags);
+        _logger.LogInformation("Updated tags on inference record {RecordId} to {Tags}", command.Id, record.Tags);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Reduces an arbitrary caller-supplied tag list to the canonical form the tag filter
+    /// matches against: trimmed, lowercased, non-empty, de-duplicated, order preserved. A
+    /// null list becomes an empty list — clearing the tags, not crashing on a required column.
+    /// </summary>
+    /// <param name="tags">The tags as supplied, possibly null or containing null/blank entries.</param>
+    /// <returns>The normalized tag list.</returns>
+    internal static List<string> NormalizeTags(IEnumerable<string?>? tags)
+    {
+        if (tags is null)
+        {
+            return [];
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+
+        foreach (string? tag in tags)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                continue;
+            }
+
+            string normalized = tag.Trim().ToLowerInvariant();
+            if (seen.Add(normalized))
+            {
+                result.Add(normalized);
+            }
+        }
+
+        return result;
     }
 }

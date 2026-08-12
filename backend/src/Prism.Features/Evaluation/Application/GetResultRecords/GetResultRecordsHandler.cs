@@ -46,16 +46,18 @@ public sealed class GetResultRecordsHandler
 
         int totalCount = await q.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<EvaluationResult> results = await q
             .OrderBy(r => r.CreatedAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         return new PagedResult<EvaluationResultDto>(
             results.Select(EvaluationResultDto.FromEntity).ToList(),
             totalCount,
-            query.Page,
-            query.PageSize);
+            page,
+            pageSize);
     }
 }

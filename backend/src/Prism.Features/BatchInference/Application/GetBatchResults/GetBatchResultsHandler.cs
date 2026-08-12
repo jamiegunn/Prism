@@ -46,16 +46,18 @@ public sealed class GetBatchResultsHandler
 
         int totalCount = await q.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<BatchResult> results = await q
             .OrderBy(r => r.CreatedAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         return new PagedResult<BatchResultDto>(
             results.Select(BatchResultDto.FromEntity).ToList(),
             totalCount,
-            query.Page,
-            query.PageSize);
+            page,
+            pageSize);
     }
 }

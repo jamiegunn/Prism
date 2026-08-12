@@ -42,10 +42,12 @@ public sealed class SearchHistoryHandler
 
         int totalCount = await queryable.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<InferenceRecord> records = await queryable
             .OrderByDescending(r => r.StartedAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         List<InferenceRecordSummaryDto> items = records
@@ -53,7 +55,7 @@ public sealed class SearchHistoryHandler
             .ToList();
 
         var pagedResult = new PagedResult<InferenceRecordSummaryDto>(
-            items, totalCount, query.Page, query.PageSize);
+            items, totalCount, page, pageSize);
 
         return pagedResult;
     }

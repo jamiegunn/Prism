@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 
@@ -35,32 +36,51 @@ public sealed class GlobalExceptionMiddleware
         {
             await _next(context);
         }
+        catch (BadHttpRequestException ex)
+        {
+            // A malformed or missing request body is the caller's mistake, not the server's.
+            // ASP.NET Core raises this (with StatusCode 400) when it cannot bind the body —
+            // routing it through the generic handler reported every garbled payload as a 500,
+            // which reads as "the server crashed" and pages the wrong person.
+            Logger.Information(ex, "Bad request body on {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+
+            await HandleExceptionAsync(context, ex, ex.StatusCode, "The request could not be read.");
+        }
         catch (Exception ex)
         {
             Logger.Error(ex, "Unhandled exception processing {Method} {Path}",
                 context.Request.Method, context.Request.Path);
 
-            await HandleExceptionAsync(context, ex);
+            await HandleExceptionAsync(context, ex, (int)HttpStatusCode.InternalServerError,
+                "An internal server error has occurred.");
         }
     }
 
-    private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private static async Task HandleExceptionAsync(
+        HttpContext context, Exception exception, int statusCode, string publicDetail)
     {
         context.Response.ContentType = "application/problem+json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+        context.Response.StatusCode = statusCode;
 
         IHostEnvironment? environment = context.RequestServices.GetService<IHostEnvironment>();
         bool isDevelopment = environment?.IsDevelopment() == true;
 
+        bool isClientError = statusCode is >= 400 and < 500;
+
         var problemDetails = new ProblemDetails
         {
-            Status = (int)HttpStatusCode.InternalServerError,
-            Title = "An unexpected error occurred",
-            Detail = isDevelopment ? exception.Message : "An internal server error has occurred.",
+            Status = statusCode,
+            Title = isClientError ? "Bad request" : "An unexpected error occurred",
+            // A 4xx detail describes the caller's mistake and is safe to return verbatim; a
+            // 5xx message could carry internals, so it stays generic outside development.
+            Detail = (isClientError || isDevelopment) ? exception.Message : publicDetail,
             Instance = context.Request.Path
         };
 
-        if (isDevelopment)
+        // Never leak a stack trace on a client error, even in development — there is no server
+        // bug to diagnose, and it is noise the caller cannot act on.
+        if (isDevelopment && !isClientError)
         {
             problemDetails.Extensions["stackTrace"] = exception.StackTrace;
         }

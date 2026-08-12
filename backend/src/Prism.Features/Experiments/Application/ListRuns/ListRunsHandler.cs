@@ -67,13 +67,15 @@ public sealed class ListRunsHandler
 
         int totalCount = await queryable.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<Run> runs = await queryable
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         List<RunDto> items = runs.Select(RunDto.FromEntity).ToList();
 
-        return new PagedResult<RunDto>(items, totalCount, query.Page, query.PageSize);
+        return new PagedResult<RunDto>(items, totalCount, page, pageSize);
     }
 }

@@ -52,6 +52,12 @@ public sealed class QueryCollectionHandler
     /// <returns>A result containing the ranked search results.</returns>
     public async Task<Result<List<ChunkSearchResultDto>>> HandleAsync(QueryCollectionQuery query, CancellationToken ct)
     {
+        // An empty query is the caller's mistake, caught here rather than paid for by an
+        // embedding round trip that fails with a provider 503 — which read as "the server is
+        // down" for what is really "you asked for nothing".
+        if (string.IsNullOrWhiteSpace(query.QueryText))
+            return Error.Validation("A search query is required.");
+
         RagCollection? collection = await _db.Set<RagCollection>()
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == query.CollectionId, ct);

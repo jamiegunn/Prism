@@ -44,11 +44,13 @@ public sealed class ListConversationsHandler
 
         int totalCount = await queryable.CountAsync(ct);
 
+        (int page, int pageSize, int skip, int take) = Pagination.Normalize(query.Page, query.PageSize);
+
         List<Conversation> conversations = await queryable
             .OrderByDescending(c => c.IsPinned)
             .ThenByDescending(c => c.LastMessageAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(ct);
 
         // Get message counts for each conversation in one query
@@ -67,7 +69,7 @@ public sealed class ListConversationsHandler
             .ToList();
 
         var pagedResult = new PagedResult<ConversationSummaryDto>(
-            items, totalCount, query.Page, query.PageSize);
+            items, totalCount, page, pageSize);
 
         return pagedResult;
     }
