@@ -133,6 +133,9 @@ modules:
       logprobs, so perplexity/entropy populate for streaming too. A trace endpoint
       (GET /history/{id}/trace) returns the recorded per-token events in position order
       with parsed alternatives, states why a trace is absent, and 404s missing records.
+      Replay returns both responses as text, runs the model the record names unless
+      overridden, refuses out-of-range overrides and message-less records before
+      contacting a provider, and names the model and instance when a provider refuses.
       Missing: replay does not produce a linked ReplayRun entity; no trace-level diff.
     frontend_status: implemented
     frontend_notes: >
@@ -141,7 +144,10 @@ modules:
       messages, tagging, replay button, an Export control that states the row count
       and disables at zero, and a Tokens tab rendering the recorded per-token trace
       (heatmap/entropy/surprise via the shared logprobs panel) with stated absence
-      reasons. Missing: side-by-side diff view, trace diff summary.
+      reasons. The replay dialog renders the side-by-side comparison with a
+      subsequence-aligned word diff, warns before running when the chosen instance
+      serves a different model from the record, and shows the reason a replay failed.
+      Missing: trace diff summary.
     provider_limitations: none
     tests_present: true
     release_blockers: []

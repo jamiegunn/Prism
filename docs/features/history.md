@@ -69,8 +69,8 @@ those options return nothing:
 | **Experiments** | **Nothing.** Parameter sweeps — the only way to create runs — label themselves `experiments-sweep`. |
 | **Prompt Lab** | Quick tests work. A/B tests label themselves `prompt-lab-ab-test` and are missed. |
 
-Three more labels exist that the dropdown has no option for at all: `history-replay`,
-`structured-output` and `evaluation-judge`.
+`history-replay`, `structured-output` and `evaluation-judge` do have options — **Replays**,
+**Structured Output** and **Evaluation (judge calls)** — and they return rows.
 
 Until this is tidied up, **use the Search box rather than the Source dropdown** when you are
 looking for a particular module. Search matches the module name as a substring, so `experiments`
@@ -134,35 +134,38 @@ At the bottom: **Replay**, **Copy Request**, **Copy Response**.
 **Replay** re-runs the stored request against an instance you choose.
 
 Pick a **Target Instance**, optionally open **Parameter Overrides** to change **Temperature**,
-**Top-P** or **Max Tokens**, and click **Replay**. Anything you do not override is taken from
-the original request exactly as recorded.
+**Top-P**, **Max Tokens** or **Model**, and click **Replay**. Anything you do not override is
+taken from the original request exactly as recorded.
+
+The comparison then shows original and replay responses side by side with word-level differences
+highlighted, a diff summary line, and a metrics table comparing model, latency, prompt tokens
+and completion tokens with deltas. A deterministic run replayed against the same model comes
+back **Responses are identical** — that is the check worth doing first when you suspect an
+instance has drifted.
 
 > **Only instances currently marked Online appear in the dropdown.** Health checks run every 30
 > seconds, so after restarting the backend the list can be empty for up to half a minute even
 > though everything is running. Wait and reopen the dialog.
 
-> **Known bug: the comparison view does not render.** The replay itself works — the call is
-> made, the response is generated, the record is written to history. What fails is the
-> side-by-side comparison screen that should appear afterwards, because the API returns the
-> original record as a structured object where the page expects a plain string. Expect the
-> dialog to break at that point. To see the result, close it and find the new record in the
-> table.
+Three things to keep in mind:
 
-When it is fixed, the comparison shows original and replay responses side by side with
-word-level differences highlighted, a diff summary line, and a metrics table comparing model,
-latency, prompt tokens and completion tokens with deltas.
+**The replay runs the model the record names.** Resolution order is your explicit override, then
+the model on the original request, then the target instance's own model if the record names none.
+Replaying a Mistral run against an instance serving Llama therefore asks that instance for
+Mistral — if it does not serve it, the replay fails and says so, naming both the model and the
+instance. That is deliberate: silently substituting the instance's model would make the two
+responses differ for a reason the comparison never states. To compare models on purpose, type
+one into the **Model** override; the amber **changed** badge in the metrics table marks it. When
+the instance you pick reports a different model from the record's, the dialog says so before you
+run anything.
 
-Two things about replay to keep in mind regardless:
+**Overrides are range-checked.** Temperature 0–2, Top-P 0–1, Max Tokens 1 or more. Out-of-range
+values are rejected with a message rather than passed to the inference server, which used to
+either ignore them silently or fail in a way the page reported as a server fault.
 
-**Replaying against a different instance silently changes the model.** The model is resolved in
-this order: your explicit override, then the target instance's own model, then the model from
-the original request. So replaying a Llama run against a Mistral instance runs Mistral. The only
-signal is a small amber **changed** badge in the comparison table — the one that currently does
-not render.
-
-**Replays are recorded under the source `history-replay`.** That value is not one of the options
-in the **Source** dropdown, so you cannot filter for your replays. Type `history-replay` into
-the **Search** box to find them.
+**Replays are recorded under the source `history-replay`**, which is the **Replays** option in
+the **Source** dropdown. The new row appears in the table a moment after the call returns —
+records are written on a background channel, not inside the request.
 
 ---
 
@@ -218,8 +221,11 @@ search endpoint accepts; the row count is returned in `X-Export-Row-Count`.
   **Tokens** tab displays the recorded trace (`GET /history/{id}/trace`).
 - **Perplexity and TTFT are blank for providers without logprobs.** Not zero — blank. This is
   correct behaviour, not a fault.
-- **The replay comparison is broken** — see above.
-- **Several sources cannot be filtered for**, replays among them — see the table above.
+- ~~**The replay comparison is broken.**~~ No longer true: the comparison renders, the diff is
+  aligned by longest common subsequence rather than by word position, and out-of-range overrides
+  are refused before the call.
+- **Several sources cannot be filtered for** — see the table above. Replays are no longer among
+  them.
 - **Page size is fixed at 20 rows.**
 - **You cannot edit anything but tags.**
 
@@ -264,10 +270,12 @@ search endpoint accepts; the row count is returned in `X-Export-Row-Count`.
 | R12 | The export control states the row count before writing and cannot fire on nothing | button reads "Export N" from the live count and is disabled at 0 with the reason in its tooltip (`ExportControl.test.tsx`, 5 tests, mutation-checked); browser: download + toast on the working path, disabled state on the empty path | MET |
 | R13 | A history row can be correlated with a standard tracing tool | every inference span carries `gen_ai.*` attributes and its `traceId`/`spanId` are persisted and shown, copyable, in the detail panel (`GenAiTelemetryTests`, 5 tests); verified in the browser | MET |
 | R14 | A recorded per-token trace is viewable where the record is | the detail sheet's Tokens tab renders the trace through the same logprobs panel the Playground uses; events return in position order with parsed alternatives, absent traces state why, missing records 404 (`HistoryTraceTests`, 2 tests, 3 mutations observed red); browser-verified working and failed-call paths, console clean | MET |
-| R11 | Replay shows the original and the replay side by side | none — the DTO returns an object where the client's type declares a string, so the diff call fails | **UNMET** |
+| R15 | Replay shows the original and the replay side by side | the result carries both responses as text, so the comparison renders; the diff aligns by longest common subsequence, so an insertion no longer marks every word after it (`diff.test.ts`, 7 tests; `HistoryReplayTests`, 14 tests, 2 mutations observed red); browser-verified identical, diverging, failed-original and long-response cases, console clean | MET |
+| R16 | A replay runs the request that was recorded | the model comes from the record unless overridden, out-of-range overrides are refused before any provider is contacted, and a record with no messages is refused rather than sent (`HistoryReplayTests`) | MET |
+| R17 | A failed replay says what to do about it | the error names the model and the instance, and the client shows a 503's detail rather than "check the API log" (`mutationErrors.test.ts`); browser-verified against a model the instance does not serve | MET |
 
 ### Withdrawn
 
 | # | Requirement | Why withdrawn | Decided by |
 |---|---|---|---|
-| W1 | Replays are themselves recorded as comparable runs | `ReplayRun` and its table exist with no writer, and `IReplayService` is a second replay implementation nothing injects. Two paths that disagree is worse than one | this review |
+| W1 | Replays are themselves recorded as comparable runs | `ReplayRun` and its table exist with no writer, and `IReplayService` is a second replay implementation nothing injects. Both are named in ADR 013 as the runtime layer's designed home for replay, so removing them is an architecture decision rather than a fix, and they stay. What was fixed is the disagreement: `ReplayService` always took the model from the record, the live handler took it from the target instance, and the live handler now matches. A replay is still findable only as its own `history-replay` record — nothing links it to the original | this review |
