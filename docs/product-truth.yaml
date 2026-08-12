@@ -99,6 +99,12 @@ modules:
     backend_status: implemented
     backend_notes: >
       Instance CRUD, health check endpoint, model listing, basic metrics.
+      Discovery and the seeded instances address the host correctly from inside a
+      container, so a containerised API — the default — finds local servers and does
+      not seed two permanently offline rows pointing at itself. Hot-swap capability
+      is visible through the recording decorator again, so swapping a model and
+      listing an instance's models both work; a direct type test had reported every
+      provider as incapable since recording began wrapping them.
       Missing: no IProviderCapabilityRegistry (ADR-015). Capabilities are not probed
       or persisted. No model snapshot history entity.
     frontend_status: implemented

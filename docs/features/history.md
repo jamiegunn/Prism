@@ -152,12 +152,13 @@ Three things to keep in mind:
 **The replay runs the model the record names.** Resolution order is your explicit override, then
 the model on the original request, then the target instance's own model if the record names none.
 Replaying a Mistral run against an instance serving Llama therefore asks that instance for
-Mistral — if it does not serve it, the replay fails and says so, naming both the model and the
-instance. That is deliberate: silently substituting the instance's model would make the two
-responses differ for a reason the comparison never states. To compare models on purpose, type
-one into the **Model** override; the amber **changed** badge in the metrics table marks it. When
-the instance you pick reports a different model from the record's, the dialog says so before you
-run anything.
+Mistral. That is deliberate: silently substituting the instance's model would make the two
+responses differ for a reason the comparison never states.
+
+When the instance you choose does not have the record's model — which is what happens to the
+seeded demo rows, whose models are not on anyone's machine — the dialog says so **before** you
+run anything, and the **Model** override lists what that instance actually serves. Choosing one
+is the whole fix; the amber **changed** badge in the metrics table marks that you did.
 
 **Overrides are range-checked.** Temperature 0–2, Top-P 0–1, Max Tokens 1 or more. Out-of-range
 values are rejected with a message rather than passed to the inference server, which used to
