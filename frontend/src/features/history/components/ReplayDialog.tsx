@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Play, Loader2, Settings2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useInstances } from '@/features/playground/api'
+import { useInstanceModels } from '@/features/models/api'
 import { useReplayRecord } from '../api'
 import { diffWords } from '../diff'
 import { describeMutationError } from '@/services/mutationErrors'
@@ -35,6 +36,7 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
   const [overrideTopP, setOverrideTopP] = useState<number | undefined>(undefined)
   const [overrideModel, setOverrideModel] = useState<string>('')
   const { data: instances } = useInstances()
+  const { data: instanceModels } = useInstanceModels(selectedInstance || null)
   const replayMutation = useReplayRecord()
   const [result, setResult] = useState<ReplayResult | null>(null)
 
@@ -72,15 +74,15 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
     overrideTopP !== undefined ||
     overrideModel.trim() !== ''
 
-  // The replay runs the model the record names. When the chosen instance is serving a different
-  // one, saying so before the run beats a "model not found" afterwards — and the override below
-  // is how you deliberately compare models rather than accidentally swap them.
-  const targetInstance = onlineInstances.find((i) => i.id === selectedInstance)
-  const modelMismatch =
-    targetInstance?.modelId != null &&
-    record.model.length > 0 &&
-    targetInstance.modelId !== record.model &&
-    overrideModel.trim() === ''
+  // The replay runs the model the record names. Whether the chosen instance can serve it is the
+  // question worth answering before the run rather than after a "model not found" — and when it
+  // cannot, the list below is what turns that into a choice instead of a dead end.
+  const servedModels = instanceModels?.models ?? []
+  const recordModelIsServed =
+    record.model.length === 0 ||
+    servedModels.length === 0 ||
+    servedModels.includes(record.model)
+  const modelMismatch = !recordModelIsServed && overrideModel.trim() === ''
 
   // What temperature the replay actually ran at decides whether a difference means anything.
   // The recorded request is the source for it, since that is what the replay re-sends.
@@ -130,11 +132,17 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
                   <div className="mt-2 flex gap-2 rounded border border-amber-800/60 bg-amber-950/30 px-2.5 py-2 text-xs text-amber-200/90">
                     <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-400 mt-0.5" />
                     <span>
-                      This instance reports{' '}
-                      <span className="font-mono">{targetInstance?.modelId}</span>, but the record ran on{' '}
-                      <span className="font-mono">{record.model}</span>. The replay asks for{' '}
-                      <span className="font-mono">{record.model}</span> — override the model below to
-                      compare against a different one.
+                      This instance does not serve{' '}
+                      <span className="font-mono">{record.model}</span>, which is the model the record
+                      ran on, so the replay will fail as asked. Pick one it does have under{' '}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2 hover:text-amber-100"
+                        onClick={() => setShowOverrides(true)}
+                      >
+                        Parameter Overrides
+                      </button>
+                      {' '}— the comparison marks the model as changed.
                     </span>
                   </div>
                 )}
@@ -222,14 +230,37 @@ export function ReplayDialog({ record, open, onClose }: ReplayDialogProps) {
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-400">Model</label>
-                      <Input
-                        placeholder={record.model || 'original'}
-                        value={overrideModel}
-                        onChange={(e) => setOverrideModel(e.target.value)}
-                        className="h-7 text-xs bg-zinc-800 font-mono"
-                      />
+                      {servedModels.length > 0 ? (
+                        <Select
+                          value={overrideModel}
+                          onChange={(e) => setOverrideModel(e.target.value)}
+                          className="h-7 text-xs bg-zinc-800 font-mono"
+                        >
+                          <option value="">
+                            {recordModelIsServed
+                              ? `${record.model || 'as recorded'} (as recorded)`
+                              : `${record.model} (as recorded — not on this instance)`}
+                          </option>
+                          {servedModels
+                            .filter((m) => m !== record.model)
+                            .map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder={record.model || 'original'}
+                          value={overrideModel}
+                          onChange={(e) => setOverrideModel(e.target.value)}
+                          className="h-7 text-xs bg-zinc-800 font-mono"
+                        />
+                      )}
                       <p className="text-[11px] text-zinc-600">
-                        Leave blank to run the model the record was made with.
+                        {instanceModels && !instanceModels.canList && instanceModels.reason
+                          ? instanceModels.reason
+                          : 'Leave as recorded to replay the model the record was made with.'}
                       </p>
                     </div>
                   </div>

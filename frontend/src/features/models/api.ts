@@ -19,6 +19,29 @@ export function useInstance(id: string) {
   })
 }
 
+/** What an instance reports it can serve, or the stated reason it cannot say. */
+export interface InstanceModels {
+  models: string[]
+  /** False for a server that serves only what it was started with, such as vLLM. */
+  canList: boolean
+  /** Why the list is empty or unavailable; null when it is neither. */
+  reason: string | null
+}
+
+/**
+ * The models an instance can currently serve.
+ *
+ * Asked by anything that has to name a model on someone's behalf — replay, most of all, where
+ * the alternative was typing an exact identifier from memory after a "model not found".
+ */
+export function useInstanceModels(id: string | null) {
+  return useQuery({
+    queryKey: [...MODELS_KEY, id, 'models'],
+    queryFn: () => apiClient<InstanceModels>(`/models/instances/${id}/models`),
+    enabled: !!id,
+  })
+}
+
 export function useInstanceMetrics(id: string) {
   return useQuery({
     queryKey: [...MODELS_KEY, id, 'metrics'],
