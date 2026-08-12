@@ -637,10 +637,18 @@ if ! $FRONTEND_ONLY; then
   # predating a capability fix, spent an afternoon flipping SupportsLogprobs
   # between true and false — which reads as "the token views randomly stop
   # working" and is invisible from any one of them.
-  stale_apis="$(pgrep -f "$ROOT/backend/src/Prism.Api" 2>/dev/null | tr '\n' ' ' || true)"
+  #
+  # The pattern is machine-wide on purpose: there is one machine and one database,
+  # so a Prism API launched from *any* checkout — not just this one — is a second
+  # writer. Matching a `dotnet` executable token followed by Prism.Api catches
+  # `dotnet run` and a published dll alike — whether dotnet is bare or fully
+  # pathed — without matching an editor that merely has similar text in its
+  # arguments.
+  stale_api_pattern='(^|/)dotnet .*Prism\.Api'
+  stale_apis="$(pgrep -f "$stale_api_pattern" 2>/dev/null | tr '\n' ' ' || true)"
 
   if [ -n "${stale_apis// /}" ]; then
-    warn "Another Prism API is already running (PID${stale_apis#* } ${stale_apis% })."
+    warn "Another Prism API is already running (PID(s): ${stale_apis% })."
     warn "Two APIs share one database and overwrite each other's model capabilities,"
     warn "so a second one is worse than a port conflict rather than a way around it."
     step "Stopping the one already running..."
@@ -651,9 +659,21 @@ if ! $FRONTEND_ONLY; then
 
     # Give them a moment to release their ports before the check below reads them.
     for _ in $(seq 1 10); do
-      pgrep -f "$ROOT/backend/src/Prism.Api" >/dev/null 2>&1 || break
+      pgrep -f "$stale_api_pattern" >/dev/null 2>&1 || break
       sleep 1
     done
+
+    # A process that ignored TERM for ten seconds is not going to hand over the
+    # port or stop writing capabilities on its own. One machine, one API: finish
+    # the job rather than starting a second writer next to a wedged first.
+    leftover="$(pgrep -f "$stale_api_pattern" 2>/dev/null | tr '\n' ' ' || true)"
+    if [ -n "${leftover// /}" ]; then
+      warn "Still running after SIGTERM; forcing (PID(s): ${leftover% })."
+      for stale_pid in $leftover; do
+        kill -9 "$stale_pid" 2>/dev/null || true
+      done
+      sleep 1
+    fi
   fi
 
   # Port 5000 is not as free as it looks. On macOS the AirPlay Receiver holds it
