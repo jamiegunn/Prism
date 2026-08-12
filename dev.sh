@@ -104,6 +104,21 @@ prism_version_at_least() {
   [ "$h3" -ge "$w3" ]
 }
 
+# Where this machine keeps Ollama's models, when it keeps any. OLLAMA_MODELS
+# names the models directory; the container wants its parent, which is the whole
+# store. Prints nothing and fails when there is no store worth mounting.
+host_ollama_store() {
+  local store="${OLLAMA_MODELS:+$(dirname "$OLLAMA_MODELS")}"
+  store="${store:-$HOME/.ollama}"
+
+  # Blobs rather than the directory: an Ollama that has run once but pulled
+  # nothing leaves an empty store, and mounting that gains nothing.
+  [ -d "$store/models/blobs" ] || return 1
+  [ -n "$(ls -A "$store/models/blobs" 2>/dev/null)" ] || return 1
+
+  printf '%s' "$store"
+}
+
 # Pulls a model when the server has none, because a running Ollama with an
 # empty model list produces exactly the same empty screens as no Ollama at all.
 # The prefix lets the same logic drive the host binary and the container.
@@ -121,7 +136,24 @@ ensure_ollama_model() {
   if ${prefix}ollama pull "$model"; then
     ok "$model is ready."
   else
-    warn "Could not pull $model. Do it yourself with:  ${prefix}ollama pull $model"
+    warn "Could not pull $model."
+
+    # A container that cannot reach the registry is usually a network that
+    # inspects TLS: the host trusts the intercepting certificate and the
+    # container does not. Copying weights around is the wrong answer — the
+    # host's store can simply be mounted, which is what dev.sh does when it
+    # finds one, so the fix is to pull where the certificates already work.
+    if [ -n "$prefix" ] && command -v ollama >/dev/null 2>&1; then
+      warn "The container could not fetch it, but this machine has Ollama. Pull it here:"
+      warn "    ollama pull $model"
+      warn "then run ./dev.sh again — it will mount the models you already have."
+    elif [ -n "$prefix" ]; then
+      warn "If the container cannot reach the registry (a TLS-inspecting network will do it),"
+      warn "install Ollama on this machine, run 'ollama pull $model', and run ./dev.sh again:"
+      warn "it mounts the host's model store when it finds one, so nothing is downloaded twice."
+    else
+      warn "Do it yourself with:  ${prefix}ollama pull $model"
+    fi
   fi
 
   # Ollama gained logprobs in 0.12.11. Before that Prism told everyone here that
@@ -147,6 +179,106 @@ _prism_ollama_container_running() {
   command -v docker >/dev/null 2>&1 || return 1
   docker ps --filter 'name=prism-ollama' --filter 'status=running' \
             --format '{{.Names}}' 2>/dev/null | grep -q prism-ollama
+}
+
+# How to run ollama commands against whatever holds port 11434 — through our
+# container when that is what is there, otherwise the host binary. Asking the
+# wrong one pulls a model into a server nobody is talking to.
+ollama_command_prefix() {
+  if _prism_ollama_container_running; then
+    printf 'docker exec prism-ollama '
+  fi
+}
+
+# Starts the host's Ollama and, on success, sets it as the provider to register.
+# Extracted so the recovery path below can reach it: a saved provider that has
+# gone away and a deliberate "start Ollama" want exactly the same thing done.
+start_native_ollama() {
+  if _prism_port_open localhost 11434; then
+    ok "Ollama is already running natively."
+  else
+    step "Starting Ollama..."
+    ollama serve > "$LOGS/ollama.log" 2>&1 &
+    echo $! > "$LOGS/ollama.pid"
+    for _ in $(seq 1 20); do _prism_port_open localhost 11434 && break; sleep 1; done
+  fi
+
+  if _prism_port_open localhost 11434; then
+    ok "Ollama is listening on 11434."
+    PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+    ensure_ollama_model "" "$PRISM_MODEL"
+    return 0
+  fi
+
+  warn "Ollama did not come up — see $LOGS/ollama.log"
+  return 1
+}
+
+# Starts the Ollama container and, on success, sets it as the provider to register.
+start_container_ollama() {
+  step "Starting Ollama in a container..."
+  export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
+  export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
+  echo "   Limits: ${PRISM_OLLAMA_MEMORY} memory, ${PRISM_OLLAMA_CPUS} CPUs"
+
+  # Read the machine's own model store when it has one, rather than downloading
+  # a second copy into a volume — and on a network that intercepts TLS, the
+  # container's download is the one that fails while the host's already worked.
+  local store
+  if store="$(host_ollama_store)"; then
+    export PRISM_OLLAMA_MODELS="$store"
+    ok "Using the models already on this machine ($store) — nothing to download."
+  fi
+
+  if ! docker compose -f "$ROOT/docker-compose.yml" --profile ollama up -d ollama; then
+    warn "Could not start the Ollama container. Check:  docker compose logs ollama"
+    return 1
+  fi
+
+  echo -n "   Waiting for Ollama..."
+  for _ in $(seq 1 60); do
+    _prism_port_open localhost 11434 && break
+    echo -n "."; sleep 1
+  done
+  echo ""
+
+  if _prism_port_open localhost 11434; then
+    ok "Ollama is listening on 11434."
+    PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
+    ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+    return 0
+  fi
+
+  warn "The container started but nothing is answering on 11434."
+  warn "Check:  docker compose logs ollama"
+  return 1
+}
+
+# Last resort when the configured provider is not there. Prism without an
+# inference server is a set of empty screens, and "connect one from the Models
+# page" is a instruction to go and solve the problem the launcher exists to
+# solve. Starting the project's default server instead is the whole point of
+# having a launcher; it says what it is doing rather than doing it quietly.
+recover_a_provider() {
+  local missing="$1"
+
+  if command -v ollama >/dev/null 2>&1; then
+    step "Starting the Ollama installed on this machine instead, so Prism opens on a working model..."
+    start_native_ollama && return 0
+  fi
+
+  if [ -z "${NO_DOCKER:-}" ]; then
+    step "Starting Ollama in a container instead, so Prism opens on a working model..."
+    if [ "$missing" != "Ollama" ]; then
+      warn "This is Ollama rather than the $missing you chose — a different server with"
+      warn "different capabilities. Run ./dev.sh --reconfigure once $missing is back."
+    fi
+    start_container_ollama && return 0
+  fi
+
+  warn "There is no Ollama installed and no container runtime to run one in."
+  warn "Prism will start; connect a model from the Models page when you have one."
+  return 1
 }
 
 # ── Configuration ─────────────────────────────────────────────────────
@@ -493,6 +625,63 @@ container_provider_endpoint() {
     | sed -E 's#(https?://)(localhost|127\.0\.0\.1)#\1host.docker.internal#'
 }
 
+# Registers the provider that was started, then checks the API agrees it is
+# usable. Shared by the container and metal paths, which had grown two copies of
+# this that could drift.
+#
+# The check at the end is the point. Registering an endpoint only records an
+# intention; whether the API can reach it is a different question, and the answer
+# used to arrive as an empty dropdown much later. A launcher that says "Ready"
+# over an inference server the app cannot reach has told you the one thing you
+# needed to know incorrectly.
+register_provider_with_api() {
+  local endpoint="$1"
+  [ -n "$endpoint" ] || return 0
+
+  local existing id status error
+  existing="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null || echo '')"
+
+  if printf '%s' "$existing" | grep -q "\"endpoint\":\"${endpoint}\""; then
+    ok "$endpoint is already registered."
+  elif curl -fsS --max-time 15 -X POST "$PRISM_API_URL/api/v1/models/instances" \
+         -H 'Content-Type: application/json' \
+         -d "{\"name\":\"Local ${PROVIDER_TYPE}\",\"endpoint\":\"${endpoint}\",\"providerType\":\"${PROVIDER_TYPE}\",\"isDefault\":true}" \
+         >/dev/null 2>&1; then
+    ok "Registered $endpoint as the default model."
+  else
+    warn "Could not register $endpoint automatically."
+    warn "Add it from the Models page — it will be found by the search there."
+    return 0
+  fi
+
+  # Ask the API to prove it, rather than trusting that registration means reachable.
+  id="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null \
+        | tr '}' '\n' | grep -F "\"endpoint\":\"${endpoint}\"" \
+        | sed -nE 's/.*"id":"([0-9a-f-]{36})".*/\1/p' | head -1)"
+
+  [ -n "$id" ] || return 0
+
+  local health
+  health="$(curl -fsS --max-time 30 -X POST \
+              "$PRISM_API_URL/api/v1/models/instances/$id/health-check" 2>/dev/null || echo '')"
+  status="$(printf '%s' "$health" | sed -nE 's/.*"status":"([A-Za-z]+)".*/\1/p' | head -1)"
+
+  if [ "$status" = "Online" ]; then
+    ok "The API can reach $endpoint."
+    return 0
+  fi
+
+  error="$(printf '%s' "$health" | sed -nE 's/.*"lastHealthError":"([^"]*)".*/\1/p' | head -1)"
+  warn "The API cannot reach $endpoint${error:+ — $error}"
+
+  if [ "$endpoint" != "${endpoint#http://localhost}" ] && $USE_CONTAINERS; then
+    warn "Inside the API container, localhost is the container. Re-run ./dev.sh so it"
+    warn "registers the address the container can use."
+  else
+    warn "Prism will open, but nothing can run until this endpoint answers."
+  fi
+}
+
 # Brings the app up in containers via the `app` compose profile and waits for the
 # API to answer. Honours scope: the API unless this is a frontend-only run, the
 # frontend unless backend-only. Registers the provider with an endpoint rewritten
@@ -538,24 +727,9 @@ start_app_containers() {
   fi
   ok " Ready! Swagger: $PRISM_API_URL/swagger"
 
-  # Register the provider, rewriting the endpoint to the container's view. Skip
-  # when something is already registered so relaunches do not pile up duplicates.
-  if [ -n "$PROVIDER_ENDPOINT" ]; then
-    local container_endpoint existing
-    container_endpoint="$(container_provider_endpoint "$PROVIDER_ENDPOINT")"
-    existing="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null || echo '')"
-
-    if printf '%s' "$existing" | grep -q "\"endpoint\":\"${container_endpoint}\""; then
-      ok "$container_endpoint is already registered."
-    elif curl -fsS --max-time 15 -X POST "$PRISM_API_URL/api/v1/models/instances" \
-           -H 'Content-Type: application/json' \
-           -d "{\"name\":\"Local ${PROVIDER_TYPE}\",\"endpoint\":\"${container_endpoint}\",\"providerType\":\"${PROVIDER_TYPE}\",\"isDefault\":true}" \
-           >/dev/null 2>&1; then
-      ok "Registered $container_endpoint as the default model."
-    else
-      warn "Could not register $container_endpoint automatically — add it from the Models page."
-    fi
-  fi
+  # Registered through the container's view of the network: inside the API
+  # container, `localhost` is the container itself.
+  register_provider_with_api "$(container_provider_endpoint "$PROVIDER_ENDPOINT")"
 
   if ! $BACKEND_ONLY; then
     ok "Frontend container is up: http://localhost:5173"
@@ -613,11 +787,19 @@ if ! $FRONTEND_ONLY; then
         if _prism_port_open localhost "$cport"; then
           ok "$clabel is listening on $cport."
           PROVIDER_ENDPOINT="$cendpoint"; PROVIDER_TYPE="$ctype"
+
+          # A server with no model is the same empty Playground as no server,
+          # and "already running" is exactly the case where nobody checked.
+          if [ "$ctype" = "Ollama" ]; then
+            ensure_ollama_model "$(ollama_command_prefix)" "$PRISM_MODEL"
+          fi
         else
-          # Saved from a previous run, but gone now — say so rather than
-          # registering an endpoint nothing is behind.
+          # Saved from a previous run, but gone now. Saying so and carrying on
+          # left the app with no inference at all — and the endpoint a previous
+          # run registered still sitting in the database, offered by every model
+          # picker until something tried to use it.
           warn "Nothing is answering on port $cport, where $clabel used to be."
-          warn "Prism will still start; connect a model from the Models page."
+          recover_a_provider "$clabel" || true
         fi
 
         break
@@ -646,22 +828,7 @@ if ! $FRONTEND_ONLY; then
         PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
         ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
       else
-        if _prism_port_open localhost 11434; then
-          ok "Ollama is already running natively."
-        else
-          step "Starting Ollama..."
-          ollama serve > "$LOGS/ollama.log" 2>&1 &
-          echo $! > "$LOGS/ollama.pid"
-          for _ in $(seq 1 20); do _prism_port_open localhost 11434 && break; sleep 1; done
-        fi
-
-        if _prism_port_open localhost 11434; then
-          ok "Ollama is listening on 11434."
-          PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-          ensure_ollama_model "" "$PRISM_MODEL"
-        else
-          warn "Ollama did not come up — see $LOGS/ollama.log"
-        fi
+        start_native_ollama || true
       fi
       ;;
 
@@ -679,30 +846,7 @@ if ! $FRONTEND_ONLY; then
         # Playground, which is the thing this whole step exists to avoid.
         ensure_ollama_model "" "$PRISM_MODEL"
       else
-        step "Starting Ollama in a container..."
-        export PRISM_OLLAMA_MEMORY="${PRISM_OLLAMA_MEMORY_GIB:-8}g"
-        export PRISM_OLLAMA_CPUS="${PRISM_OLLAMA_CPUS:-$(prism_runtime_cpus 2>/dev/null || echo 4)}"
-        echo "   Limits: ${PRISM_OLLAMA_MEMORY} memory, ${PRISM_OLLAMA_CPUS} CPUs"
-
-        if docker compose -f "$ROOT/docker-compose.yml" --profile ollama up -d ollama; then
-          echo -n "   Waiting for Ollama..."
-          for _ in $(seq 1 60); do
-            _prism_port_open localhost 11434 && break
-            echo -n "."; sleep 1
-          done
-          echo ""
-
-          if _prism_port_open localhost 11434; then
-            ok "Ollama is listening on 11434."
-            PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-            ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
-          else
-            warn "The container started but nothing is answering on 11434."
-            warn "Check:  docker compose logs ollama"
-          fi
-        else
-          warn "Could not start the Ollama container. Check:  docker compose logs ollama"
-        fi
+        start_container_ollama || true
       fi
       ;;
 
@@ -876,26 +1020,9 @@ if ! $FRONTEND_ONLY && ! $USE_CONTAINERS; then
   if $api_up; then
     ok " Ready! Swagger: $PRISM_API_URL/swagger"
 
-    # Register whatever we started, so the app opens on a working Playground
-    # rather than an empty Models page. Skipped when something is already
-    # registered — re-adding on every launch would pile up duplicates.
-    if [ -n "$PROVIDER_ENDPOINT" ]; then
-      existing="$(curl -fsS --max-time 5 "$PRISM_API_URL/api/v1/models/instances" 2>/dev/null || echo '')"
-
-      if printf '%s' "$existing" | grep -q "\"endpoint\":\"${PROVIDER_ENDPOINT}\""; then
-        ok "$PROVIDER_ENDPOINT is already registered."
-      else
-        if curl -fsS --max-time 15 -X POST "$PRISM_API_URL/api/v1/models/instances" \
-             -H 'Content-Type: application/json' \
-             -d "{\"name\":\"Local ${PROVIDER_TYPE}\",\"endpoint\":\"${PROVIDER_ENDPOINT}\",\"providerType\":\"${PROVIDER_TYPE}\",\"isDefault\":true}" \
-             >/dev/null 2>&1; then
-          ok "Registered $PROVIDER_ENDPOINT as the default model."
-        else
-          warn "Could not register $PROVIDER_ENDPOINT automatically."
-          warn "Add it from the Models page — it will be found by the search there."
-        fi
-      fi
-    fi
+    # A metal API reaches the host's ports directly, so what was started is what
+    # gets registered.
+    register_provider_with_api "$PROVIDER_ENDPOINT"
   else
     echo ""
     echo -e "${RED}The API did not come up.${NC}"

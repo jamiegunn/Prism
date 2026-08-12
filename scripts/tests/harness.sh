@@ -43,12 +43,16 @@ if [ "$1" = compose ]; then
 fi
 if [ "$1" = exec ]; then          # docker exec prism-ollama ollama <cmd>
   shift 2
+  # Resolved by path rather than through PATH, so a test can model a machine
+  # that has a container runtime and no ollama binary of its own — which is
+  # what "nothing installed, Docker available" actually looks like.
+  if [ "$1" = ollama ]; then shift; exec "$WORK/ollama-impl" "$@"; fi
   exec "$@"
 fi
 exit 0
 DOCKER
 
-cat > "$BIN/ollama" <<'OLLAMA'
+cat > "$WORK/ollama-impl" <<'OLLAMA'
 #!/usr/bin/env bash
 . "$STATE"
 case "$1" in
@@ -61,6 +65,9 @@ case "$1" in
 esac
 exit 0
 OLLAMA
+
+chmod +x "$WORK/ollama-impl"
+cp "$WORK/ollama-impl" "$BIN/ollama"
 
 cat > "$BIN/uname" <<'UNAME'
 #!/usr/bin/env bash

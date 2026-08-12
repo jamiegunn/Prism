@@ -51,7 +51,14 @@ services:
     volumes:
       # Named volume so a `docker compose down` does not throw away several
       # gigabytes of downloaded weights.
-      - prism-ollama-models:/root/.ollama
+      #
+      # PRISM_OLLAMA_MODELS overrides the source with a path, which turns this
+      # into a bind mount of a model store that already exists — normally the
+      # host's ~/.ollama. That is the way in on a machine whose containers
+      # cannot reach the model registry: pull on the host, where the corporate
+      # certificates live, and the container reads the same files. dev.sh sets
+      # it when it finds a host store; nothing is copied either way.
+      - ${PRISM_OLLAMA_MODELS:-prism-ollama-models}:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0
       OLLAMA_KEEP_ALIVE: ${PRISM_OLLAMA_KEEP_ALIVE:-5m}

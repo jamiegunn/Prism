@@ -240,6 +240,20 @@ ollama pull mistral:7b-instruct
 
 Then click **Search again**.
 
+> **If the container cannot download a model but this machine can**, pull it here rather than
+> in there. A network that inspects TLS is the usual cause: the machine trusts the intercepting
+> certificate and a fresh container does not, so `ollama pull` inside the container fails on a
+> certificate while the same pull on the host works.
+>
+> ```bash
+> ollama pull mistral:7b-instruct   # on this machine, where the certificates already work
+> ./dev.sh                          # mounts ~/.ollama into the container
+> ```
+>
+> `dev.sh` looks for a model store on the machine and mounts it into the Ollama container when
+> it finds one, so nothing is copied and nothing is downloaded twice. To point it somewhere
+> else, set `PRISM_OLLAMA_MODELS` to the directory that contains `models/`.
+
 > **One choice shapes everything you see next.** Prism's headline features — the token heatmap,
 > the entropy view, the Token Explorer — are built on per-token probabilities. vLLM returns
 > them; Ollama does not. Ollama is the easiest way to get chatting, and it leaves those views
