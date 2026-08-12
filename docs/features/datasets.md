@@ -253,7 +253,7 @@ Set the seed, note it in the experiment's hypothesis or description on the
 | # | Presupposition | Holds on a cold install? | Evidence |
 |---|---|---|---|
 | P1 | Splits are reproducible | **Not by default.** The seed field is optional and empty, and the handler falls back to an unseeded `Random`. Two splits with identical ratios differ unless you type a seed | `SplitDatasetDialog.tsx:24`; `SplitDatasetHandler.cs:60` |
-| P2 | The Statistics tab names each column and lists its top values | **No.** The backend sends `columnName` and a map of top values; the frontend reads `column` and an array — so names render blank and top values never appear. No crash; it just says less than it claims | `DatasetStatsDto.cs:22-27` vs `datasets/types.ts:60-71` |
+| P2 | The Statistics tab names each column and lists its top values | **Yes, now.** The frontend types were rewritten to the contract the backend actually sends (`columnName`, a value→count map); names render and the five most frequent values show, sorted by count | `datasets/types.ts`, `DatasetStatsPanel.tsx` |
 | P3 | The records table shows the whole record | **Not necessarily.** It renders only the columns in the schema, and the schema is inferred from row 0 alone, so later rows with extra keys are hidden | `UploadDatasetHandler.cs:55,191-198` |
 | P4 | An empty grid means there are no datasets | **Not when the API is down** — there is no error branch | `DatasetsPage.tsx:41-56` |
 | P5 | The Purpose column means something | **Not for uploads.** Schema detection never sets it, and there is no UI to set it, so every uploaded dataset shows "—" | `UploadDatasetHandler.cs:191-198` |
@@ -272,7 +272,7 @@ Set the seed, note it in the experiment's hypothesis or description on the
 | R6 | Deleting a dataset returns to the list without an error | trash → confirm; fixed by the 204 handling in `apiClient` | MET |
 | R7 | A column more than half null is reported as an error, 10–50% as a warning | `ValidateDatasetTests` | MET |
 | R8 | A failed dataset request says so rather than "No datasets yet" | none | **UNMET** |
-| R9 | The Statistics tab names each column and lists its top values | none — see P2 | **UNMET** |
+| R9 | The Statistics tab names each column and lists its top values | frontend types now mirror `ColumnStatsDto` (`columnName`, value→count map, most-frequent first, truncated with full value in the tooltip); browser-verified: `text`/`label`/`confidence` named, `positive (2)` chips shown, the React key warning that flagged the mismatch is gone | MET |
 | R10 | A successful upload confirms on screen | none — the dialog only clears its fields and cannot close itself | **UNMET** |
 | R11 | A dataset can be renamed, or a column's purpose set | none — `useUpdateDataset` and its endpoint exist with no callers | **UNMET** |
 

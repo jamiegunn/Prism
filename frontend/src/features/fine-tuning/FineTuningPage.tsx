@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NotImplementedOverlay } from './components/NotImplementedOverlay'
 import { Plus, Trash2, Download, Wrench } from 'lucide-react'
 import { useAdapters, useCreateAdapter, useDeleteAdapter, useExportFineTune } from './api'
+import { useDatasets } from '@/features/datasets/api'
 import type { LoraAdapter, ExportFineTuneResult } from './types'
 
 type Tab = 'adapters' | 'export'
@@ -122,6 +123,7 @@ function ExportPanel() {
   const [outputCol, setOutputCol] = useState('output')
   const [result, setResult] = useState<ExportFineTuneResult | null>(null)
 
+  const { data: datasets } = useDatasets()
   const exportFn = useExportFineTune()
 
   const handleExport = () => {
@@ -154,13 +156,21 @@ function ExportPanel() {
   return (
     <div className="space-y-4 max-w-xl">
       <div>
-        <label className="text-sm text-zinc-400">Dataset ID *</label>
-        <input
+        <label className="text-sm text-zinc-400">Dataset *</label>
+        {/* Every other screen picks datasets from a list; asking for a raw GUID here made
+            the export unusable without a trip to the database or the Datasets URL bar. */}
+        <select
           className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50"
-          placeholder="Dataset GUID"
           value={datasetId}
           onChange={(e) => setDatasetId(e.target.value)}
-        />
+        >
+          <option value="">Select a dataset...</option>
+          {(datasets ?? []).map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name} ({d.recordCount} records)
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>

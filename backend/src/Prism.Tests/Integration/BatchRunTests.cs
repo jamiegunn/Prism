@@ -5,6 +5,7 @@ using Prism.Common.Inference;
 using Prism.Common.Jobs;
 using Prism.Common.Results;
 using Prism.Features.BatchInference.Application.Dtos;
+using Prism.Features.BatchInference.Application.RetryFailed;
 using Prism.Features.BatchInference.Application.RunBatch;
 using Prism.Features.BatchInference.Application.UpdateBatchJobStatus;
 using Prism.Features.BatchInference.Domain;
@@ -197,6 +198,118 @@ public sealed class BatchRunTests
     /// Token estimation must scale with the text, not be a constant. The previous estimator
     /// returned the same number for every record regardless of content.
     /// </summary>
+    /// <summary>
+    /// Retry-failed actually reruns: it enqueues a fresh durable job (the original is
+    /// Complete, and nothing watches BatchJob.Status — without this the "retried" job sat
+    /// Queued forever), and the rerun reuses the failed rows rather than adding new ones,
+    /// so a six-record dataset does not become twelve results with one retry.
+    /// </summary>
+    [Fact]
+    public async Task Retry_Failed_Enqueues_A_Runnable_Job_And_Reuses_Result_Rows()
+    {
+        await using AppDbContext db = _fixture.CreateContext();
+        await SeedInstanceAsync(db);
+        Guid datasetId = await SeedDatasetAsync(db, ["a", "b"]);
+        (Guid batchId, DurableJob job) = await SeedBatchAsync(db, datasetId);
+
+        // First run: everything fails.
+        var failing = new BatchJobHandler(
+            db,
+            new InferenceProviderFactory(FakeHttpTransport.ServerError(), NullLoggerFactory.Instance),
+            NullLogger<BatchJobHandler>.Instance);
+        await failing.ExecuteAsync(job, CancellationToken.None);
+
+        // Retry: must produce a NEW queued durable job for this batch.
+        int durableJobsBefore = await db.Set<DurableJob>().CountAsync(j => j.JobType == BatchJobHandler.Type);
+        var retry = new RetryFailedHandler(db, NullLogger<RetryFailedHandler>.Instance);
+        Result<BatchJobDto> retried = await retry.HandleAsync(
+            new RetryFailedCommand(batchId), CancellationToken.None);
+        Assert.True(retried.IsSuccess, retried.IsFailure ? retried.Error.Message : "");
+
+        DurableJob? requeued = await db.Set<DurableJob>()
+            .Where(j => j.JobType == BatchJobHandler.Type && j.Status == JobStatus.Queued)
+            .OrderByDescending(j => j.CreatedAt)
+            .FirstOrDefaultAsync();
+        Assert.NotNull(requeued);
+        Assert.True(
+            await db.Set<DurableJob>().CountAsync(j => j.JobType == BatchJobHandler.Type) > durableJobsBefore,
+            "Retry did not enqueue a new durable job; nothing would ever run the retried batch.");
+
+        // Second run succeeds; rows are reused, not duplicated, and attempts increment.
+        await using AppDbContext db2 = _fixture.CreateContext();
+        var succeeding = new BatchJobHandler(
+            db2,
+            new InferenceProviderFactory(
+                FakeHttpTransport.ChatCompletion("recovered"), NullLoggerFactory.Instance),
+            NullLogger<BatchJobHandler>.Instance);
+        await succeeding.ExecuteAsync(requeued, CancellationToken.None);
+
+        await using AppDbContext verify = _fixture.CreateContext();
+        List<BatchResult> results = await verify.Set<BatchResult>()
+            .AsNoTracking().Where(r => r.BatchJobId == batchId).ToListAsync();
+        Assert.Equal(2, results.Count);
+        Assert.All(results, r => Assert.Equal(BatchResultStatus.Success, r.Status));
+        Assert.All(results, r => Assert.Equal("recovered", r.Output));
+        Assert.All(results, r => Assert.Equal(2, r.Attempt));
+
+        BatchJob batch = await verify.Set<BatchJob>().AsNoTracking().FirstAsync(b => b.Id == batchId);
+        Assert.Equal(BatchJobStatus.Completed, batch.Status);
+        Assert.Equal(2, batch.CompletedRecords);
+        Assert.Equal(0, batch.FailedRecords);
+    }
+
+    /// <summary>
+    /// The runner uses the default instance, not an arbitrary row. Before the fix it took
+    /// the first row EF happened to return — with a dead seeded endpoint inserted first, an
+    /// entire batch failed with connection errors while the healthy default sat idle (the
+    /// evaluation runner had the identical bug).
+    /// </summary>
+    [Fact]
+    public async Task The_Runner_Uses_The_Default_Instance_Not_An_Arbitrary_Row()
+    {
+        await using AppDbContext db = _fixture.CreateContext();
+
+        // Serial collection: demote any instances earlier tests left behind, then insert a
+        // decoy first so unordered enumeration would find it before the default.
+        await db.Set<InferenceInstance>()
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsDefault, false));
+        db.Set<InferenceInstance>().Add(new InferenceInstance
+        {
+            Name = "dead-decoy",
+            Endpoint = "http://dead-decoy:1111",
+            ProviderType = InferenceProviderType.OpenAiCompatible,
+            Status = InstanceStatus.Offline,
+        });
+        await db.SaveChangesAsync();
+        db.Set<InferenceInstance>().Add(new InferenceInstance
+        {
+            Name = "healthy-default",
+            Endpoint = "http://healthy-default:2222",
+            ProviderType = InferenceProviderType.OpenAiCompatible,
+            Status = InstanceStatus.Online,
+            IsDefault = true,
+        });
+        await db.SaveChangesAsync();
+
+        Guid datasetId = await SeedDatasetAsync(db, ["only record"]);
+        (Guid batchId, DurableJob job) = await SeedBatchAsync(db, datasetId);
+
+        var transport = FakeHttpTransport.ChatCompletion("answer");
+        var handler = new BatchJobHandler(
+            db,
+            new InferenceProviderFactory(transport, NullLoggerFactory.Instance),
+            NullLogger<BatchJobHandler>.Instance);
+        await handler.ExecuteAsync(job, CancellationToken.None);
+
+        Assert.NotEmpty(transport.Requests);
+        Assert.All(transport.Requests, r => Assert.Equal(
+            "healthy-default", r.RequestUri!.Host));
+
+        await using AppDbContext verify = _fixture.CreateContext();
+        BatchJob batch = await verify.Set<BatchJob>().AsNoTracking().FirstAsync(b => b.Id == batchId);
+        Assert.Equal(1, batch.CompletedRecords);
+    }
+
     [Fact]
     public void Token_Estimation_Scales_With_Content()
     {

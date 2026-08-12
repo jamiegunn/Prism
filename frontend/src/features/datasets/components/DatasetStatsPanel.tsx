@@ -53,25 +53,31 @@ export function DatasetStatsPanel({ datasetId }: DatasetStatsPanelProps) {
         <div>
           <h4 className="text-sm font-medium mb-2">Column Statistics</h4>
           <div className="space-y-2">
-            {stats.columnStats.map((col) => (
-              <div key={col.column} className="rounded border p-3 text-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium">{col.column}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {col.uniqueCount} unique · {col.nullCount} null
-                  </span>
-                </div>
-                {col.topValues.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {col.topValues.slice(0, 5).map((tv, i) => (
-                      <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                        {tv.value} ({tv.count})
-                      </span>
-                    ))}
+            {stats.columnStats.map((col) => {
+              // topValues arrives as a value→count map; show the most frequent first.
+              const topValues = Object.entries(col.topValues ?? {})
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+              return (
+                <div key={col.columnName} className="rounded border p-3 text-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">{col.columnName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {col.uniqueCount} unique · {col.nullCount} null
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+                  {topValues.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {topValues.map(([value, count]) => (
+                        <span key={value} className="text-xs bg-muted px-1.5 py-0.5 rounded max-w-72 truncate" title={value}>
+                          {value} ({count})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

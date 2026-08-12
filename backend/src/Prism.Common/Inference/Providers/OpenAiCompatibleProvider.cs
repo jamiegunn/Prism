@@ -49,8 +49,26 @@ public class OpenAiCompatibleProvider : IInferenceProvider
     {
         HttpClient = httpClient;
         ProviderName = providerName;
-        Endpoint = endpoint.TrimEnd('/');
+        Endpoint = NormalizeEndpoint(endpoint);
         Logger = logger;
+    }
+
+    /// <summary>
+    /// Normalizes a configured endpoint to the server root. OpenAI-compatible servers are
+    /// conventionally quoted with their <c>/v1</c> base URL (vLLM's own docs say
+    /// <c>http://host:8000/v1</c>), and this provider appends <c>/v1/...</c> itself — so a
+    /// verbatim paste produced <c>/v1/v1/chat/completions</c> and a 404 on every call.
+    /// Prism's own seed data wrote exactly that form.
+    /// </summary>
+    /// <param name="endpoint">The endpoint as configured.</param>
+    /// <returns>The endpoint without a trailing slash or trailing <c>/v1</c> segment.</returns>
+    internal static string NormalizeEndpoint(string endpoint)
+    {
+        string trimmed = endpoint.TrimEnd('/');
+
+        return trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^3].TrimEnd('/')
+            : trimmed;
     }
 
     /// <summary>

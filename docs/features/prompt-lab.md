@@ -28,6 +28,11 @@ The second thing to know is in [Creating a template](#creating-a-template): a te
 create through the UI cannot declare variables, and a template with an undeclared `{{variable}}`
 cannot be tested. Read that section before you create anything.
 
+The editors work offline. Monaco used to load from the jsdelivr CDN, so on a machine without
+internet — the machine Prism is built for — both panes sat at "Loading..." forever. The editor
+now ships in the bundle (`src/lib/monacoLoader.ts`), with the html worker backing handlebars
+highlighting, so an airgapped install renders templates like any other.
+
 ---
 
 ## The layout

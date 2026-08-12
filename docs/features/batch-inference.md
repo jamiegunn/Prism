@@ -259,7 +259,9 @@ instead — same shape of job, with metrics attached.
 | R2 | Token-probability capture is opt-in, and only offered when a server supports it | dialog disables it when no instance reports logprobs | MET |
 | R3 | A running job's progress advances without user action | list polls at 3s while anything is Running or Queued | MET |
 | R4 | A paused job resumes from where it stopped rather than restarting | `POST /batch/{id}/resume`; `completedRecords` carries over | MET |
-| R5 | Only the failed records of a finished job can be re-run | Retry failed appears when `failedRecords > 0` | MET |
+| R5 | Only the failed records of a finished job can be re-run | Retry failed appears when `failedRecords > 0`; the endpoint now enqueues a fresh durable job (previously it re-queued the batch row and nothing ever ran it — the job sat Queued forever) and the rerun reuses the failed rows, so record counts do not double (`BatchRunTests.Retry_Failed_Enqueues_A_Runnable_Job_And_Reuses_Result_Rows`, mutation-checked both ways); proven live: 6 failed → retry → 6/6 succeeded at attempt 2 | MET |
+| R9 | The runner uses the default instance, not an arbitrary row | selection orders by `IsDefault`, then online status — previously it took the first row EF returned and ran an entire batch against the dead seeded Ollama endpoint while the healthy default sat idle (`BatchRunTests.The_Runner_Uses_The_Default_Instance_Not_An_Arbitrary_Row`, mutation-checked); same bug and same fix as the evaluation runner | MET |
+| R10 | The progress label reads 0–100% | the card multiplied the API's 0–100 progress by 100 again, showing a retried job at "10000%" — same bug the evaluation page had; clamped and fixed | MET |
 | R6 | A job's outputs can be read after it completes | none — no detail route; the results and download endpoints have no UI | **UNMET** |
 | R7 | The cost of a job can be estimated before running it | none — `POST /batch/estimate` exists, `useEstimateBatchCost` has no callers | **UNMET** |
 | R8 | A paused job's progress is visible | none — the bar renders only for Running or Queued, so the state you most want to inspect shows none | **UNMET** |

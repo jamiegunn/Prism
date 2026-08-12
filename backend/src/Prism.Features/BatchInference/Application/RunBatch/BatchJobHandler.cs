@@ -96,8 +96,22 @@ public sealed class BatchJobHandler : IJobHandler
                 .ToListAsync(ct))
             .ToHashSet();
 
+        // A record being re-run (retry-failed, or a resumed run that died mid-record) already
+        // has a non-success row. Reuse it — adding a fresh row per attempt would show a
+        // six-record dataset as twelve results after one retry.
+        Dictionary<Guid, BatchResult> reusableResults = (await _db.Set<BatchResult>()
+                .Where(r => r.BatchJobId == batchJobId && r.Status != BatchResultStatus.Success)
+                .ToListAsync(ct))
+            .GroupBy(r => r.RecordId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Default first, then online — an unordered FirstOrDefault here is the documented
+        // arbitrary-row trap: it ran whole batches against a dead seeded endpoint while a
+        // healthy default instance sat idle (the evaluation runner had the same bug).
         InferenceInstance? instance = await _db.Set<InferenceInstance>()
             .AsNoTracking()
+            .OrderByDescending(i => i.IsDefault)
+            .ThenByDescending(i => i.Status == InstanceStatus.Online)
             .FirstOrDefaultAsync(ct);
 
         if (instance is null)
@@ -136,7 +150,23 @@ public sealed class BatchJobHandler : IJobHandler
             }
 
             BatchResult result = await RunRecordAsync(batch, record, provider, ct);
-            _db.Set<BatchResult>().Add(result);
+
+            if (reusableResults.TryGetValue(record.Id, out BatchResult? prior))
+            {
+                prior.Status = result.Status;
+                prior.Output = result.Output;
+                prior.Error = result.Error;
+                prior.LatencyMs = result.LatencyMs;
+                prior.TokensUsed = result.TokensUsed;
+                prior.LogprobsData = result.LogprobsData;
+                prior.Perplexity = result.Perplexity;
+                prior.Attempt++;
+                result = prior;
+            }
+            else
+            {
+                _db.Set<BatchResult>().Add(result);
+            }
 
             if (result.Status == BatchResultStatus.Success)
             {

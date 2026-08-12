@@ -136,10 +136,12 @@ function BatchJobCard({
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
               <span>Progress</span>
-              <span>{(job.progress * 100).toFixed(0)}%</span>
+              {/* progress is already 0-100 from the API; multiplying by 100 again showed
+                  a retried job at "10000%". Same bug the evaluation page had. */}
+              <span>{Math.min(job.progress, 100).toFixed(0)}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${job.progress * 100}%` }} />
+              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(job.progress, 100)}%` }} />
             </div>
           </div>
         )}

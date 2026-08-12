@@ -57,17 +57,13 @@ export interface DatasetStats {
   columnStats: ColumnStats[]
 }
 
+/** Per-column statistics — mirrors ColumnStatsDto: topValues is a value→count map. */
 export interface ColumnStats {
-  column: string
+  columnName: string
   nonNullCount: number
   nullCount: number
   uniqueCount: number
-  topValues: TopValue[]
-}
-
-export interface TopValue {
-  value: string
-  count: number
+  topValues: Record<string, number>
 }
 
 /** Parameters for splitting a dataset. */

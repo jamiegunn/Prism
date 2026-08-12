@@ -260,7 +260,7 @@ your own test set, with nothing on screen to indicate it.
 | R3 | All four advertised formats produce output in that format | export the seeded dataset with a correct mapping; compare against the handler | MET |
 | R4 | A mapping that matches nothing reports zero records rather than appearing to succeed | leave the defaults and export; "Exported 0 records" plus a warning per row | MET |
 | R5 | Deleting an already-deleted adapter says so | 404 → the global mutation toast names it | MET |
-| R6 | A dataset is chosen from a list; no GUID is typed | none — the field is a free-text "Dataset GUID", though `DatasetPicker` exists and is used by two other pages | **UNMET** |
+| R6 | A dataset is chosen from a list; no GUID is typed | the export form now offers a dropdown of datasets with record counts (fed by the same `useDatasets` hook the rest of the app uses); browser-verified: select "Sentiment Analysis Samples", map columns, export succeeds with preview | MET |
 | R7 | An export can be limited to one split | none — no control, no request field, no filter | **UNMET** |
 | R8 | A record missing its output column warns in every format | none — three of four formats are silent | **UNMET** |
 | R9 | Registering an adapter selects its server from a dropdown | none — free-text "vLLM instance GUID", validated only for non-emptiness | **UNMET** |

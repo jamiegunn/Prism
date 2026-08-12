@@ -61,7 +61,7 @@ want vLLM.
 | Field | Notes |
 |---|---|
 | **Name** | Free text, up to 100 characters. This is what appears in every instance dropdown in the application, so make it say which model it is. |
-| **Endpoint URL** | Must be a complete URL. `localhost:8000` is rejected; `http://localhost:8000` is accepted. |
+| **Endpoint URL** | Must be a complete URL. `localhost:8000` is rejected; `http://localhost:8000` is accepted. A trailing `/v1` is fine — vLLM's docs quote the server that way, so Prism strips it rather than calling `/v1/v1/...` and failing every request (`EndpointNormalizationTests`; Prism's own seed data used to hit exactly this). |
 | **Provider Type** | vLLM, Ollama, LM Studio or OpenAI Compatible. Pick wrong and capabilities will be wrong. |
 | **Tags** | Comma-separated, optional. |
 | **Set as default instance** | Makes this the default and clears the flag on whichever instance held it. |

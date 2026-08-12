@@ -203,7 +203,9 @@ modules:
       validation reports, annotation workflow.
     frontend_status: implemented
     frontend_notes: >
-      Dataset list, upload dialog, record table, split dialog, stats panel.
+      Dataset list, upload dialog, record table, split dialog, stats panel (column
+      names and top values now render — the types matched neither columnName nor the
+      value->count map the API sends, so both were silently blank).
       Missing: export UI, version history, annotation UI, advanced filtering.
     provider_limitations: none
     tests_present: false
@@ -254,12 +256,17 @@ modules:
     current_status: partial
     backend_status: implemented
     backend_notes: >
-      Batch job entity, queue, status tracking, result persistence.
-      Missing: jobs are not durable across restarts (ADR-016 not implemented).
-      No retry policy. No partial result streaming. No cost/throughput metrics.
+      Batch job entity, durable queue and runner, status tracking, result persistence.
+      The runner selects the default instance (was: arbitrary first row, which ran whole
+      batches against a dead seeded endpoint), and retry-failed enqueues a fresh durable
+      job and reuses failed result rows instead of duplicating them (was: re-queued the
+      batch row and nothing ever ran it). Both mutation-checked in BatchRunTests and
+      proven live: 6 failed -> retry -> 6/6 at attempt 2.
+      Missing: partial result streaming, cost/throughput metrics.
     frontend_status: implemented
     frontend_notes: >
-      Job list with status filtering, job cards with progress bars,
+      Job list with status filtering, job cards with progress bars (label clamped to
+      0-100; it used to multiply the API's percentage by 100 again and read 10000%),
       pause/resume/cancel/retry buttons. Missing: cost/throughput display,
       failed record drill-down.
     provider_limitations: none

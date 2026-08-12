@@ -1,5 +1,11 @@
-import { useState, useEffect } from 'react'
-import Editor from '@monaco-editor/react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+
+// Monaco is bundled (no CDN — see monacoLoader) but heavy, so it loads as its own chunk
+// the first time an editor actually renders instead of riding in the main bundle.
+const Editor = lazy(async () => {
+  await import('@/lib/monacoLoader')
+  return import('@monaco-editor/react')
+})
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -135,6 +141,7 @@ export function TemplateEditor() {
                 <span className="text-xs font-medium text-zinc-400">System Prompt</span>
               </div>
               <div className="h-24">
+                <Suspense fallback={<div className="p-3 text-xs text-zinc-500">Loading editor…</div>}>
                 <Editor
                   height="100%"
                   defaultLanguage="plaintext"
@@ -149,6 +156,7 @@ export function TemplateEditor() {
                     fontSize: 13,
                   }}
                 />
+                </Suspense>
               </div>
             </div>
           )}
@@ -158,6 +166,7 @@ export function TemplateEditor() {
             <span className="text-xs font-medium text-zinc-400">User Template</span>
           </div>
           <div className="flex-1">
+            <Suspense fallback={<div className="p-3 text-xs text-zinc-500">Loading editor…</div>}>
             <Editor
               height="100%"
               defaultLanguage="handlebars"
@@ -171,6 +180,7 @@ export function TemplateEditor() {
                 fontSize: 13,
               }}
             />
+            </Suspense>
           </div>
 
           {/* Few-shot examples */}

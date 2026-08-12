@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Prism.Common.Jobs;
 using Prism.Features.BatchInference.Application.Dtos;
+using Prism.Features.BatchInference.Application.RunBatch;
 using Prism.Features.BatchInference.Domain;
 
 namespace Prism.Features.BatchInference.Application.RetryFailed;
@@ -62,6 +64,21 @@ public sealed class RetryFailedHandler
         job.Status = BatchJobStatus.Queued;
         job.FailedRecords = 0;
         job.FinishedAt = null;
+        job.Progress = job.TotalRecords == 0
+            ? 0
+            : Math.Round(100.0 * job.CompletedRecords / job.TotalRecords, 2);
+
+        // Re-queueing the batch row is not enough: nothing watches BatchJob.Status. The
+        // worker consumes DurableJobs, and this batch's original one is Complete — without a
+        // fresh one the "retried" job would sit Queued forever, which is exactly what it did.
+        _db.Set<DurableJob>().Add(new DurableJob
+        {
+            JobType = BatchJobHandler.Type,
+            Status = JobStatus.Queued,
+            TotalItems = failedResults.Count,
+            MaxRetries = job.MaxRetries,
+            ParametersJson = JsonSerializer.Serialize(new { batchJobId = job.Id }),
+        });
 
         await _db.SaveChangesAsync(ct);
 
