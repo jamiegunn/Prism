@@ -97,7 +97,15 @@ public sealed class FakeHttpTransport : IHttpClientFactory
     /// <param name="content">The assistant reply.</param>
     /// <returns>A configured transport.</returns>
     public static FakeHttpTransport ChatCompletion(string content)
-        => Json($$"""
+        => Json(ChatCompletionBody(content));
+
+    /// <summary>
+    /// The body of a chat completion carrying the given assistant message.
+    /// </summary>
+    /// <param name="content">The assistant reply.</param>
+    /// <returns>The JSON body.</returns>
+    private static string ChatCompletionBody(string content)
+        => $$"""
             {
               "id": "chatcmpl-1",
               "object": "chat.completion",
@@ -107,7 +115,29 @@ public sealed class FakeHttpTransport : IHttpClientFactory
               ],
               "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
             }
-            """);
+            """;
+
+    /// <summary>
+    /// Creates a transport that answers each successive request with the next reply, so a
+    /// multi-turn exchange — an agent thinking, calling a tool, then answering — can be scripted.
+    /// The last reply is repeated once the script runs out.
+    /// </summary>
+    /// <param name="replies">Assistant message contents, in the order they should be returned.</param>
+    /// <returns>A configured transport.</returns>
+    public static FakeHttpTransport ChatCompletions(params string[] replies)
+    {
+        int call = -1;
+
+        return new FakeHttpTransport(_ =>
+        {
+            int index = Math.Min(Interlocked.Increment(ref call), replies.Length - 1);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ChatCompletionBody(replies[index]), Encoding.UTF8, "application/json"),
+            };
+        });
+    }
 
     /// <summary>
     /// Creates a transport that refuses every request with the given status and body, the way a

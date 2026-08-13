@@ -195,7 +195,12 @@ public sealed class RunAgentHandler
                         finalAnswer = currentStep.FinalAnswer;
                     }
 
-                    if (currentStep.Error is not null && currentStep.IsFinalAnswer)
+                    // Any step error belongs to the run, not only one that arrives on a final
+                    // answer. The executor's inference failure sets Error and stops without a
+                    // final answer, so under the old condition it never reached the run: the
+                    // record said Completed, carried no output and no error, and the only sign
+                    // that the model had refused the call was inside a step nobody reads first.
+                    if (currentStep.Error is not null)
                     {
                         errorMessage = currentStep.Error;
                     }

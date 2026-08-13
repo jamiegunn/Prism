@@ -89,8 +89,12 @@ public sealed class AgentsSeeder : IDataSeeder
             Description = "An agent that helps analyze research topics using available tools",
             SystemPrompt = "You are a research assistant. Use available tools to gather information and provide " +
                            "well-sourced answers. Think step-by-step.",
-            Model = "meta-llama/Llama-3.1-8B-Instruct",
-            InstanceId = ModelsSeeder.VllmSeedInstanceId,
+            // Pointed at the provider a fresh install actually has. vLLM needs a CUDA machine
+            // and a server somebody started; seeding the demo agent against it meant the one
+            // workflow on the Agents page could not run on the machine it was seeded onto —
+            // the run failed on connection refused before the agent thought anything.
+            Model = "mistral:7b-instruct",
+            InstanceId = ModelsSeeder.OllamaSeedInstanceId,
             Pattern = AgentPatternType.ReAct,
             MaxSteps = 10,
             TokenBudget = 8000,
