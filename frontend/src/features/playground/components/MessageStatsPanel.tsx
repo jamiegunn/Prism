@@ -5,23 +5,37 @@ import type { Message } from '../types'
 
 interface MessageStatsPanelProps {
   messages: Message[]
+  /**
+   * The conversation's own token total, which counts prompt and completion alike. Prompt tokens
+   * are not stored per message, so this is the only place the prompt side of the arithmetic
+   * exists; without it the panel reported "Prompt tokens 0" for a conversation whose recorded
+   * calls had counted 144, and called the completion count the total.
+   */
+  conversationTotalTokens?: number
   className?: string
 }
 
-export function MessageStatsPanel({ messages, className }: MessageStatsPanelProps) {
+export function MessageStatsPanel({
+  messages,
+  conversationTotalTokens,
+  className,
+}: MessageStatsPanelProps) {
   const assistantMessages = messages.filter((m) => m.role === 'Assistant')
 
   if (assistantMessages.length === 0) return null
 
-  // Aggregate stats
-  const totalPromptTokens = messages
-    .filter((m) => m.role === 'User')
-    .reduce((sum, m) => sum + (m.tokenCount ?? 0), 0)
   const totalCompletionTokens = assistantMessages.reduce(
     (sum, m) => sum + (m.tokenCount ?? 0),
     0
   )
-  const totalTokens = totalPromptTokens + totalCompletionTokens
+
+  // Absent rather than zero: a prompt count that was never reported is unknown, and printing 0
+  // for it is a claim about the model's input that nothing measured.
+  const promptTokens =
+    conversationTotalTokens != null && conversationTotalTokens >= totalCompletionTokens
+      ? conversationTotalTokens - totalCompletionTokens
+      : null
+  const totalTokens = conversationTotalTokens ?? totalCompletionTokens
 
   const avgLatency =
     assistantMessages.filter((m) => m.latencyMs != null).length > 0
@@ -54,7 +68,7 @@ export function MessageStatsPanel({ messages, className }: MessageStatsPanelProp
           <table className="w-full text-xs">
             <tbody className="divide-y divide-zinc-800">
               <StatRow label="Messages" value={String(messages.length)} />
-              <StatRow label="Prompt tokens" value={totalPromptTokens.toLocaleString()} />
+              <StatRow label="Prompt tokens" value={promptTokens?.toLocaleString() ?? "--"} />
               <StatRow
                 label="Completion tokens"
                 value={totalCompletionTokens.toLocaleString()}

@@ -294,7 +294,11 @@ export function PlaygroundPage() {
 
         {/* Stats Panel (between chat and parameters) */}
         {showStatsPanel && messages.length > 0 && (
-          <MessageStatsPanel messages={messages} className="w-56 shrink-0" />
+          <MessageStatsPanel
+            messages={messages}
+            conversationTotalTokens={conversationQuery.data?.totalTokens}
+            className="w-56 shrink-0"
+          />
         )}
 
         {/* Token Inspector Drawer */}
