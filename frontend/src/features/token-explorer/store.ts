@@ -1,9 +1,12 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { applyTemperature } from './temperature'
 import type {
   NextTokenPrediction,
   StepEntry,
   BranchExploration,
+  TokenPredictionEntry,
 } from './types'
 
 interface BranchEntry {
@@ -45,10 +48,24 @@ interface TokenExplorerState {
   reset: () => void
 }
 
+/** The slice of state that is persisted, which is what a migration receives. */
+type PersistedParameters = {
+  instanceId: string | null
+  prompt: string
+  temperature: number
+  topP: number
+  topK: number
+  topLogprobs: number
+  enableThinking: boolean
+}
+
 const defaultParameters = {
   instanceId: null as string | null,
   prompt: '',
-  temperature: 0,
+  // 1 is the model's own distribution: what a server returns is already the temperature-1
+  // probabilities. The old default of 0 asked for greedy, which the page then could not show,
+  // because it displayed the returned distribution unchanged whatever this said.
+  temperature: 1,
   topP: 0.9,
   topK: 50,
   topLogprobs: 20,
@@ -108,6 +125,21 @@ export const useTokenExplorerStore = create<TokenExplorerState>()(
     }),
     {
       name: 'prism-token-explorer-state',
+
+      // Bumped when temperature started reshaping the displayed distribution. A stored 0 was
+      // the old default rather than anyone's choice, and under the new meaning it would draw a
+      // single bar at 100% — so it is moved to 1, the model's own distribution. A stored value
+      // someone actually picked is left where they put it.
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as PersistedParameters
+
+        if (version === 0 && state?.temperature === 0) {
+          return { ...state, temperature: 1 }
+        }
+
+        return state
+      },
       partialize: (state) => ({
         instanceId: state.instanceId,
         prompt: state.prompt,
@@ -120,3 +152,19 @@ export const useTokenExplorerStore = create<TokenExplorerState>()(
     }
   )
 )
+
+/**
+ * The current predictions as the chosen temperature would shape them.
+ *
+ * Shared by the distribution and the statistics panel so the two cannot show different numbers
+ * for the same position.
+ */
+export function useAdjustedPredictions(): TokenPredictionEntry[] {
+  const currentPredictions = useTokenExplorerStore((s) => s.currentPredictions)
+  const temperature = useTokenExplorerStore((s) => s.temperature)
+
+  return useMemo(
+    () => applyTemperature(currentPredictions?.predictions ?? [], temperature),
+    [currentPredictions, temperature]
+  )
+}

@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useInstances } from '@/features/playground/api'
-import { useTokenExplorerStore } from './store'
+import { useAdjustedPredictions, useTokenExplorerStore } from './store'
 import { useDefaultInstance } from '@/features/models/useDefaultInstance'
 import { usePredictNextToken, useExploreBranch } from './api'
 import { ProbabilityDistribution } from './components/ProbabilityDistribution'
@@ -24,6 +24,7 @@ import { HelpPanel } from './components/HelpPanel'
 export function TokenExplorerPage() {
   const instances = useInstances()
   const store = useTokenExplorerStore()
+  const adjustedPredictions = useAdjustedPredictions()
 
   // Same reason as the Playground: one online provider should not need selecting.
   useDefaultInstance(store.instanceId, store.setInstanceId)
@@ -164,8 +165,8 @@ export function TokenExplorerPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <ParamLabel
-                    label="Temperature"
-                    tooltip="Controls randomness in token selection. 0 = greedy (always pick the most likely token). Higher values spread probability more evenly, making less likely tokens more probable."
+                    label="Temperature (visualization)"
+                    tooltip="Reshapes the distribution shown here, the way temperature reshapes it during sampling. A server returns the model's own probabilities and does not vary them with this, so it is applied on the page: 1 is what the model produced, below 1 sharpens toward the top token, above 1 flattens. It cannot change which token Step takes — scaling every logprob by the same factor cannot reorder them."
                   />
                   <span className="font-mono text-xs text-zinc-500">
                     {store.temperature.toFixed(2)}
@@ -179,7 +180,7 @@ export function TokenExplorerPage() {
                   onChange={(e) => store.setTemperature(Number(e.target.value))}
                 />
                 <p className="text-xs text-zinc-600">
-                  0 = greedy (deterministic)
+                  1 = the model&rsquo;s own distribution &middot; 0 = greedy
                 </p>
               </div>
 
@@ -344,7 +345,7 @@ export function TokenExplorerPage() {
                 </HelpPanel>
                 {store.currentPredictions ? (
                   <ProbabilityDistribution
-                    predictions={store.currentPredictions.predictions}
+                    predictions={adjustedPredictions}
                     totalProbability={store.currentPredictions.totalProbability}
                     onTokenClick={handleBranchFromPrediction}
                   />

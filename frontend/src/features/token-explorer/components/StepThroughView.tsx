@@ -5,13 +5,14 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Play, Undo2, Trash2 } from 'lucide-react'
-import { useTokenExplorerStore } from '../store'
+import { useAdjustedPredictions, useTokenExplorerStore } from '../store'
 import { useStepThrough } from '../api'
 import { ProbabilityDistribution } from './ProbabilityDistribution'
 import type { StepEntry } from '../types'
 
 export function StepThroughView() {
   const store = useTokenExplorerStore()
+  const adjustedPredictions = useAdjustedPredictions()
   const stepMutation = useStepThrough()
 
   function handleStep() {
@@ -194,7 +195,7 @@ export function StepThroughView() {
           </h4>
           <ScrollArea className="h-[calc(100%-2rem)]">
             <ProbabilityDistribution
-              predictions={store.currentPredictions!.predictions}
+              predictions={adjustedPredictions}
               totalProbability={store.currentPredictions!.totalProbability}
               onTokenClick={handleForceToken}
             />

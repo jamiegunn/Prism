@@ -4,11 +4,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { calculateEntropy } from '@/lib/logprobs'
-import { useTokenExplorerStore } from '../store'
+import { useAdjustedPredictions, useTokenExplorerStore } from '../store'
 import type { TokenPredictionEntry } from '../types'
 
 export function SamplingVisualization() {
-  const { currentPredictions, topP, topK } = useTokenExplorerStore()
+  const { currentPredictions, topP, topK, temperature } = useTokenExplorerStore()
+  const adjusted = useAdjustedPredictions()
 
   if (!currentPredictions || currentPredictions.predictions.length === 0) {
     return (
@@ -21,13 +22,20 @@ export function SamplingVisualization() {
     )
   }
 
-  const predictions = currentPredictions.predictions
+  const predictions = adjusted
 
   const stats = computeStats(predictions, topP, topK)
 
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-zinc-300">Sampling Analysis</h3>
+
+      {temperature !== 1 && (
+        <p className="rounded border border-zinc-800 bg-zinc-900/50 px-2.5 py-2 text-[11px] text-amber-300/80">
+          Figures below describe the distribution reshaped to temperature {temperature.toFixed(2)},
+          not the one the model produced. Set temperature to 1 to read the model&rsquo;s own.
+        </p>
+      )}
 
       <StatCard
         label="Effective Vocab"
