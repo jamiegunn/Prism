@@ -335,6 +335,9 @@ export function TokenExplorerPage() {
                   <p className="mb-2">
                     <strong className="text-zinc-300">How to read the results:</strong> Each bar represents a candidate token. The bar length and percentage show probability. Cumulative probability tracks the running total from top to bottom. Tokens within the top-p / top-k thresholds are highlighted &mdash; only these would be sampled during generation.
                   </p>
+                  <p className="mb-2">
+                    <strong className="text-zinc-300">Your prompt is sent as a chat message,</strong> not as raw text to continue. The model sees it wrapped in whatever chat template it was trained with, so what you are looking at is the first token of its <em>reply</em>. That is why &ldquo;The capital of France is&rdquo; puts <span className="font-mono">The</span> above <span className="font-mono">Paris</span>: the model is starting a sentence, not finishing yours. It is also why the input token count is larger than your prompt alone &mdash; the template is counted too. Step Through keeps the generated tokens in that same reply, so every step is the next token of one answer.
+                  </p>
                   <p>
                     <strong className="text-zinc-300">Tip:</strong> Click any token to explore a branch &mdash; the model will generate a continuation starting from that forced token.
                   </p>
