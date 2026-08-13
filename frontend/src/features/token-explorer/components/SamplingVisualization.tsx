@@ -32,16 +32,24 @@ export function SamplingVisualization() {
       <StatCard
         label="Effective Vocab"
         tooltip="The number of tokens that have a non-trivial probability (> 1%). A small number means the model is focused on a few choices; a large number means many tokens are plausible."
-        value={String(stats.effectiveVocab)}
-        description="Tokens with P > 1%"
+        value={stats.effectiveVocabIsExact ? String(stats.effectiveVocab) : `${stats.effectiveVocab}+`}
+        description={
+          stats.effectiveVocabIsExact
+            ? 'Tokens with P > 1%'
+            : 'Tokens with P > 1%, of those returned — every alternative returned is above 1%, so there may be more'
+        }
       />
 
       <StatCard
         label="Entropy"
-        tooltip="Shannon entropy of the probability distribution, measured in bits. Low entropy (near 0) means the model is very certain. High entropy means probability is spread across many tokens. Maximum entropy would mean all tokens are equally likely."
-        value={stats.entropy.toFixed(3)}
+        tooltip="Shannon entropy of the probability distribution, measured in bits. Low entropy (near 0) means the model is very certain. High entropy means probability is spread across many tokens. Measured over the alternatives this server returned; the unreturned tail can only add uncertainty, so with a truncated distribution this is a lower bound."
+        value={stats.isTruncated ? `≥ ${stats.entropy.toFixed(3)}` : stats.entropy.toFixed(3)}
         unit="bits"
-        description="Distribution uncertainty"
+        description={
+          stats.isTruncated
+            ? `Over the ${predictions.length} returned, holding ${(stats.coveredMass * 100).toFixed(1)}% of the mass`
+            : 'Distribution uncertainty'
+        }
       />
 
       <Separator />
@@ -49,17 +57,25 @@ export function SamplingVisualization() {
       <StatCard
         label="Top-p Coverage"
         tooltip="How many tokens are needed to reach the top-p probability threshold you set in the left panel. Fewer tokens means a more concentrated distribution. This shows the actual nucleus that top-p sampling would use."
-        value={String(stats.topPTokenCount)}
+        value={stats.topPReached ? String(stats.topPTokenCount) : `> ${predictions.length}`}
         unit={`tokens for p=${topP}`}
-        description={`${(stats.topPMass * 100).toFixed(1)}% probability mass`}
+        description={
+          stats.topPReached
+            ? `${(stats.topPMass * 100).toFixed(1)}% probability mass`
+            : `The ${predictions.length} returned reach only ${(stats.topPMass * 100).toFixed(1)}% — raise Top Logprobs to find the nucleus`
+        }
       />
 
       <StatCard
         label="Top-k Effect"
-        tooltip="The total probability mass captured by the top-k tokens. If this is close to 100%, the top-k cutoff has little effect. If it's much lower, top-k is discarding significant probability mass from less likely tokens."
-        value={`${(stats.topKMass * 100).toFixed(1)}%`}
-        unit={`in top-${topK}`}
-        description={`${stats.topKActual} tokens available`}
+        tooltip="The total probability mass captured by the top-k tokens. If this is close to 100%, the top-k cutoff has little effect. If it's much lower, top-k is discarding significant probability mass. It can only be measured over the alternatives the server returned: when your k is larger than that, the figure is for the tokens actually seen and is a lower bound for your k."
+        value={`${stats.topKMeasurable ? '' : '≥ '}${(stats.topKMass * 100).toFixed(1)}%`}
+        unit={`in top-${stats.topKActual}`}
+        description={
+          stats.topKMeasurable
+            ? `${stats.topKActual} tokens available`
+            : `Only ${stats.topKActual} alternatives returned, so top-${topK} cannot be measured`
+        }
       />
 
       <Separator />
@@ -197,52 +213,93 @@ interface ComputedStats {
   entropy: number
   topPTokenCount: number
   topPMass: number
+  effectiveVocabIsExact: boolean
+  topPReached: boolean
   topKMass: number
   topKActual: number
+  topKMeasurable: boolean
+  coveredMass: number
+  isTruncated: boolean
   maxProb: number
   maxToken: string
 }
 
-function computeStats(
+/**
+ * Statistics over the alternatives a server returned for one position.
+ *
+ * A server returns the top N alternatives, not the whole vocabulary, so several of these are
+ * measured over a truncated distribution and the panel has to say which. Reporting the mass of
+ * the 20 tokens you were given under the heading "top-50" is a claim about 30 tokens nobody
+ * looked at; reporting entropy over 97% of the mass as if it were the entropy is an
+ * understatement presented as a measurement.
+ *
+ * @param predictions The alternatives, highest probability first.
+ * @param topP The nucleus threshold set in the left panel.
+ * @param topK The top-k cutoff set in the left panel.
+ * @returns The statistics, each carrying what is known about its own completeness.
+ */
+export function computeStats(
   predictions: TokenPredictionEntry[],
   topP: number,
   topK: number
 ): ComputedStats {
   const probs = predictions.map((p) => p.probability)
+  const coveredMass = probs.reduce((sum, p) => sum + p, 0)
 
-  // Effective vocabulary: tokens with probability > 1%
+  // Anything below this and there is unreturned probability out in the tail. Not exactly 1:
+  // the values are rounded on the way here, and a distribution that truly sums to 1 should not
+  // be reported as truncated because of floating point.
+  const isTruncated = coveredMass < 0.999
+
+  // Tokens over 1%. Exact whenever the smallest alternative returned is itself under 1%, since
+  // nothing unseen can then be above it. Otherwise the count is a floor.
+  const smallestReturned = probs.length > 0 ? probs[probs.length - 1] : 0
   const effectiveVocab = predictions.filter((p) => p.probability > 0.01).length
+  const effectiveVocabIsExact = smallestReturned <= 0.01
 
-  // Entropy from available probabilities
+  // Entropy over what was returned. Missing tail mass can only add uncertainty, so with a
+  // truncated distribution this is a lower bound rather than the entropy.
   const entropy = calculateEntropy(probs)
 
   // Top-p: how many tokens to reach the topP threshold
   let topPTokenCount = predictions.length
   let topPMass = 0
+  let topPReached = false
   for (let i = 0; i < predictions.length; i++) {
     topPMass += predictions[i].probability
     if (topPMass >= topP) {
       topPTokenCount = i + 1
+      topPReached = true
       break
     }
   }
 
-  // Top-k: probability mass in the top-k tokens
+  // Top-k: probability mass in the top-k tokens. Measured over however many were returned,
+  // which is not the same question as the one asked when k exceeds that.
   const topKActual = Math.min(topK, predictions.length)
   const topKMass = predictions
     .slice(0, topKActual)
     .reduce((sum, p) => sum + p.probability, 0)
+  // Answerable either because there are enough alternatives to count, or because the ones
+  // returned already hold effectively all the mass — then the tokens past k contribute nothing
+  // and hedging the figure would invent a doubt the numbers do not support.
+  const topKMeasurable = topK <= predictions.length || !isTruncated
 
   const maxProb = predictions[0]?.probability ?? 0
   const maxToken = predictions[0]?.token ?? ''
 
   return {
     effectiveVocab,
+    effectiveVocabIsExact,
     entropy,
     topPTokenCount,
     topPMass,
+    topPReached,
     topKMass,
     topKActual,
+    topKMeasurable,
+    coveredMass,
+    isTruncated,
     maxProb,
     maxToken,
   }
