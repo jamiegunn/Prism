@@ -8,6 +8,38 @@ import { PerplexityBadge } from '@/components/logprobs/PerplexityBadge'
 import { useTokenExplorerStore } from '../store'
 import type { BranchExploration, BranchToken } from '../types'
 
+/**
+ * The first position at which two branch continuations differ.
+ *
+ * @param left Tokens generated on one branch.
+ * @param right Tokens generated on the other.
+ * @returns The index of the first differing token, or null when neither differs anywhere.
+ *
+ * @remarks
+ * The scan used to start at index 1, on the reasoning that position 0 is the forced token and
+ * therefore always different. These are the tokens generated *after* the forced one, so index 0
+ * is an ordinary position: two branches whose continuations parted immediately were reported as
+ * diverging at 1, one row below the row that actually differed. Finding nothing also left the
+ * answer at 0, which reads as "diverged at once" — the opposite of what happened.
+ *
+ * A shorter branch is handled by the same comparison: past its end its token is undefined, which
+ * differs from a real token, so the position where one branch stopped is a divergence.
+ */
+export function findFirstDivergence(
+  left: readonly BranchToken[],
+  right: readonly BranchToken[]
+): number | null {
+  const maxLen = Math.max(left.length, right.length)
+
+  for (let i = 0; i < maxLen; i++) {
+    if (left[i]?.token !== right[i]?.token) {
+      return i
+    }
+  }
+
+  return null
+}
+
 interface BranchEntry {
   token: string
   exploration: BranchExploration
@@ -34,16 +66,10 @@ export function BranchDiffView() {
   const right = branches[rightIdx]
   const maxLen = Math.max(left.exploration.tokens.length, right.exploration.tokens.length)
 
-  // Find first divergence point (token 0 is always different since it's the forced token)
-  let firstDivergence = 0
-  for (let i = 1; i < maxLen; i++) {
-    const lToken = left.exploration.tokens[i]?.token
-    const rToken = right.exploration.tokens[i]?.token
-    if (lToken !== rToken) {
-      firstDivergence = i
-      break
-    }
-  }
+  const firstDivergence = findFirstDivergence(
+    left.exploration.tokens,
+    right.exploration.tokens
+  )
 
   return (
     <div className="space-y-3">
@@ -69,7 +95,9 @@ export function BranchDiffView() {
       {/* Summary stats */}
       <div className="flex items-center gap-4 text-xs text-zinc-500">
         <span>
-          First divergence at position {firstDivergence}
+          {firstDivergence === null
+            ? `No divergence in the ${maxLen} tokens compared`
+            : `First divergence at position ${firstDivergence}`}
         </span>
         <span className="text-zinc-700">|</span>
         <span>

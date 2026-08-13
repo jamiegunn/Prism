@@ -158,9 +158,15 @@ export function StepThroughView() {
             </Tooltip>
           ))}
 
-          {!hasSteps && !store.prompt && (
+          {/* Shown whenever there is nothing to step from. Keyed on the predictions rather than
+              the prompt: a prompt restored from a previous visit left this hidden, so the tab
+              opened with a filled prompt, a disabled Step button and nothing saying that a
+              prediction has to come first. */}
+          {!hasSteps && !hasPredictions && (
             <span className="text-sm text-zinc-600 italic">
-              Enter a prompt and click Predict to begin stepping...
+              {store.prompt
+                ? ' Press Predict Next Token to see the distribution, then step from there.'
+                : 'Enter a prompt and click Predict to begin stepping...'}
             </span>
           )}
         </div>

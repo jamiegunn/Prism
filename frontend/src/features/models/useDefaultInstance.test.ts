@@ -104,4 +104,42 @@ describe('resolveSelection', () => {
   it('does nothing while the list is still loading', () => {
     expect(resolveSelection(null, undefined)).toBeNull()
   })
+
+  it('replaces a restored selection that cannot answer', () => {
+    // The seeded instances have fixed ids, so a stored choice of the seeded vLLM is found again
+    // on every later install and kept. The Token Explorer opened on a server nobody was running
+    // and its first prediction failed, with a working model in the same dropdown.
+    const chosen = resolveSelection(
+      'dead',
+      [instance({ id: 'dead', status: 'Offline' }), instance({ id: 'live' })],
+      true,
+    )
+
+    expect(chosen).toBe('live')
+  })
+
+  it('keeps a restored selection that can answer', () => {
+    expect(
+      resolveSelection('live', [instance({ id: 'live' }), instance({ id: 'other' })], true),
+    ).toBeNull()
+  })
+
+  it('does not move off a dead restored selection when everything else is dead too', () => {
+    // Movement without improvement: the reader loses their choice and gains nothing.
+    expect(
+      resolveSelection(
+        'dead',
+        [instance({ id: 'dead', status: 'Offline' }), instance({ id: 'also-dead', status: 'Offline' })],
+        true,
+      ),
+    ).toBeNull()
+  })
+
+  it('still leaves a model that goes offline mid-session alone', () => {
+    // Same input, but not the restoring moment: this is someone's working session and the
+    // model they chose has stopped, which is theirs to decide about.
+    expect(
+      resolveSelection('x', [instance({ id: 'x', status: 'Offline' }), instance({ id: 'y' })]),
+    ).toBeNull()
+  })
 })

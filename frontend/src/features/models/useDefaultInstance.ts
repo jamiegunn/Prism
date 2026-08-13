@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useInstances } from './api'
 import type { InferenceInstance } from './types'
 
@@ -48,19 +48,33 @@ export function pickDefaultInstance(
  * A selected instance that has merely gone offline is deliberately left alone. Silently moving
  * someone to a different model mid-session would change their results without saying so, which
  * matters more here than convenience.
+ *
+ * Restoring one is a different moment from staying on one. The seeded instances have fixed ids,
+ * so a page whose stored choice was the seeded vLLM finds it present on every later install and
+ * keeps it — the Token Explorer opened on a server nobody is running, and the first prediction
+ * failed, with a working model sitting in the same dropdown. `isRestoring` marks that first
+ * resolution after mount, where replacing an unusable choice is help rather than interference.
  */
 export function resolveSelection(
   selectedId: string | null,
   instances: InferenceInstance[] | undefined,
+  isRestoring = false,
 ): string | null {
   if (!instances) {
     return null
   }
 
-  const stillExists = selectedId !== null && instances.some((i) => i.id === selectedId)
+  const current = selectedId === null ? undefined : instances.find((i) => i.id === selectedId)
 
-  if (stillExists) {
-    return null
+  if (current) {
+    if (!isRestoring || current.status === 'Online') {
+      return null
+    }
+
+    // A stored choice that cannot answer, replaced only if there is something that can — and
+    // never with another dead one, which would be movement without improvement.
+    const usable = pickDefaultInstance(instances)
+    return usable && usable.id !== current.id ? usable.id : null
   }
 
   return pickDefaultInstance(instances)?.id ?? null
@@ -84,8 +98,17 @@ export function useDefaultInstance(
 ): void {
   const { data } = useInstances()
 
+  // True until the first list arrives, which is the moment a stored selection is being restored
+  // rather than held. After that, what is selected is what this session chose.
+  const restoring = useRef(true)
+
   useEffect(() => {
-    const next = resolveSelection(selectedId, data)
+    if (!data) {
+      return
+    }
+
+    const next = resolveSelection(selectedId, data, restoring.current)
+    restoring.current = false
 
     if (next !== null) {
       onSelect(next)
