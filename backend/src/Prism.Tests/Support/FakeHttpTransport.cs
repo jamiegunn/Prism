@@ -110,6 +110,19 @@ public sealed class FakeHttpTransport : IHttpClientFactory
             """);
 
     /// <summary>
+    /// Creates a transport that refuses every request with the given status and body, the way a
+    /// server does when it is asked for a model it does not have.
+    /// </summary>
+    /// <param name="status">The status to answer with.</param>
+    /// <param name="body">The response body.</param>
+    /// <returns>A configured transport.</returns>
+    public static FakeHttpTransport Refuses(HttpStatusCode status, string body)
+        => new(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        });
+
+    /// <summary>
     /// Creates a transport that fails every request, for exercising error paths.
     /// </summary>
     /// <returns>A configured transport.</returns>

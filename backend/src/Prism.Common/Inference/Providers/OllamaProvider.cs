@@ -342,7 +342,16 @@ public sealed class OllamaProvider : IHotReloadableProvider
         {
             string errorBody = await httpResponse.Content.ReadAsStringAsync(ct);
             _logger.LogError("Ollama streaming request failed: {ErrorBody}", errorBody);
-            yield break;
+
+            // Thrown rather than `yield break`. A stream that ends without chunks is
+            // indistinguishable from a model that answered with nothing: the screen showed an
+            // empty reply and 0 tokens, the history row recorded a success, and the only trace
+            // of "model 'sample' not found" was this log line. The caller turns a throw into a
+            // reported error, which is what the reader needs to see.
+            throw new HttpRequestException(
+                $"Ollama returned {(int)httpResponse.StatusCode}: {errorBody}",
+                inner: null,
+                statusCode: httpResponse.StatusCode);
         }
 
         using Stream responseStream = await httpResponse.Content.ReadAsStreamAsync(ct);

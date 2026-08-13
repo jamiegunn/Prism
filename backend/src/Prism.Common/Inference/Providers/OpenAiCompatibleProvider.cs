@@ -181,7 +181,14 @@ public class OpenAiCompatibleProvider : IInferenceProvider
             string errorBody = await httpResponse.Content.ReadAsStringAsync(ct);
             Logger.LogError("Streaming request failed with status {StatusCode}: {ErrorBody}",
                 (int)httpResponse.StatusCode, errorBody);
-            yield break;
+
+            // Thrown rather than `yield break`: a refused request that ends the stream without
+            // chunks reads to every caller as "the model said nothing", which is a different
+            // fact and sends the reader looking in the wrong place.
+            throw new HttpRequestException(
+                $"{ProviderName} returned {(int)httpResponse.StatusCode}: {errorBody}",
+                inner: null,
+                statusCode: httpResponse.StatusCode);
         }
 
         using Stream responseStream = await httpResponse.Content.ReadAsStreamAsync(ct);

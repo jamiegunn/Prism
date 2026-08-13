@@ -160,9 +160,25 @@ public sealed class StreamChatHandler
             chatMessages.Add(new ChatMessage(role, msg.Content));
         }
 
+        // The model that runs is the one the chosen instance serves, not the one stored on the
+        // conversation when it was created. Those differ in two ordinary situations, and the
+        // stored value was wrong in both: after switching instance mid-conversation, and on the
+        // seeded conversations, which carry the placeholder "sample". Asking a real server for
+        // "sample" is a 404 the Playground displayed as an empty answer in eight milliseconds,
+        // while the picker and the status bar both named the model that should have run.
+        string requestModel = Coalesce(command.Model, instance.ModelId, conversation.ModelId)
+            ?? conversation.ModelId;
+
+        // Kept on the conversation so its record of what it ran on stays true.
+        if (!string.Equals(conversation.ModelId, requestModel, StringComparison.Ordinal))
+        {
+            conversation.ModelId = requestModel;
+            conversation.InstanceId = command.InstanceId;
+        }
+
         var chatRequest = new ChatRequest
         {
-            Model = conversation.ModelId,
+            Model = requestModel,
             Messages = chatMessages,
             Temperature = command.Parameters.Temperature,
             TopP = command.Parameters.TopP,
@@ -356,4 +372,12 @@ public sealed class StreamChatHandler
 
         yield return new ChatCompleted(messageDto, conversationDto);
     }
+
+    /// <summary>
+    /// Returns the first candidate that carries an actual value, treating blank as absent.
+    /// </summary>
+    /// <param name="candidates">The candidates in order of preference.</param>
+    /// <returns>The first non-blank candidate, or null when every one is blank.</returns>
+    private static string? Coalesce(params string?[] candidates)
+        => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 }
