@@ -8,6 +8,10 @@ import type { AgentWorkflow, AgentTool } from './types'
 export function AgentsPage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+
+  // Inline rather than window.confirm, which is what this was: a native modal is unstyled, sits
+  // outside the app's own confirm pattern used elsewhere, and blocks the page while it is open.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const { data: workflows, isLoading } = useWorkflows(search || undefined)
@@ -64,9 +68,10 @@ export function AgentsPage() {
               </div>
               <button
                 className="text-zinc-500 hover:text-red-400 p-1"
+                aria-label={`Delete ${workflow.name}`}
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (confirm('Delete this workflow?')) deleteWorkflow.mutate(workflow.id)
+                  setPendingDelete(pendingDelete === workflow.id ? null : workflow.id)
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -77,6 +82,27 @@ export function AgentsPage() {
               <span>{workflow.model}</span>
               <span>{workflow.runCount} runs</span>
             </div>
+            {pendingDelete === workflow.id && (
+              <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <span className="text-[11px] text-red-400">Delete this workflow and its runs?</span>
+                <button
+                  className="text-[11px] font-medium text-red-400 hover:text-red-300"
+                  onClick={() => {
+                    setPendingDelete(null)
+                    deleteWorkflow.mutate(workflow.id)
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                  onClick={() => setPendingDelete(null)}
+                >
+                  No
+                </button>
+              </div>
+            )}
+
             <div className="mt-2 flex items-center gap-1 flex-wrap">
               {workflow.enabledTools.map((tool) => (
                 <span key={tool} className="text-[10px] rounded bg-violet-900/30 text-violet-400 px-1.5 py-0.5">

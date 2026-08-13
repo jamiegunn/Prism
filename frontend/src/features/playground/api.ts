@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/services/apiClient'
 import type { Conversation, ConversationSummary, PagedResult } from './types'
-import type { InferenceInstance } from '@/features/models/types'
 
 const PLAYGROUND_KEY = ['playground', 'conversations']
 
@@ -11,12 +10,12 @@ interface ConversationListParams {
   search?: string
 }
 
-export function useInstances() {
-  return useQuery({
-    queryKey: ['models', 'instances'],
-    queryFn: () => apiClient<InferenceInstance[]>('/models/instances'),
-  })
-}
+/**
+ * Re-exported rather than re-declared. This was a second copy of the same query against the same
+ * key, which meant a change to how instance health is kept fresh reached some screens and not
+ * others depending on which import they happened to use.
+ */
+export { useInstances } from '@/features/models/api'
 
 export function useConversations(params?: ConversationListParams) {
   const searchParams = new URLSearchParams()

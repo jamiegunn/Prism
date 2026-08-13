@@ -4,10 +4,22 @@ import type { InferenceInstance, InstanceMetrics, RegisterInstanceRequest } from
 
 export const MODELS_KEY = ['models', 'instances']
 
+/**
+ * How often instance health is re-read, matching the background health check's own cadence.
+ *
+ * Without it the app kept whatever status it fetched when the page loaded, and every screen that
+ * reads from it aged into a lie: the banner announced that none of your models were responding
+ * while an agent was answering through one of them, and the Playground's footer went on saying
+ * "Connected" to a server that had stopped. Both directions mislead, and neither corrects itself
+ * until a reload.
+ */
+const HEALTH_REFRESH_MS = 30_000
+
 export function useInstances() {
   return useQuery({
     queryKey: MODELS_KEY,
     queryFn: () => apiClient<InferenceInstance[]>('/models/instances'),
+    refetchInterval: HEALTH_REFRESH_MS,
   })
 }
 
