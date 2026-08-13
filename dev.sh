@@ -13,6 +13,11 @@
 #                           saved ones came from a different machine
 #   ./dev.sh --stop         Stop all services
 #
+#   Every run checks itself first — the launcher's own tests and the doctor,
+#   quietly, reporting only when something is wrong. Neither stops the launch.
+#   --no-checks     Skip those checks (or set PRISM_SKIP_CHECKS=true)
+#   --full-checks   Also run the backend and frontend test suites
+#
 #   ./dev.sh --backend      Only Postgres + API     ) explicit flags win over
 #   ./dev.sh --frontend     Only frontend dev server ) the saved answers
 #   ./dev.sh --gpu          Also start vLLM (needs an NVIDIA GPU)
@@ -32,6 +37,7 @@ warn() { echo -e "   ${YELLOW}$1${NC}"; }
 
 GPU=false; STOP=false; BACKEND_ONLY=false; FRONTEND_ONLY=false
 RECONFIGURE=false; ASSUME_YES=false
+SKIP_CHECKS=${PRISM_SKIP_CHECKS:-false}; FULL_CHECKS=false
 SCOPE_FROM_FLAG=false
 
 for arg in "$@"; do
@@ -42,7 +48,9 @@ for arg in "$@"; do
     --frontend)    FRONTEND_ONLY=true; SCOPE_FROM_FLAG=true ;;
     --reconfigure) RECONFIGURE=true ;;
     --yes|-y)      ASSUME_YES=true ;;
-    --help|-h)     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --no-checks)   SKIP_CHECKS=true ;;
+    --full-checks) FULL_CHECKS=true ;;
+    --help|-h)     sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown arg: $arg"; echo "Try: $0 --help"; exit 1 ;;
   esac
 done
@@ -569,6 +577,102 @@ fi
 [ "$PRISM_PROVIDER" = "container-vllm" ] && GPU=true
 : "${PRISM_API_PORT:=$PRISM_API_PORT_PREF}"
 
+# Settles which port the API is published on, every run, whether or not anyone
+# was asked. The question in configure() only appears when someone is sitting
+# there to answer it, so a first run with no saved answers — the fresh install,
+# and every CI run — took port 5000 unexamined. On macOS the AirPlay Receiver
+# holds 5000 by default and answers 403 to everything, so the container bound
+# nothing anyone could reach, the launcher waited ninety seconds for an API that
+# was never going to answer there, and reported that the API had not come up.
+#
+# A port that answers /health is a Prism API from a previous run and is kept:
+# moving off it would start a second API against the same database.
+choose_api_port() {
+  local port="$1" candidate holder
+
+  if ! _prism_port_open localhost "$port"; then
+    printf '%s' "$port"; return 0
+  fi
+
+  if curl -fsS --max-time 3 "http://localhost:$port/health" >/dev/null 2>&1; then
+    printf '%s' "$port"; return 0
+  fi
+
+  holder="$(command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1}')"
+  warn "Port $port is held by something that is not Prism${holder:+ ('$holder')}." >&2
+
+  if [ "$(uname -s)" = "Darwin" ] && [ "$port" = "5000" ]; then
+    warn "On macOS that is the AirPlay Receiver, which answers 403 to everything." >&2
+    warn "Turn it off in System Settings -> General -> AirDrop & Handoff to free 5000." >&2
+  fi
+
+  for candidate in 5001 5002 5003 5004 5005; do
+    if ! _prism_port_open localhost "$candidate"; then
+      warn "Using port $candidate instead." >&2
+      printf '%s' "$candidate"; return 0
+    fi
+  done
+
+  warn "No free port between 5000 and 5005. Set PRISM_API_PORT to one that is free." >&2
+  printf '%s' "$port"
+}
+
+PRISM_API_PORT="$(choose_api_port "$PRISM_API_PORT")"
+export PRISM_API_PORT
+
+# ── Self-checks ───────────────────────────────────────────────────────
+#
+# Run on every launch, quietly. The point of a check that runs every time is
+# that it costs nothing to read when it passes: one line, no output. When it
+# fails it stops being quiet, because that is the moment its output is worth
+# your attention.
+#
+# Neither check stops the launch. A launcher that refuses to start the app
+# because a test failed has taken away the tool you were about to debug with.
+run_self_checks() {
+  $SKIP_CHECKS && return 0
+
+  local out rc
+
+  step "Checking the launcher itself..."
+  for suite in menu provider; do
+    out="$("$ROOT/scripts/tests/${suite}_test.sh" 2>&1)"; rc=$?
+    if [ $rc -eq 0 ]; then
+      ok "$(printf '%s' "$out" | grep -E "^  ${suite}:" | sed 's/^ *//')"
+    else
+      warn "The ${suite} tests failed. dev.sh may not do what you expect:"
+      printf '%s\n' "$out" | sed 's/^/     /'
+    fi
+  done
+
+  # The doctor has no quiet mode of its own, so it is run for its exit code and
+  # then, if it is unhappy, run again for its output — which also gives it a
+  # second chance at the things it fixes itself.
+  step "Checking this machine..."
+  if "$ROOT/scripts/doctor.sh" >/dev/null 2>&1; then
+    ok "Everything the doctor checks is in place."
+  else
+    warn "The doctor found something. Running it again with its output:"
+    "$ROOT/scripts/doctor.sh" 2>&1 | sed 's/^/     /' || true
+  fi
+
+  if $FULL_CHECKS; then
+    step "Running the application test suites..."
+    if (cd "$ROOT/backend" && dotnet test Prism.sln --nologo -v q) >/dev/null 2>&1; then
+      ok "Backend tests pass."
+    else
+      warn "Backend tests failed. Re-run to see why:  cd backend && dotnet test Prism.sln"
+    fi
+    if (cd "$ROOT/frontend" && npm test) >/dev/null 2>&1; then
+      ok "Frontend tests pass."
+    else
+      warn "Frontend tests failed. Re-run to see why:  cd frontend && npm test"
+    fi
+  fi
+}
+
+run_self_checks
+
 # ── Preflight ─────────────────────────────────────────────────────────
 step "Checking prerequisites..."
 
@@ -722,7 +826,18 @@ start_app_containers() {
   if ! $api_up; then
     echo ""
     warn "The API container did not answer on $PRISM_API_URL."
-    warn "Logs: docker compose -f $ROOT/docker-compose.yml --profile app logs api"
+
+    # "Did not answer" has two very different causes, and the container's own
+    # logs only explain one of them. Something else holding the published port
+    # means the API is running perfectly and being asked at the wrong door.
+    local squatter
+    squatter="$(curl -sI --max-time 3 "$PRISM_API_URL/health" 2>/dev/null | sed -nE 's/^[Ss]erver: (.*)$/\1/p' | tr -d '\r')"
+    if [ -n "$squatter" ]; then
+      warn "Something else is answering on that port: it identifies itself as '$squatter'."
+      warn "Free the port, or set PRISM_API_PORT to one that is not taken."
+    else
+      warn "Logs: docker compose -f $ROOT/docker-compose.yml --profile app logs api"
+    fi
     exit 1
   fi
   ok " Ready! Swagger: $PRISM_API_URL/swagger"
