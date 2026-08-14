@@ -14,10 +14,9 @@ import {
   TooltipContent,
 } from '@/components/ui/tooltip'
 import { useInstances } from '@/features/models/api'
-import { useTokenExplorerStore } from '../store'
-import { useTokenize, useDetokenize } from '../api'
-import type { TokenizeResult } from '../types'
-import type { DetokenizeResult } from '../api'
+import { useTokenize, useDetokenize } from '@/features/token-explorer/api'
+import type { TokenizeResult } from '@/features/token-explorer/types'
+import type { DetokenizeResult } from '@/features/token-explorer/api'
 
 const TOKEN_COLORS = [
   'bg-violet-500/20 text-violet-200',
@@ -57,13 +56,19 @@ function isSpecialToken(text: string): boolean {
   return SPECIAL_TOKEN_PATTERNS.some((p) => p.test(text))
 }
 
-export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
-  const store = useTokenExplorerStore()
+interface TokenizerViewProps {
+  /** The server whose tokenizer to use. */
+  instanceId: string | null
+  /** Rendered inside a page that already scrolls and pads. */
+  embedded?: boolean
+}
+
+export function TokenizerView({ instanceId, embedded = false }: TokenizerViewProps) {
   const tokenizeMutation = useTokenize()
   const detokenizeMutation = useDetokenize()
 
   const { data: instances } = useInstances()
-  const [text, setText] = useState(store.prompt)
+  const [text, setText] = useState('')
   const [result, setResult] = useState<TokenizeResult | null>(null)
   const [inputPrice, setInputPrice] = useState(0.15)
   const [outputPrice, setOutputPrice] = useState(0.60)
@@ -73,10 +78,10 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   const [copied, setCopied] = useState(false)
 
   function handleTokenize() {
-    if (!store.instanceId || !text.trim()) return
+    if (!instanceId || !text.trim()) return
 
     tokenizeMutation.mutate(
-      { instanceId: store.instanceId, text },
+      { instanceId, text },
       {
         onSuccess: (data) => {
           setResult(data)
@@ -93,7 +98,7 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   }
 
   function handleDetokenize() {
-    if (!store.instanceId || !tokenIdsInput.trim()) return
+    if (!instanceId || !tokenIdsInput.trim()) return
 
     const ids = tokenIdsInput
       .split(/[\s,]+/)
@@ -105,7 +110,7 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
     if (ids.length === 0) return
 
     detokenizeMutation.mutate(
-      { instanceId: store.instanceId, tokenIds: ids },
+      { instanceId, tokenIds: ids },
       {
         onSuccess: (data) => setDetokenizeResult(data),
       }
@@ -116,17 +121,17 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   // on the Models page. Asking it here means the tab can say so before you type into it: with
   // Ollama, which is what a fresh install runs, every control below fails, and it used to take
   // a filled box and a button press to find that out.
-  const instance = instances?.find((i) => i.id === store.instanceId)
+  const instance = instances?.find((i) => i.id === instanceId)
   const serverCanTokenize = instance?.supportsTokenize ?? true
 
   const canTokenize =
-    !!store.instanceId &&
+    !!instanceId &&
     serverCanTokenize &&
     text.trim().length > 0 &&
     !tokenizeMutation.isPending
 
   const canDetokenize =
-    !!store.instanceId &&
+    !!instanceId &&
     serverCanTokenize &&
     tokenIdsInput.trim().length > 0 &&
     !detokenizeMutation.isPending

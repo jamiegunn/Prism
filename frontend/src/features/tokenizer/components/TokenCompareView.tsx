@@ -12,8 +12,8 @@ import {
   TooltipContent,
 } from '@/components/ui/tooltip'
 import { useInstances } from '@/features/playground/api'
-import { useCompareTokenize } from '../api'
-import type { CompareTokenizeResult } from '../types'
+import { useCompareTokenize } from '@/features/token-explorer/api'
+import type { CompareTokenizeResult } from '@/features/token-explorer/types'
 
 const TOKEN_COLORS = [
   'bg-violet-500/20 text-violet-200',

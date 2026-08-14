@@ -6,7 +6,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Separator } from '@/components/ui/separator'
 import { Play, Undo2, Trash2 } from 'lucide-react'
 import { useAdjustedPredictions, useTokenExplorerStore } from '../store'
-import { useStepThrough } from '../api'
+import { usePredictNextToken, useStepThrough } from '../api'
 import { ProbabilityDistribution } from './ProbabilityDistribution'
 import type { StepEntry } from '../types'
 
@@ -14,9 +14,41 @@ export function StepThroughView() {
   const store = useTokenExplorerStore()
   const adjustedPredictions = useAdjustedPredictions()
   const stepMutation = useStepThrough()
+  const predictMutation = usePredictNextToken()
 
   function handleStep() {
-    if (!store.instanceId || !store.currentPredictions) return
+    if (!store.instanceId) return
+
+    // Self-priming, so this tab has one way to begin. It used to need the Predict button in the
+    // left rail first — a second primary action, in another panel, for the same experiment —
+    // and the tab gave no sign of that when a prompt was already filled in.
+    if (!store.currentPredictions) {
+      if (!store.prompt.trim()) return
+
+      store.setLoading(true)
+      predictMutation.mutate(
+        {
+          instanceId: store.instanceId,
+          prompt: store.prompt,
+          topLogprobs: store.topLogprobs,
+          temperature: store.temperature,
+          enableThinking: store.enableThinking,
+        },
+        {
+          onSuccess: (result) => {
+            store.setPredictions(result)
+
+            const top = result.predictions[0]
+            if (top) {
+              performStep(top.token, false, result)
+            }
+          },
+          onSettled: () => store.setLoading(false),
+        }
+      )
+      return
+    }
+
     const topPrediction = store.currentPredictions.predictions[0]
     if (!topPrediction) return
 
@@ -28,10 +60,14 @@ export function StepThroughView() {
     performStep(token, true)
   }
 
-  function performStep(token: string, wasForced: boolean) {
-    if (!store.instanceId || !store.currentPredictions) return
+  function performStep(
+    token: string,
+    wasForced: boolean,
+    from = store.currentPredictions
+  ) {
+    if (!store.instanceId || !from) return
 
-    const predictions = store.currentPredictions.predictions
+    const predictions = from.predictions
     const entry = predictions.find((p) => p.token === token)
     const previousTokens = store.stepHistory.map((s) => s.token).join('')
 
@@ -117,7 +153,7 @@ export function StepThroughView() {
             <Button
               size="sm"
               onClick={handleStep}
-              disabled={!hasPredictions || store.isLoading}
+              disabled={(!hasPredictions && !store.prompt.trim()) || store.isLoading}
               className="gap-1.5 bg-violet-600 hover:bg-violet-700"
             >
               <Play className="h-3.5 w-3.5" />
@@ -159,15 +195,11 @@ export function StepThroughView() {
             </Tooltip>
           ))}
 
-          {/* Shown whenever there is nothing to step from. Keyed on the predictions rather than
-              the prompt: a prompt restored from a previous visit left this hidden, so the tab
-              opened with a filled prompt, a disabled Step button and nothing saying that a
-              prediction has to come first. */}
           {!hasSteps && !hasPredictions && (
             <span className="text-sm text-zinc-600 italic">
               {store.prompt
-                ? ' Press Predict Next Token to see the distribution, then step from there.'
-                : 'Enter a prompt and click Predict to begin stepping...'}
+                ? ' Press Step to take the model\'s most likely token, or force a different one from the list it produces.'
+                : 'Write a prompt on the left, then press Step.'}
             </span>
           )}
         </div>

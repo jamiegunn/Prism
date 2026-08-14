@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Microscope, Loader2, Brain } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { describeMutationError } from '@/services/mutationErrors'
@@ -16,8 +17,6 @@ import { ProbabilityDistribution } from './components/ProbabilityDistribution'
 import { StepThroughView } from './components/StepThroughView'
 import { BranchTreeView } from './components/BranchTreeView'
 import { SamplingVisualization } from './components/SamplingVisualization'
-import { TokenizerView } from './components/TokenizerView'
-import { TokenCompareView } from './components/TokenCompareView'
 import { ParamLabel } from '@/components/ui/param-label'
 import { HelpPanel } from './components/HelpPanel'
 
@@ -25,6 +24,7 @@ export function TokenExplorerPage() {
   const instances = useInstances()
   const store = useTokenExplorerStore()
   const adjustedPredictions = useAdjustedPredictions()
+  const [activeTab, setActiveTab] = useState('predictions')
 
   // Same reason as the Playground: one online provider should not need selecting.
   useDefaultInstance(store.instanceId, store.setInstanceId)
@@ -277,19 +277,23 @@ export function TokenExplorerPage() {
 
               <Separator />
 
-              {/* Predict button */}
-              <Button
-                onClick={handlePredict}
-                disabled={!canPredict}
-                className="w-full gap-2 bg-violet-600 hover:bg-violet-700"
-              >
-                {store.isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Microscope className="h-4 w-4" />
-                )}
-                Predict Next Token
-              </Button>
+              {/* Hidden while Step Through is open: that tab's own Step button starts the
+                  experiment and continues it, and two primary actions in two panels for one
+                  experiment is what made the rail feel like it belonged to something else. */}
+              {activeTab !== 'step-through' && (
+                <Button
+                  onClick={handlePredict}
+                  disabled={!canPredict}
+                  className="w-full gap-2 bg-violet-600 hover:bg-violet-700"
+                >
+                  {store.isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Microscope className="h-4 w-4" />
+                  )}
+                  Predict Next Token
+                </Button>
+              )}
 
               {/* Reset */}
               <Button
@@ -306,7 +310,12 @@ export function TokenExplorerPage() {
 
         {/* Center panel: Tabs */}
         <div className="flex-1 overflow-hidden">
-          <Tabs defaultValue="predictions" className="flex h-full flex-col">
+          <Tabs
+            defaultValue="predictions"
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex h-full flex-col"
+          >
             <div className="shrink-0 border-b border-zinc-800 px-4 py-2" data-tour="token-explorer-views">
               <TabsList>
                 <TabsTrigger value="predictions">Predictions</TabsTrigger>
@@ -319,8 +328,6 @@ export function TokenExplorerPage() {
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="tokenizer">Tokenizer</TabsTrigger>
-                <TabsTrigger value="compare">Compare</TabsTrigger>
               </TabsList>
             </div>
 
@@ -424,49 +431,6 @@ export function TokenExplorerPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="tokenizer" className="flex-1 overflow-hidden mt-0">
-              <div className="flex h-full flex-col p-4">
-                <HelpPanel title="How the Tokenizer Works">
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">What:</strong> The tokenizer breaks text into the subword tokens that the model actually processes. Each colored block is one token. This shows you the model&apos;s true &ldquo;vocabulary units.&rdquo;
-                  </p>
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">Why:</strong> Token boundaries directly affect model behavior. Common words may be a single token while rare words get split into multiple pieces. Understanding tokenization helps explain prompt length limits, cost calculations, and why the model sometimes struggles with spelling, counting, or code formatting.
-                  </p>
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">How to read the results:</strong> Each colored block is a single token. Hover to see the token ID, byte representation, and byte length. The summary shows total token count, character count, and byte count. Whitespace and special characters are made visible with display markers.
-                  </p>
-                  <p>
-                    <strong className="text-zinc-300">Tip:</strong> Try pasting code, URLs, or non-English text to see how different content gets tokenized. Numbers are often split in surprising ways.
-                  </p>
-                </HelpPanel>
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <TokenizerView embedded />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="compare" className="flex-1 overflow-hidden mt-0">
-              <div className="flex h-full flex-col p-4">
-                <HelpPanel title="How Token Comparison Works">
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">What:</strong> Compare tokenization runs the same text through multiple model instances, showing how each model&apos;s tokenizer breaks it down differently.
-                  </p>
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">Why:</strong> Different model families (Llama, Qwen, Mistral, GPT) use different tokenizers with different vocabularies. The same text can produce vastly different token counts, which affects context window usage, inference cost, and even model behavior at token boundaries.
-                  </p>
-                  <p className="mb-2">
-                    <strong className="text-zinc-300">How to read the results:</strong> Each row shows one model&apos;s tokenization. Compare token counts and look at where token boundaries fall. Fewer tokens for the same text generally means a more efficient tokenizer for that content type.
-                  </p>
-                  <p>
-                    <strong className="text-zinc-300">Tip:</strong> Try comparing with multilingual text, code, or structured data &mdash; tokenizer differences are most dramatic with non-English content.
-                  </p>
-                </HelpPanel>
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <TokenCompareView embedded />
-                </div>
-              </div>
-            </TabsContent>
           </Tabs>
         </div>
 

@@ -389,13 +389,52 @@ const pageTours: Tour[] = [
       },
       {
         id: 'sampling',
-        title: 'The sliders here only redraw the picture',
+        title: 'The sliders here redraw the picture',
         body:
-          'Temperature is sent to the model, but the top-p and top-k sliders re-shade the '
-          + 'chart you already have — they show you which candidates a given setting would '
-          + 'have kept, without spending another request to find out.',
+          'None of these spend another request. Top-p and top-k re-shade the chart you already '
+          + 'have, showing which candidates a given setting would have kept. Temperature '
+          + 'reshapes it: a server returns the model\'s own probabilities whatever temperature '
+          + 'it is sent, so 1 is what the model produced, below 1 sharpens and above 1 flattens. '
+          + 'It is also the temperature a branch generates at, which is the one place it reaches '
+          + 'the server.',
         anchor: 'token-explorer-sampling',
         side: 'left',
+      },
+    ],
+  },
+  {
+    id: 'page-tokenizer',
+    kind: 'page',
+    area: '/tokenizer',
+    title: 'Tokenizer',
+    outcome: 'Count the tokens in a piece of text, and see two models disagree about them.',
+    minutes: 2,
+    requires: ['provider'],
+    steps: [
+      {
+        id: 'server',
+        title: 'Not every server can answer this',
+        body:
+          'Tokenization is a separate endpoint from generation, and plenty of servers do not '
+          + 'expose it — Ollama is one, so the picker marks those. The page says so before you '
+          + 'type rather than after you press, and the Models page lists which of your servers '
+          + 'report the capability.',
+        route: '/tokenizer',
+        anchor: 'tokenizer-server',
+        side: 'bottom',
+      },
+      {
+        id: 'tabs',
+        title: 'Count, then compare',
+        body:
+          'Tokenize shows the blocks one model reads, with ids, bytes and a cost estimate. '
+          + 'Compare runs the same text through several servers at once, which is the honest '
+          + 'way to find out whether a token count from one model means anything next to '
+          + 'another — the same sentence can cost noticeably more on one tokenizer than on '
+          + 'another, and that difference is what decides context limits and price.',
+        anchor: 'tokenizer-tabs',
+        side: 'bottom',
+        action: 'Paste some text and press Tokenize.',
       },
     ],
   },

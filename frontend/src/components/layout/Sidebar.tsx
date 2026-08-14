@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   MessageSquare,
   Microscope,
+  Hash,
   Server,
   Clock,
   FlaskConical,
@@ -35,6 +36,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Playground', icon: MessageSquare, path: '/playground', active: true },
   { label: 'Token Explorer', icon: Microscope, path: '/token-explorer', active: true },
+  { label: 'Tokenizer', icon: Hash, path: '/tokenizer', active: true },
   { label: 'Models', icon: Server, path: '/models', active: true },
   { label: 'History', icon: Clock, path: '/history', active: true },
   { label: 'Prompt Lab', icon: FlaskConical, path: '/prompt-lab', active: true },

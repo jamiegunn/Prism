@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { PlaygroundPage } from '@/features/playground/PlaygroundPage'
 import { TokenExplorerPage } from '@/features/token-explorer/TokenExplorerPage'
+import { TokenizerPage } from '@/features/tokenizer/TokenizerPage'
 import { ModelsPage } from '@/features/models/ModelsPage'
 import { HistoryPage } from '@/features/history/HistoryPage'
 import { ExperimentsPage } from '@/features/experiments/ExperimentsPage'
@@ -31,6 +32,7 @@ export function AppRoutes() {
       <Route path="/playground" element={<PlaygroundPage />} />
       <Route path="/playground/compare" element={<MultiPanePlayground />} />
       <Route path="/token-explorer" element={<TokenExplorerPage />} />
+      <Route path="/tokenizer" element={<TokenizerPage />} />
       <Route path="/models" element={<ModelsPage />} />
       <Route path="/history" element={<HistoryPage />} />
       <Route path="/experiments" element={<ExperimentsPage />} />

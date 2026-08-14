@@ -10,9 +10,15 @@ forward one token at a time or force a different token and watch where the answe
 
 Sidebar: **Token Explorer**.
 
-The page has five tabs. **Predictions**, **Step Through** and **Branches** are covered here.
-**Tokenizer** and **Compare** are a different job — counting and comparing token boundaries —
-and have their own guide: [Tokenizer and Compare](tokenizer.md).
+The page has three tabs — **Predictions**, **Step Through** and **Branches** — and they are
+three views of one experiment, which is why they share the console on the left. Counting and
+comparing token boundaries is a different job and moved to its own page: [Tokenizer and
+Compare](tokenizer.md).
+
+**Step Through starts itself.** Press **Step** and it takes the model's most likely token,
+whether or not you have run a prediction first; the left rail's Predict button is hidden while
+that tab is open, because two primary buttons in two panels for one experiment is how a page
+stops reading as one thing.
 
 ---
 
@@ -206,7 +212,7 @@ that field is not part of what was kept.
 
 ## See also
 
-- [Tokenizer and Compare](tokenizer.md) — the other two tabs on this page
+- [Tokenizer and Compare](tokenizer.md) — counting and comparing token boundaries, now its own page
 - [Playground](playground.md) — chat with heatmaps, for reading a whole response at once
 - [History](history.md) — every prediction, step and branch is recorded there
 - [Model Management](models.md) — why this page needs vLLM

@@ -8,9 +8,13 @@ family draws those boundaries differently. That difference decides how much of y
 window a document consumes, what an API call costs, and whether a perplexity number from one
 model can be honestly compared with one from another.
 
-These are two tabs inside the **Token Explorer** page — sidebar **Token Explorer**, then the
-**Tokenizer** and **Compare** tabs along the top. The prediction and branching tabs on the same
-page are documented separately in [Token Explorer](token-explorer.md).
+This is its own page — sidebar **Tokenizer** — with two tabs, **Tokenize** and **Compare**.
+
+It used to be two tabs on the Token Explorer, sharing that page's left rail: a prompt, a
+temperature, top-p, top-k and a Predict button, none of which tokenization uses, and Compare
+carried its own server selector besides, so the screen showed two of them. Counting tokens is a
+different question from what the model would say next, and it now has the room to be one. The
+prediction and branching views are documented in [Token Explorer](token-explorer.md).
 
 ---
 
