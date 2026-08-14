@@ -43,6 +43,11 @@ _to_delete/
 # Per-developer dev.sh answers, written by ./dev.sh
 .prism-dev.conf
 
-# Source snapshot produced for handoff. Tens of megabytes of binary, and a copy of
-# the tree it sits in — committing it puts that weight in every future clone.
-.prism-src-snapshot.tar.gz
+# Archives. A tarball in a repository is nearly always a snapshot of the repository,
+# and committing one puts its whole weight in every future clone — permanently, since
+# taking it out later means rewriting history rather than reverting a commit.
+# Nothing of this type is tracked, so this excludes rather than hides anything.
+*.tar
+*.tar.gz
+*.tgz
+*.zip
