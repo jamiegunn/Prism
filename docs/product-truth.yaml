@@ -333,6 +333,11 @@ modules:
       Collection/document/chunk entities with pgvector embeddings; vector, BM25 and
       hybrid search; labelled query sets and a retrieval evaluation endpoint scoring
       all modes with precision@k/recall@k/MRR/nDCG@k (hand-proved, mutation-checked).
+      Each collection is searched by the distance metric it was created with — cosine,
+      Euclidean and inner product were all offered, stored and then ignored, so every
+      search ranked by cosine. Hybrid returns its BM25 half when embedding is
+      unavailable, labelled as not being hybrid, and the retrieval evaluation refuses
+      to score a fallback as though the method had run.
       Embeddings go to a reachable instance first, then the default — "default, then
       oldest" sent them to an offline seeded vLLM on a fresh install. The sample
       collection is seeded with real embeddings, and retried shortly after startup when
@@ -358,7 +363,6 @@ modules:
       - Chunking preview (P4-02)
       - Retrieval debugger (P4-03)
       - Citation mapping (P4-04)
-      - Tests (P4-07)
 
   - id: structured-output
     name: Structured Output

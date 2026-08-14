@@ -140,7 +140,7 @@ public sealed class EvaluateRetrievalHandler
 
         foreach (RagQuerySetItem item in querySet.Items.OrderBy(i => i.OrderIndex))
         {
-            Result<List<ChunkSearchResultDto>> retrieval = await _queryHandler.HandleAsync(
+            Result<ChunkSearchOutcomeDto> retrieval = await _queryHandler.HandleAsync(
                 new QueryCollectionQuery(collectionId, item.QueryText, topK, mode), ct);
 
             if (retrieval.IsFailure)
@@ -157,7 +157,20 @@ public sealed class EvaluateRetrievalHandler
                     modeName, 0, null, retrieval.Error.Message);
             }
 
-            List<Guid> ranked = retrieval.Value.Select(r => r.ChunkId).ToList();
+            // A search that quietly fell back to another method is not this mode, and scoring it
+            // as though it were would put a number against "hybrid" that hybrid never produced —
+            // the precise misreading this whole report exists to prevent.
+            if (!retrieval.Value.RanAsRequested)
+            {
+                _logger.LogWarning(
+                    "Retrieval evaluation: {Mode} on collection {CollectionId} did not run as asked: {Reason}",
+                    modeName, collectionId, retrieval.Value.DegradedReason);
+
+                return new RetrievalModeResultDto(
+                    modeName, 0, null, retrieval.Value.DegradedReason);
+            }
+
+            List<Guid> ranked = retrieval.Value.Results.Select(r => r.ChunkId).ToList();
             var relevant = item.RelevantChunkIds.ToHashSet();
 
             var metrics = new Dictionary<string, double>();

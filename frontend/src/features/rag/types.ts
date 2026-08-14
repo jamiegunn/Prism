@@ -41,6 +41,17 @@ export interface ChunkSearchResult {
   metadata: Record<string, string>
 }
 
+/**
+ * What a search returned, and whether it ran the method that was asked for.
+ *
+ * `degradedReason` is null when it did. Hybrid sets it when the vector half could not run and
+ * the keyword half was returned instead — results that are real, but not the method requested.
+ */
+export interface ChunkSearchOutcome {
+  results: ChunkSearchResult[]
+  degradedReason: string | null
+}
+
 export interface RagPipelineResult {
   query: string
   generatedResponse: string

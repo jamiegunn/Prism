@@ -76,7 +76,7 @@ public static class RagEndpoints
         rag.MapPost("/collections/{id:guid}/query", QueryCollection)
             .WithName("QueryRagCollection")
             .WithSummary("Searches a collection using vector, BM25, or hybrid search")
-            .Produces<List<ChunkSearchResultDto>>()
+            .Produces<ChunkSearchOutcomeDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         rag.MapPost("/collections/{id:guid}/rag", ExecuteRagPipeline)
@@ -331,10 +331,10 @@ public static class RagEndpoints
             : SearchType.Vector;
 
         var query = new QueryCollectionQuery(id, request.QueryText, request.TopK, searchType, request.VectorWeight);
-        Result<List<ChunkSearchResultDto>> result = await handler.HandleAsync(query, ct);
+        Result<ChunkSearchOutcomeDto> result = await handler.HandleAsync(query, ct);
 
         return result.Match(
-            dtos => TypedResults.Ok(dtos),
+            outcome => TypedResults.Ok(outcome),
             error => error.ToHttpResult());
     }
 

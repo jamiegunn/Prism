@@ -19,6 +19,10 @@ export function SearchPanel({ collectionId }: SearchPanelProps) {
   // indistinguishable from an empty corpus.
   const [results, setResults] = useState<ChunkSearchResult[] | null>(null)
 
+  // Set when a search ran a different method from the one asked for — hybrid falling back to its
+  // keyword half. The results are real; the label on them would otherwise be wrong.
+  const [degraded, setDegraded] = useState<string | null>(null)
+
   // The other half of "Search & RAG". The endpoint, the client hook and the result type all
   // existed; nothing called them, so the tab retrieved chunks and stopped — the R in RAG with
   // no G, on the page named after it.
@@ -35,15 +39,22 @@ export function SearchPanel({ collectionId }: SearchPanelProps) {
     if (!queryText.trim()) return
     setResults(null)
     setAnswer(null)
+    setDegraded(null)
     queryCollection.mutate(
       { queryText, topK, searchType },
-      { onSuccess: (data) => setResults(data) }
+      {
+        onSuccess: (data) => {
+          setResults(data.results)
+          setDegraded(data.degradedReason)
+        },
+      }
     )
   }
 
   const handleAnswer = () => {
     if (!queryText.trim() || !instanceId) return
     setAnswer(null)
+    setDegraded(null)
     ragPipeline.mutate(
       // No model named: the instance's own is used. Sending a blank one used to reach the
       // inference server as `model is required` and surface as a 503.
@@ -121,6 +132,13 @@ export function SearchPanel({ collectionId }: SearchPanelProps) {
 
       {queryCollection.isPending && (
         <p className="text-sm text-zinc-500">Searching...</p>
+      )}
+
+      {degraded && !queryCollection.isPending && (
+        <div className="rounded border border-amber-900/60 bg-amber-950/30 p-3 text-sm">
+          <p className="font-medium text-amber-300">These are not the results you asked for.</p>
+          <p className="mt-1 text-amber-200/80">{degraded}</p>
+        </div>
       )}
 
       {ragPipeline.isError && !ragPipeline.isPending && (

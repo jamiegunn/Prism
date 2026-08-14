@@ -332,8 +332,8 @@ endpoint and looking at the generated answer.
 | P1 | The seeded collection is searchable — it says Ready, 1 doc, 3 chunks | **Yes now.** The seeder embeds the sample, and retries shortly after startup when no server was reachable in time; when it still cannot, the document reads Pending with the reason rather than Ready. It used to write null embeddings and mark itself Completed, so vector search returned nothing on the only collection a new user has | `RagSampleEmbedder`, `RagSampleEmbeddingService`, `RagSeedEmbeddingTests` |
 | P2 | Embeddings go to the server you are running | **Yes.** Reachable first, then the default, then the oldest. "Default, then oldest" tied on the two seeded instances and picked the offline vLLM, which is how a fresh install came up unembedded with `Connection refused (…:8000)` | `An_Offline_Instance_Is_Not_Preferred_Over_A_Reachable_One` |
 | P3 | …and the URL is right | **Yes now.** An endpoint already ending in `/v1` is not given a second one. It was `/v1/v1/embeddings` before, so embeddings could never work against vLLM or LM Studio, which both publish their `/v1` | `The_Embedding_Url_Carries_Exactly_One_V1` |
-| P4 | BM25 needs no embedding server | True for BM25; **false for hybrid**, which aborts on the vector failure instead of degrading to the half it already computed | `QueryCollectionHandler.cs:137-139` |
-| P5 | The distance metric chosen for a collection is used | **No.** Cosine/Euclidean/InnerProduct are offered, stored, and never read — search is always cosine | `QueryCollectionHandler.cs:90,97` |
+| P4 | BM25 needs no embedding server | **True for both now.** Hybrid returns its keyword half and says it is not hybrid; it used to abort and throw that half away | `RagHybridFallbackTests` |
+| P5 | The distance metric chosen for a collection is used | **Yes now.** Each ranks by its own operator, proved on vectors where all three disagree about the winner | `RagDistanceMetricTests` |
 | P6 | The default new-collection settings will work here | **No.** They default to OpenAI's `text-embedding-3-small` at 1536 dims, and there is no OpenAI key path | `CreateCollectionDialog.tsx:12-13` |
 
 ### Requirements
@@ -346,11 +346,11 @@ endpoint and looking at the generated answer.
 | R4 | A search that ran and matched nothing shows an empty state, not an error | BM25 for a nonsense term | MET |
 | R5 | With nothing configured, embedding goes to a registered instance rather than a hardcoded address | `Embeddings_Go_To_The_Registered_Instance_When_Unconfigured` | MET |
 | R6 | Vector search returns a chunk on the seeded collection when an embedding server is available | `RagSeedEmbeddingTests`; browser-verified after a full delete and fresh install — vector 3 hits, BM25 2, hybrid 3 | MET |
-| R7 | Hybrid returns its BM25 half when embedding is unavailable | none — it returns the vector failure | **UNMET** |
+| R7 | Hybrid returns its BM25 half when embedding is unavailable | `Hybrid_Falls_Back_To_Keyword_Results`, and it is labelled rather than passed off as hybrid (`The_Fallback_Says_It_Is_Not_Hybrid`); browser-verified with embedding forced to fail | MET |
 | R8 | The embedding URL contains exactly one `/v1` when the endpoint already ends in `/v1` | `The_Embedding_Url_Carries_Exactly_One_V1` (4 cases, mutation-checked) | MET |
-| R9 | A collection created with Euclidean ranks by Euclidean distance | none — always cosine | **UNMET** |
+| R9 | A collection created with Euclidean ranks by Euclidean distance | `Euclidean_Ranks_By_Distance` — the three vectors are chosen so cosine, Euclidean and inner product each have a *different* winner, so the test cannot pass against always-cosine (mutation-checked) | MET |
 | R10 | An unknown collection id says the collection is missing | the page reports it and offers the way back; 4xx responses are no longer retried, so it says so promptly | MET |
-| R11 | A document whose ingest failed appears marked Failed without a manual refresh | none — the client invalidates only on success | **UNMET** |
+| R11 | A document whose ingest failed appears marked Failed without a manual refresh | the ingest mutation refreshes on settle rather than on success, so the row the server already wrote — Failed, with its reason — appears straight away | MET |
 | R12 | Retrieval quality is measurable against ground truth | the Evaluate tab scores vector/BM25/hybrid over a labelled query set with precision@k, recall@k, MRR and nDCG@k; metrics proved by hand-worked examples (incl. both nDCG truncation directions and duplicate-id ties), invariants (recall non-decreasing in k, ideal ranking nDCG exactly 1, bounds), and a live end-to-end test against real pgvector (`RetrievalMetricsTests`, `RetrievalEvaluationTests`, mutation-checked); browser-verified | MET |
 | R13 | Labelled query sets are validated against the collection | creating a set rejects empty items, unlabelled queries, and chunk ids from another collection (`Labels_Must_Belong_To_The_Collection`) | MET |
 | R14 | A mode that cannot run reports why instead of scoring zero | vector/hybrid on an unembedded collection return "could not be evaluated" with the reason and no metrics; BM25 still evaluates (`Unembedded_Collection_Reports_Vector_Unavailable_Not_Zero`); browser-verified on the seeded collection | MET |
@@ -360,6 +360,8 @@ endpoint and looking at the generated answer.
 | R17 | The answer step runs without naming a model explicitly | `An_Unnamed_Model_Falls_Back_To_The_Instance`; it used to send a blank model and surface Ollama's `model is required` as a 503 | MET |
 | R18 | A query set sent with no items is a 400, not a 500 | `A_Query_Set_With_No_Items_Is_A_Validation_Error`, `An_Item_With_Null_Labels_Is_A_Validation_Error` | MET |
 | R19 | The embedding model is present on a cold install | `models_test.sh` cases A/B/D — `ensure_ollama_model` used to return early if *any* model existed, so the embedding model was never pulled on a machine that already had a chat model | MET |
+| R20 | A degraded search is never scored as though it ran | the retrieval evaluation reports a fallback as unavailable with the reason rather than putting a number against a method that never ran (`The_Evaluation_Will_Not_Score_A_Fallback_As_Hybrid`) | MET |
+| R21 | Inner product ranks by magnitude as well as direction | `Inner_Product_Rewards_Magnitude` | MET |
 
 ### Withdrawn
 

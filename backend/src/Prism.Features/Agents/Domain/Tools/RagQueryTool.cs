@@ -67,20 +67,31 @@ public sealed class RagQueryTool : IAgentTool
             }
 
             var queryObj = new QueryCollectionQuery(collectionId, query, 5, SearchType.Hybrid);
-            Common.Results.Result<List<Rag.Application.Dtos.ChunkSearchResultDto>> result = await handler.HandleAsync(queryObj, ct);
+            Common.Results.Result<Rag.Application.Dtos.ChunkSearchOutcomeDto> result = await handler.HandleAsync(queryObj, ct);
 
             if (result.IsFailure)
             {
                 return ToolResult.Fail($"RAG query failed: {result.Error.Message}");
             }
 
-            if (result.Value.Count == 0)
+            List<Rag.Application.Dtos.ChunkSearchResultDto> chunks = result.Value.Results;
+
+            if (chunks.Count == 0)
             {
                 return ToolResult.Ok("No relevant documents found.");
             }
 
             var sb = new System.Text.StringBuilder();
-            foreach (Rag.Application.Dtos.ChunkSearchResultDto chunk in result.Value)
+
+            // Told, not hidden: an agent reasoning over keyword hits it believes are hybrid will
+            // draw conclusions about its own retrieval that are not true.
+            if (!result.Value.RanAsRequested)
+            {
+                sb.AppendLine($"[note: {result.Value.DegradedReason}]");
+                sb.AppendLine();
+            }
+
+            foreach (Rag.Application.Dtos.ChunkSearchResultDto chunk in chunks)
             {
                 sb.AppendLine($"[{chunk.DocumentFilename} (score: {chunk.Score:F3})]");
                 sb.AppendLine(chunk.Content);

@@ -273,7 +273,7 @@ function QuerySetBuilder({
     const bm25 = await search
       .mutateAsync({ queryText, topK: 10, searchType: 'bm25' })
       .catch(() => null)
-    bm25?.forEach((r) => merged.set(r.chunkId, r))
+    bm25?.results.forEach((r) => merged.set(r.chunkId, r))
 
     const vector = await search
       .mutateAsync({ queryText, topK: 10, searchType: 'vector' })
@@ -281,7 +281,7 @@ function QuerySetBuilder({
         vectorFailed = true
         return null
       })
-    vector?.forEach((r) => {
+    vector?.results.forEach((r) => {
       if (!merged.has(r.chunkId)) merged.set(r.chunkId, r)
     })
 

@@ -107,11 +107,20 @@ public sealed class RagPipelineHandler
             command.TopK > 0 ? command.TopK : 5,
             command.SearchType);
 
-        Result<List<ChunkSearchResultDto>> searchResult = await _queryHandler.HandleAsync(searchQuery, ct);
+        Result<ChunkSearchOutcomeDto> searchResult = await _queryHandler.HandleAsync(searchQuery, ct);
         if (searchResult.IsFailure)
             return Result<RagPipelineResultDto>.Failure(searchResult.Error);
 
-        List<ChunkSearchResultDto> chunks = searchResult.Value;
+        List<ChunkSearchResultDto> chunks = searchResult.Value.Results;
+
+        // Worth a line in the log: an answer grounded in keyword hits when hybrid was asked for
+        // is still an answer, but not the one that was requested.
+        if (!searchResult.Value.RanAsRequested)
+        {
+            _logger.LogWarning(
+                "RAG pipeline on {CollectionId} retrieved with a fallback: {Reason}",
+                command.CollectionId, searchResult.Value.DegradedReason);
+        }
 
         // Step 2: Format context from retrieved chunks
         string context = string.Join("\n\n---\n\n", chunks.Select((c, i) =>

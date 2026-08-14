@@ -3,7 +3,7 @@ import { apiClient } from '@/services/apiClient'
 import type {
   RagCollection,
   RagDocument,
-  ChunkSearchResult,
+  ChunkSearchOutcome,
   RagPipelineResult,
   CollectionStats,
   RagQuerySet,
@@ -84,7 +84,11 @@ export function useIngestDocument(collectionId: string) {
       }
       return response.json() as Promise<RagDocument>
     },
-    onSuccess: () => {
+    // Settled, not succeeded. A failed ingest still writes a document row — marked Failed, with
+    // the reason — so refreshing only on success left that row invisible until something else
+    // happened to refetch. The upload appeared to vanish, when in fact the list was stale and the
+    // explanation was already sitting in the database.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: [...RAG_KEY, 'documents', collectionId] })
       queryClient.invalidateQueries({ queryKey: [...RAG_KEY, 'collections'] })
     },
@@ -99,7 +103,7 @@ export function useQueryCollection(collectionId: string) {
       searchType?: string
       vectorWeight?: number
     }) =>
-      apiClient<ChunkSearchResult[]>(`/rag/collections/${collectionId}/query`, {
+      apiClient<ChunkSearchOutcome>(`/rag/collections/${collectionId}/query`, {
         method: 'POST',
         body: data,
       }),

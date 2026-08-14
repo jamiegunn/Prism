@@ -44,19 +44,19 @@ public sealed class RagSearchTests
             new StubEmbeddingProvider([1f, 0f, 0f, 0f]),
             NullLogger<QueryCollectionHandler>.Instance);
 
-        Result<List<ChunkSearchResultDto>> result = await handler.HandleAsync(
+        Result<ChunkSearchOutcomeDto> result = await handler.HandleAsync(
             new QueryCollectionQuery(collectionId, "anything", TopK: 3, SearchType.Vector),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : $"Vector search failed: {result.Error.Message}");
-        Assert.NotEmpty(result.Value);
+        Assert.NotEmpty(result.Value.Results);
 
         // The chunk whose embedding equals the query vector must rank first.
-        Assert.Equal("exact match", result.Value[0].Content);
+        Assert.Equal("exact match", result.Value.Results[0].Content);
 
         // Scores must be ordered descending — a search that returns rows in arbitrary
         // order is not a search.
-        List<double> scores = result.Value.Select(r => r.Score).ToList();
+        List<double> scores = result.Value.Results.Select(r => r.Score).ToList();
         Assert.Equal(scores.OrderByDescending(s => s).ToList(), scores);
     }
 
@@ -74,7 +74,7 @@ public sealed class RagSearchTests
             new StubEmbeddingProvider([1f, 0f, 0f, 0f]),
             NullLogger<QueryCollectionHandler>.Instance);
 
-        Result<List<ChunkSearchResultDto>> result = await handler.HandleAsync(
+        Result<ChunkSearchOutcomeDto> result = await handler.HandleAsync(
             new QueryCollectionQuery(collectionId, "exact", TopK: 3, SearchType.Hybrid),
             CancellationToken.None);
 
@@ -100,7 +100,7 @@ public sealed class RagSearchTests
             new ThrowingEmbeddingProvider(),
             NullLogger<QueryCollectionHandler>.Instance);
 
-        Result<List<ChunkSearchResultDto>> result = await handler.HandleAsync(
+        Result<ChunkSearchOutcomeDto> result = await handler.HandleAsync(
             new QueryCollectionQuery(collectionId, queryText, TopK: 3, SearchType.Vector),
             CancellationToken.None);
 
