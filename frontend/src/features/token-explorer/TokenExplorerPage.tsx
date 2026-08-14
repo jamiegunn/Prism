@@ -165,8 +165,8 @@ export function TokenExplorerPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <ParamLabel
-                    label="Temperature (visualization)"
-                    tooltip="Reshapes the distribution shown here, the way temperature reshapes it during sampling. A server returns the model's own probabilities and does not vary them with this, so it is applied on the page: 1 is what the model produced, below 1 sharpens toward the top token, above 1 flattens. It cannot change which token Step takes — scaling every logprob by the same factor cannot reorder them."
+                    label="Temperature"
+                    tooltip="Two things, one number. It reshapes the distribution shown on this page — a server returns the model's own probabilities whatever temperature it is sent, so the reshaping happens here: 1 is what the model produced, below 1 sharpens toward the top token, above 1 flattens. And it is the temperature a branch generates at, where it genuinely changes the continuation. It cannot change which token Step takes: scaling every logprob by the same factor cannot reorder them."
                   />
                   <span className="font-mono text-xs text-zinc-500">
                     {store.temperature.toFixed(2)}
@@ -180,7 +180,7 @@ export function TokenExplorerPage() {
                   onChange={(e) => store.setTemperature(Number(e.target.value))}
                 />
                 <p className="text-xs text-zinc-600">
-                  1 = the model&rsquo;s own distribution &middot; 0 = greedy
+                  1 = the model&rsquo;s own distribution &middot; 0 = greedy &middot; also used when a branch generates
                 </p>
               </div>
 

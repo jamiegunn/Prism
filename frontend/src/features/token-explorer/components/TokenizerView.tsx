@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@/components/ui/tooltip'
+import { useInstances } from '@/features/models/api'
 import { useTokenExplorerStore } from '../store'
 import { useTokenize, useDetokenize } from '../api'
 import type { TokenizeResult } from '../types'
@@ -61,6 +62,7 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
   const tokenizeMutation = useTokenize()
   const detokenizeMutation = useDetokenize()
 
+  const { data: instances } = useInstances()
   const [text, setText] = useState(store.prompt)
   const [result, setResult] = useState<TokenizeResult | null>(null)
   const [inputPrice, setInputPrice] = useState(0.15)
@@ -110,11 +112,24 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
     )
   }
 
+  // Whether this server has a tokenizer endpoint at all is recorded on the instance and shown
+  // on the Models page. Asking it here means the tab can say so before you type into it: with
+  // Ollama, which is what a fresh install runs, every control below fails, and it used to take
+  // a filled box and a button press to find that out.
+  const instance = instances?.find((i) => i.id === store.instanceId)
+  const serverCanTokenize = instance?.supportsTokenize ?? true
+
   const canTokenize =
-    !!store.instanceId && text.trim().length > 0 && !tokenizeMutation.isPending
+    !!store.instanceId &&
+    serverCanTokenize &&
+    text.trim().length > 0 &&
+    !tokenizeMutation.isPending
 
   const canDetokenize =
-    !!store.instanceId && tokenIdsInput.trim().length > 0 && !detokenizeMutation.isPending
+    !!store.instanceId &&
+    serverCanTokenize &&
+    tokenIdsInput.trim().length > 0 &&
+    !detokenizeMutation.isPending
 
   const charsPerToken =
     result && result.tokenCount > 0
@@ -123,6 +138,17 @@ export function TokenizerView({ embedded = false }: { embedded?: boolean }) {
 
   const content = (
     <div className={cn('space-y-4', !embedded && 'p-4')}>
+        {/* Said before you type rather than after you press. Tokenization is a separate endpoint
+            that not every server exposes, and whether this one does is already known. */}
+        {instance && !serverCanTokenize && (
+          <div className="rounded-md border border-amber-800/60 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-200/90">
+            <span className="font-medium">{instance.name} has no tokenizer endpoint.</span>{' '}
+            {instance.providerType} exposes generation but not text-to-token conversion, so
+            nothing on this tab can run against it. A vLLM or LM Studio server does — the Models
+            page shows which of your servers report the capability.
+          </div>
+        )}
+
         {/* Text input */}
         <div className="space-y-2">
           <label className="text-xs font-medium text-zinc-400">

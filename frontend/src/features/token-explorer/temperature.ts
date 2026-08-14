@@ -15,6 +15,10 @@ import type { TokenPredictionEntry } from './types'
  * — scaling every logprob by the same factor cannot reorder them, so the most likely token is
  * the most likely token at every temperature.
  *
+ * Branch exploration is the one place the same number reaches a server as a real sampling
+ * temperature, because a branch generates a continuation rather than reading one distribution.
+ * One control, honest in both places, which is why it is not labelled as visualisation-only.
+ *
  * @param predictions Alternatives as returned, highest first.
  * @param temperature The temperature to view the distribution at. 1 returns it unchanged.
  * @returns The alternatives with probabilities reshaped, in the same order.
