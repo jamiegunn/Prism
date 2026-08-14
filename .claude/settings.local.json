@@ -166,7 +166,8 @@
       "Bash(PRISM_PROVIDER=container-ollama ./dev.sh --yes)",
       "Bash(echo \"dev.sh exit: $?\")",
       "Bash(sed -e 's/\\\\x1b\\\\[[0-9;]*m//g' /tmp/fresh.log)",
-      "Bash(lsof -nP -iTCP:5000 -sTCP:LISTEN)"
+      "Bash(lsof -nP -iTCP:5000 -sTCP:LISTEN)",
+      "Bash(git reset *)"
     ]
   }
 }

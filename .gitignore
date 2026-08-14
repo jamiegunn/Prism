@@ -42,3 +42,7 @@ _to_delete/
 
 # Per-developer dev.sh answers, written by ./dev.sh
 .prism-dev.conf
+
+# Source snapshot produced for handoff. Tens of megabytes of binary, and a copy of
+# the tree it sits in — committing it puts that weight in every future clone.
+.prism-src-snapshot.tar.gz
