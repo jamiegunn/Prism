@@ -94,9 +94,15 @@ public sealed class TestPromptHandler
         IInferenceProvider provider = _providerFactory.CreateProvider(
             instance.Name, instance.Endpoint, instance.ProviderType);
 
+        Result<string> model = ModelSelection.Resolve(instance);
+        if (model.IsFailure)
+        {
+            return Result<TestPromptResultDto>.Failure(model.Error);
+        }
+
         var chatRequest = new ChatRequest
         {
-            Model = instance.ModelId ?? "",
+            Model = model.Value,
             Messages = rendered.Messages,
             Temperature = command.Temperature,
             TopP = command.TopP,

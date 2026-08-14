@@ -57,9 +57,15 @@ public sealed class ExploreBranchHandler
 
         // Use the prompt as user message and the forced token as the beginning of the assistant response.
         // This causes the model to continue generation from the forced token.
+        Result<string> model = ModelSelection.Resolve(instance);
+        if (model.IsFailure)
+        {
+            return Result<BranchExplorationDto>.Failure(model.Error);
+        }
+
         var chatRequest = new ChatRequest
         {
-            Model = instance.ModelId ?? "",
+            Model = model.Value,
             Messages =
             [
                 ChatMessage.User(command.Prompt),

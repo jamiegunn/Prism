@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Play, Clock, Cpu, Zap, Pin, Save, FolderOpen, Trash2, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Play, Clock, Cpu, Zap, Pin, Save, FolderOpen, Trash2, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -55,6 +55,7 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
       return stored ? JSON.parse(stored) : []
     } catch { return [] }
   })
+  const resultsRef = useRef<HTMLDivElement>(null)
   const [showSavedSets, setShowSavedSets] = useState(false)
   const [saveSetName, setSaveSetName] = useState('')
 
@@ -93,6 +94,26 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
     )
   }
 
+  /**
+   * Adds a result and brings it into view.
+   *
+   * The results used to sit at the very bottom of this panel, below the variables, the input
+   * sets, both test controls and four parameter sliders — several hundred pixels beneath the
+   * button that asked for them. Pressing Run therefore appeared to do nothing at all: the answer
+   * had arrived and rendered, off-screen, and the panel read as broken. They now sit directly
+   * under the controls that produce them, which is the part that does not depend on scrolling
+   * behaving; the scroll is the belt to that pair of braces, for a panel already scrolled down.
+   */
+  function addResult(pinned: PinnedResult) {
+    setResults((prev) => [pinned, ...prev])
+
+    // After paint, or the node being scrolled to does not exist yet. `start` rather than
+    // `nearest`: the newest result is the first in the list, so its top edge is what to show.
+    requestAnimationFrame(() =>
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    )
+  }
+
   async function handleTestSingle() {
     if (!testInstanceId) {
       toast.error('Select an inference instance')
@@ -111,13 +132,13 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
       {
         onSuccess: (data) => {
           const inst = instances?.find((i) => i.id === testInstanceId)
-          setResults((prev) => [{
+          addResult({
             id: `r-${Date.now()}`,
             instanceName: inst?.name ?? 'unknown',
             modelId: data.modelId,
             result: data,
             pinnedAt: Date.now(),
-          }, ...prev])
+          })
         },
         onError: (error) => toast.error(`Test failed: ${error.message}`),
       }
@@ -142,13 +163,13 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
           maxTokens: testMaxTokens,
         })
         const inst = instances?.find((i) => i.id === instanceId)
-        setResults((prev) => [{
+        addResult({
           id: `r-${Date.now()}-${instanceId}`,
           instanceName: inst?.name ?? 'unknown',
           modelId: data.modelId,
           result: data,
           pinnedAt: Date.now(),
-        }, ...prev])
+        })
       } catch (err) {
         const inst = instances?.find((i) => i.id === instanceId)
         toast.error(`${inst?.name ?? instanceId}: ${err instanceof Error ? err.message : 'failed'}`)
@@ -238,7 +259,9 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
                 onClick={handleTestSingle}
                 disabled={testMutation.isPending || !testInstanceId}
               >
-                <Play className="h-3 w-3" />
+                {testMutation.isPending && !isRunningMulti
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Play className="h-3 w-3" />}
               </Button>
             </div>
           </div>
@@ -272,46 +295,9 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
             </Button>
           </div>
 
-          {/* Parameters */}
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <label className="text-xs text-zinc-400">Temperature</label>
-                <span className="text-xs text-zinc-500 tabular-nums">{testTemperature}</span>
-              </div>
-              <Slider
-                value={testTemperature}
-                onChange={(e) => setTestTemperature(Number(e.target.value))}
-                min={0} max={2} step={0.1}
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <label className="text-xs text-zinc-400">Top P</label>
-                <span className="text-xs text-zinc-500 tabular-nums">{testTopP}</span>
-              </div>
-              <Slider
-                value={testTopP}
-                onChange={(e) => setTestTopP(Number(e.target.value))}
-                min={0} max={1} step={0.05}
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <label className="text-xs text-zinc-400">Max Tokens</label>
-                <span className="text-xs text-zinc-500 tabular-nums">{testMaxTokens}</span>
-              </div>
-              <Slider
-                value={testMaxTokens}
-                onChange={(e) => setTestMaxTokens(Number(e.target.value))}
-                min={1} max={8192} step={64}
-              />
-            </div>
-          </div>
-
           {/* Pinned results */}
           {results.length > 0 && (
-            <div className="space-y-2">
+            <div ref={resultsRef} className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-zinc-400">
                   Results ({results.length})
@@ -359,6 +345,43 @@ export function TestPanel({ templateId, version }: TestPanelProps) {
               ))}
             </div>
           )}
+          {/* Parameters */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <label className="text-xs text-zinc-400">Temperature</label>
+                <span className="text-xs text-zinc-500 tabular-nums">{testTemperature}</span>
+              </div>
+              <Slider
+                value={testTemperature}
+                onChange={(e) => setTestTemperature(Number(e.target.value))}
+                min={0} max={2} step={0.1}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <label className="text-xs text-zinc-400">Top P</label>
+                <span className="text-xs text-zinc-500 tabular-nums">{testTopP}</span>
+              </div>
+              <Slider
+                value={testTopP}
+                onChange={(e) => setTestTopP(Number(e.target.value))}
+                min={0} max={1} step={0.05}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <label className="text-xs text-zinc-400">Max Tokens</label>
+                <span className="text-xs text-zinc-500 tabular-nums">{testMaxTokens}</span>
+              </div>
+              <Slider
+                value={testMaxTokens}
+                onChange={(e) => setTestMaxTokens(Number(e.target.value))}
+                min={1} max={8192} step={64}
+              />
+            </div>
+          </div>
+
         </div>
       </ScrollArea>
     </div>

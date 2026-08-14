@@ -166,8 +166,9 @@ public sealed class StreamChatHandler
         // seeded conversations, which carry the placeholder "sample". Asking a real server for
         // "sample" is a 404 the Playground displayed as an empty answer in eight milliseconds,
         // while the picker and the status bar both named the model that should have run.
-        string requestModel = Coalesce(command.Model, instance.ModelId, conversation.ModelId)
-            ?? conversation.ModelId;
+        string requestModel = ModelSelection
+            .Resolve(instance, command.Model, instance.ModelId, conversation.ModelId)
+            .Match(model => model, _ => conversation.ModelId);
 
         // Kept on the conversation so its record of what it ran on stays true.
         if (!string.Equals(conversation.ModelId, requestModel, StringComparison.Ordinal))
@@ -372,12 +373,4 @@ public sealed class StreamChatHandler
 
         yield return new ChatCompleted(messageDto, conversationDto);
     }
-
-    /// <summary>
-    /// Returns the first candidate that carries an actual value, treating blank as absent.
-    /// </summary>
-    /// <param name="candidates">The candidates in order of preference.</param>
-    /// <returns>The first non-blank candidate, or null when every one is blank.</returns>
-    private static string? Coalesce(params string?[] candidates)
-        => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 }

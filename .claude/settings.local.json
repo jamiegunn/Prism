@@ -167,7 +167,15 @@
       "Bash(echo \"dev.sh exit: $?\")",
       "Bash(sed -e 's/\\\\x1b\\\\[[0-9;]*m//g' /tmp/fresh.log)",
       "Bash(lsof -nP -iTCP:5000 -sTCP:LISTEN)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git count-objects *)",
+      "Bash(git gc *)",
+      "Bash(awk '{print $1}')",
+      "Bash(git reflog *)",
+      "Bash(awk '{print \"  .git dir:\", $1}')",
+      "Bash(awk '{print \" \", $5, $9}')",
+      "Bash(./scripts/tests/models_test.sh)",
+      "Bash(echo \"dev.sh exit=$?\")"
     ]
   }
 }

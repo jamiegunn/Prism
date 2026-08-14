@@ -86,6 +86,18 @@ public sealed class RagPipelineHandler
         if (instance is null)
             return Error.NotFound($"Inference instance {command.InstanceId} not found.");
 
+        // The instance is the answer to "which model", and asking for one without naming a model
+        // is the ordinary case. Passing the caller's empty string through sent an empty model on
+        // the wire and returned Ollama's own `model is required` as a 503, which reads as an
+        // inference server problem rather than a missing field.
+        Result<string> resolvedModel = ModelSelection.Resolve(instance, command.Model);
+        if (resolvedModel.IsFailure)
+        {
+            return Result<RagPipelineResultDto>.Failure(resolvedModel.Error);
+        }
+
+        string requestModel = resolvedModel.Value;
+
         var sw = Stopwatch.StartNew();
 
         // Step 1: Retrieve relevant chunks
@@ -121,7 +133,7 @@ public sealed class RagPipelineHandler
 
         var chatRequest = new ChatRequest
         {
-            Model = command.Model,
+            Model = requestModel,
             Messages = messages,
             Temperature = command.Temperature ?? 0.1,
             MaxTokens = command.MaxTokens ?? 2048,
@@ -160,7 +172,7 @@ public sealed class RagPipelineHandler
             })),
             AssembledContext = context,
             GeneratedResponse = response.Content,
-            Model = command.Model,
+            Model = requestModel,
             LatencyMs = sw.ElapsedMilliseconds,
             TotalTokens = (response.Usage?.TotalTokens) ?? 0,
             IsSuccess = true
@@ -173,7 +185,10 @@ public sealed class RagPipelineHandler
             command.Query,
             response.Content,
             chunks,
-            command.Model,
+            // The model that ran, not the one that was asked for — those differ whenever the
+            // caller left it to the instance, and reporting the blank made the answer look
+            // like it came from nowhere.
+            requestModel,
             response.Usage?.PromptTokens ?? 0,
             response.Usage?.CompletionTokens ?? 0,
             sw.Elapsed.TotalMilliseconds,

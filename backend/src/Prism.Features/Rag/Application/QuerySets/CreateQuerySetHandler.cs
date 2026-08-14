@@ -44,7 +44,10 @@ public sealed class CreateQuerySetHandler
             return Error.Validation("Query set name is required.");
         }
 
-        if (command.Items.Count == 0)
+        // Null is treated as empty rather than trusted: an omitted `items` used to reach LINQ and
+        // return a 500 saying "Value cannot be null. (Parameter 'source')", which names an
+        // internal argument instead of the field the caller left out.
+        if (command.Items is not { Count: > 0 })
         {
             return Error.Validation("A query set needs at least one labelled query.");
         }
@@ -56,7 +59,7 @@ public sealed class CreateQuerySetHandler
                 return Error.Validation("Every item needs query text.");
             }
 
-            if (relevantIds.Count == 0)
+            if (relevantIds is not { Count: > 0 })
             {
                 return Error.Validation(
                     $"Query '{Truncate(queryText)}' has no relevant chunks labelled. " +

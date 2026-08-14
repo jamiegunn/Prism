@@ -59,9 +59,15 @@ public sealed class PredictNextTokenHandler
             messages.Add(ChatMessage.Assistant(command.AssistantPrefix));
         }
 
+        Result<string> model = ModelSelection.Resolve(instance);
+        if (model.IsFailure)
+        {
+            return Result<NextTokenPredictionDto>.Failure(model.Error);
+        }
+
         var chatRequest = new ChatRequest
         {
-            Model = instance.ModelId ?? "",
+            Model = model.Value,
             Messages = messages,
             MaxTokens = 1,
             Logprobs = true,

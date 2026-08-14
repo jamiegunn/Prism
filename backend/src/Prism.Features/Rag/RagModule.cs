@@ -63,7 +63,13 @@ public static class RagModule
         services.AddScoped<IEmbeddingProvider, OpenAiEmbeddingProvider>();
 
         // Seeders
+        services.AddScoped<RagSampleEmbedder>();
         services.AddScoped<IDataSeeder, RagSeeder>();
+
+        // Seeding happens before anything has been health-checked, so a first launch often has no
+        // reachable server yet. This tries again once there is one, which is the difference
+        // between semantic search working on a fresh install and working after a restart.
+        services.AddHostedService<RagSampleEmbeddingService>();
 
         return services;
     }

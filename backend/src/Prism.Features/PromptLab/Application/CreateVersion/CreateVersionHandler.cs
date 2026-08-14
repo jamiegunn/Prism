@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prism.Common.Results;
 using Prism.Features.PromptLab.Application.Dtos;
+using Prism.Features.PromptLab.Application.Rendering;
 using Prism.Features.PromptLab.Domain;
 
 namespace Prism.Features.PromptLab.Application.CreateVersion;
@@ -38,6 +39,20 @@ public sealed class CreateVersionHandler
         if (template is null)
         {
             return Error.NotFound($"Prompt template '{command.TemplateId}' was not found.");
+        }
+
+        // Caught here rather than at render time. A version referencing {{code}} without
+        // declaring it used to be accepted with a 201 and then refused by every attempt to run
+        // it, so the author learned about the mistake somewhere other than where they made it —
+        // and the version stayed in the history, permanently untestable.
+        List<string> undeclared = TemplateRenderer.FindUndeclared(
+            command.UserTemplate, (command.Variables ?? []).Select(v => v.Name));
+
+        if (undeclared.Count > 0)
+        {
+            return Error.Validation(
+                $"The template uses variables it does not declare: {string.Join(", ", undeclared)}. " +
+                "Declare them, or remove the placeholders.");
         }
 
         int nextVersion = template.LatestVersion + 1;

@@ -76,7 +76,12 @@ public sealed class CheckHealthHandler
             if (modelResult.IsSuccess)
             {
                 ModelInfo modelInfo = modelResult.Value;
-                instance.ModelId = modelInfo.ModelId;
+
+                if (await ShouldAdoptModelAsync(provider, instance, ct))
+                {
+                    instance.ModelId = modelInfo.ModelId;
+                }
+
                 instance.MaxContextLength = modelInfo.MaxContextLength;
                 instance.SupportsLogprobs = modelInfo.Capabilities.SupportsLogprobs;
                 instance.MaxTopLogprobs = modelInfo.Capabilities.MaxTopLogprobs;
@@ -106,5 +111,78 @@ public sealed class CheckHealthHandler
         }
 
         return InferenceInstanceDto.FromEntity(instance);
+    }
+
+    /// <summary>
+    /// Decides whether a health check may replace the model an instance is set to.
+    /// </summary>
+    /// <param name="provider">The provider being checked.</param>
+    /// <param name="instance">The instance as stored.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>
+    /// <see langword="true"/> when the instance has no model, or its model is definitely not on
+    /// the server any more.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This used to be unconditional, and for Ollama the server's answer is "whatever was pulled
+    /// most recently" — so a routine poll reassigned every instance whenever anything was
+    /// downloaded. Pulling an embedding model to make RAG work took every generative screen down
+    /// with <c>does not support chat</c>.
+    /// </para>
+    /// <para>
+    /// The one case worth overruling the stored value is a model that is genuinely gone, where
+    /// keeping it points at nothing. That needs the server's list, so a provider that cannot list
+    /// models keeps its instance's model untouched: an unanswered question is not evidence the
+    /// model disappeared.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> ShouldAdoptModelAsync(
+        IInferenceProvider provider, InferenceInstance instance, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(instance.ModelId))
+        {
+            return true;
+        }
+
+        // A model that cannot generate text is not a choice worth protecting — nothing in Prism
+        // asks an instance for an embedding, so this value can only ever fail. Installs that ran
+        // under the old health check are sitting on exactly that, and this is what repairs them.
+        bool? canChat = await (provider.As<IModelPurposeProbe>()?.CanGenerateTextAsync(instance.ModelId, ct)
+                               ?? Task.FromResult<bool?>(null));
+
+        if (canChat is false)
+        {
+            _logger.LogInformation(
+                "Instance {InstanceName} was set to {ModelId}, which cannot generate text; adopting a model that can",
+                instance.Name, instance.ModelId);
+
+            return true;
+        }
+
+        IHotReloadableProvider? lister = provider.As<IHotReloadableProvider>();
+        if (lister is null)
+        {
+            return false;
+        }
+
+        Result<IReadOnlyList<AvailableModel>> models = await lister.ListAvailableModelsAsync(ct);
+        if (models.IsFailure || models.Value.Count == 0)
+        {
+            return false;
+        }
+
+        bool stillThere = models.Value.Any(m =>
+            string.Equals(m.ModelId, instance.ModelId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(m.Name, instance.ModelId, StringComparison.OrdinalIgnoreCase));
+
+        if (!stillThere)
+        {
+            _logger.LogInformation(
+                "Instance {InstanceName} was set to {ModelId}, which {Endpoint} no longer has; adopting a model it does",
+                instance.Name, instance.ModelId, instance.Endpoint);
+        }
+
+        return !stillThere;
     }
 }

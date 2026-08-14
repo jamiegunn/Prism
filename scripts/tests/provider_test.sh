@@ -137,8 +137,13 @@ echo ""
 echo "=== I. detected-ollama present with a model — nothing to do ==="
 run_provider detected-ollama 1 0 1 1
 printf '%s\n' "$RUN_OUT" | sed 's/^/        /'
-check  "keeps the model it has"        "A model is already available" "$RUN_OUT"
-refute "pulls nothing"                 "PULLED" "$RUN_OUT"
+check  "keeps the chat model it has"   "mistral:7b-instruct is already available" "$RUN_OUT"
+refute "does not re-pull the chat model" "PULLED mistral:7b-instruct" "$RUN_OUT"
+
+# "Nothing to do" was only ever true of the chat model. A server holding one is
+# still missing the embedding model, and the old assertion that nothing at all
+# got pulled is precisely what let RAG ship unable to embed anything.
+check  "still fetches the embedding model" "PULLED nomic-embed-text" "$RUN_OUT"
 
 echo ""
 echo "=== J. container-ollama on a machine that already has the models ==="

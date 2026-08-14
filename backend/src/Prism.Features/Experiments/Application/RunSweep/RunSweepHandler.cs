@@ -78,13 +78,19 @@ public sealed class RunSweepHandler
         int failed = 0;
         List<Run> runs = [];
 
+        Result<string> sweepModel = ModelSelection.Resolve(instance, instance.ModelId, command.Model);
+        if (sweepModel.IsFailure)
+        {
+            return Result<SweepResultDto>.Failure(sweepModel.Error);
+        }
+
         for (int i = 0; i < combinations.Count; i++)
         {
             RunParameters paramSet = combinations[i];
 
             var chatRequest = new ChatRequest
             {
-                Model = instance.ModelId ?? command.Model ?? "",
+                Model = sweepModel.Value,
                 Messages = BuildMessages(command.SystemPrompt, command.Input),
                 Temperature = paramSet.Temperature,
                 TopP = paramSet.TopP,

@@ -103,12 +103,15 @@ public sealed class ReplaySingleHandler
         // did — meant that replaying a run against its own instance could silently swap the model
         // out from under the comparison, which makes the two responses unequal for a reason the
         // screen never named. The instance's model is used only when the record has none.
-        string? replayModel = Coalesce(command.OverrideModel, originalRequest.Model, instance.ModelId);
-        if (replayModel is null)
+        Result<string> resolved = ModelSelection.Resolve(
+            instance, command.OverrideModel, originalRequest.Model);
+
+        if (resolved.IsFailure)
         {
-            return Error.Validation(
-                "Neither the record nor the target instance names a model, so there is nothing to run.");
+            return Result<ReplayResultDto>.Failure(resolved.Error);
         }
+
+        string replayModel = resolved.Value;
 
         ChatRequest replayRequest = originalRequest with
         {
@@ -163,14 +166,6 @@ public sealed class ReplaySingleHandler
 
         return result;
     }
-
-    /// <summary>
-    /// Returns the first candidate that carries an actual value, treating blank strings as absent.
-    /// </summary>
-    /// <param name="candidates">The candidates in order of preference.</param>
-    /// <returns>The first non-blank candidate, or null when every one is blank.</returns>
-    private static string? Coalesce(params string?[] candidates)
-        => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 
     /// <summary>
     /// Deserializes a serialized ChatRequest JSON string back to a <see cref="ChatRequest"/> object.

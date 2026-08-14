@@ -153,6 +153,47 @@ public sealed class FakeHttpTransport : IHttpClientFactory
         });
 
     /// <summary>
+    /// Creates a transport that answers each request according to the first route whose fragment
+    /// appears in the request URL.
+    /// </summary>
+    /// <param name="routes">
+    /// Pairs of fragment and JSON body, tried in order. A fragment matches when it appears in
+    /// either the request URL or the request body — <c>/api/show</c> names its model in the body,
+    /// so routing on the URL alone cannot tell one model's answer from another's. A request
+    /// matching no route is answered with 404, which is what a server does for a path it does
+    /// not serve.
+    /// </param>
+    /// <returns>A configured transport.</returns>
+    /// <remarks>
+    /// Choosing a model takes two calls that must disagree — <c>/api/tags</c> for what exists and
+    /// <c>/api/show</c> for what each one can do — so a transport with a single canned body cannot
+    /// express the case at all.
+    /// </remarks>
+    public static FakeHttpTransport JsonByPath(params (string Fragment, string Json)[] routes)
+        => new(request =>
+        {
+            string url = request.RequestUri?.ToString() ?? "";
+            string body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            string target = url + " " + body;
+
+            foreach ((string fragment, string json) in routes)
+            {
+                if (target.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                    };
+                }
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent("{\"error\":\"not found\"}", Encoding.UTF8, "application/json"),
+            };
+        });
+
+    /// <summary>
     /// Creates a transport that fails every request, for exercising error paths.
     /// </summary>
     /// <returns>A configured transport.</returns>

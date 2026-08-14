@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCreateTemplate } from '../api'
+import { deriveVariables } from '../variables'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
@@ -59,6 +60,8 @@ export function CreateTemplateDialog() {
       {
         name: values.name,
         userTemplate: values.userTemplate,
+        // Writing {{name}} in the body is the declaration; there is nowhere else to make one.
+        variables: deriveVariables(values.userTemplate),
         category: values.category || undefined,
         description: values.description || undefined,
         systemPrompt: values.systemPrompt || undefined,

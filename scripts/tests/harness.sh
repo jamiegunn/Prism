@@ -11,6 +11,11 @@ BIN="$WORK/bin"
 
 # world <container 0|1> <native 0|1> <stop_works 0|1> <has_model 0|1>
 world() {
+  # Pulled models are world state too: without this they leak from one scenario
+  # into the next, and a test that sets up an empty server silently gets one
+  # holding whatever the previous scenario downloaded.
+  rm -f "$WORK/pulled"
+
   cat > "$STATE" <<EOF
 CONTAINER=$1
 NATIVE=$2
@@ -55,13 +60,26 @@ DOCKER
 cat > "$WORK/ollama-impl" <<'OLLAMA'
 #!/usr/bin/env bash
 . "$STATE"
+PULLED="$WORK/pulled"
 case "$1" in
   serve) sed -i.bak 's/^NATIVE=0/NATIVE=1/' "$STATE"; sleep 30 ;;
   list)
     echo "NAME  ID  SIZE"
-    [ "$HAS_MODEL" = 1 ] && echo "mistral:7b  abc  4GB"
+    [ "$HAS_MODEL" = 1 ] && echo "mistral:7b-instruct  abc  4GB"
+    # A pulled model is one the server has from then on, which is what makes
+    # "did it pull the same thing twice" an answerable question.
+    [ -f "$PULLED" ] && cat "$PULLED"
     ;;
-  pull) echo "PULLED $2" ;;
+  pull)
+    echo "PULLED $2"
+    # Ollama stores an untagged pull as name:latest; recording it any other way
+    # would let a bug that ignores the tag pass here and fail on a real machine.
+    case "$2" in
+      *:*) printf '%s  abc  1GB\n' "$2" >> "$PULLED" ;;
+      *)   printf '%s:latest  abc  1GB\n' "$2" >> "$PULLED" ;;
+    esac
+    ;;
+  --version) echo "ollama version is 0.32.6" ;;
 esac
 exit 0
 OLLAMA

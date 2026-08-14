@@ -71,11 +71,17 @@ public sealed class StructuredInferenceHandler
         if (instance is null)
             return Error.NotFound($"Inference instance {command.InstanceId} not found.");
 
+        Result<string> model = ModelSelection.Resolve(instance, command.Model);
+        if (model.IsFailure)
+        {
+            return Result<StructuredInferenceResultDto>.Failure(model.Error);
+        }
+
         var sw = Stopwatch.StartNew();
 
         var chatRequest = new ChatRequest
         {
-            Model = command.Model,
+            Model = model.Value,
             Messages = command.Messages,
             Temperature = command.Temperature ?? 0.1,
             MaxTokens = command.MaxTokens ?? 2048,

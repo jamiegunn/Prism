@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { useCreateVersion } from '../api'
 import type { PromptVersion } from '../types'
+import { deriveVariables } from '../variables'
 
 interface VersionSelectorProps {
   versions: PromptVersion[]
@@ -33,6 +34,10 @@ export function VersionSelector({
   const [newNotes, setNewNotes] = useState('')
   const createVersion = useCreateVersion()
 
+  // The version being worked from, so its variable definitions carry into the new one.
+  const currentVariables =
+    versions.find((v) => v.version === currentVersion)?.variables ?? []
+
   function handleCreate() {
     if (!newTemplate.trim()) {
       toast.error('Template body is required')
@@ -42,6 +47,9 @@ export function VersionSelector({
       {
         templateId,
         userTemplate: newTemplate,
+        // Carried forward from the version being edited, so a type or default set earlier
+        // survives a change to the body instead of resetting to a bare required string.
+        variables: deriveVariables(newTemplate, currentVariables),
         systemPrompt: newSystemPrompt || undefined,
         notes: newNotes || undefined,
       },

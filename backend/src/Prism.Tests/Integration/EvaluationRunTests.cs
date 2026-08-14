@@ -260,10 +260,13 @@ public sealed class EvaluationRunTests
 
     private static async Task SeedInstanceAsync(AppDbContext db)
     {
-        if (await db.Set<InferenceInstance>().AnyAsync())
-        {
-            return;
-        }
+        // Was "add one only if the table is empty", which meant borrowing whatever instance an
+        // earlier test had left behind. The scored answers here are parsed by whichever provider
+        // that instance names, so inheriting an Ollama-typed row made an OpenAI-shaped fake reply
+        // parse as nothing and every exact-match score come out zero — a failure in this file
+        // caused entirely by a different one. The tests in this collection run one at a time, so
+        // owning the precondition outright is both safe and the only order-independent option.
+        await db.Set<InferenceInstance>().ExecuteDeleteAsync();
 
         db.Set<InferenceInstance>().Add(new InferenceInstance
         {

@@ -120,6 +120,16 @@ public sealed class BatchJobHandler : IJobHandler
                 "No inference instance is registered, so there is nothing to run the batch against.");
         }
 
+        // The batch records the model it was created with; the instance is the fallback for a
+        // batch that never named one, so a blank never reaches the server as `model is required`.
+        Result<string> batchModelResult = ModelSelection.Resolve(instance, batch.Model);
+        if (batchModelResult.IsFailure)
+        {
+            throw new InvalidOperationException(batchModelResult.Error.Message);
+        }
+
+        string batchModel = batchModelResult.Value;
+
         IInferenceProvider provider = _providerFactory.CreateProvider(
             instance.Name, instance.Endpoint, instance.ProviderType);
 
@@ -149,7 +159,7 @@ public sealed class BatchJobHandler : IJobHandler
                 return;
             }
 
-            BatchResult result = await RunRecordAsync(batch, record, provider, ct);
+            BatchResult result = await RunRecordAsync(batch, batchModel, record, provider, ct);
 
             if (reusableResults.TryGetValue(record.Id, out BatchResult? prior))
             {
@@ -244,7 +254,11 @@ public sealed class BatchJobHandler : IJobHandler
             .FirstAsync(ct);
 
     private async Task<BatchResult> RunRecordAsync(
-        BatchJob batch, DatasetRecord record, IInferenceProvider provider, CancellationToken ct)
+        BatchJob batch,
+        string batchModel,
+        DatasetRecord record,
+        IInferenceProvider provider,
+        CancellationToken ct)
     {
         string input = ExtractInput(record);
 
@@ -261,7 +275,7 @@ public sealed class BatchJobHandler : IJobHandler
         Result<ChatResponse> response = await provider.ChatAsync(
             new ChatRequest
             {
-                Model = batch.Model,
+                Model = batchModel,
                 Messages = [ChatMessage.User(input)],
                 Logprobs = batch.CaptureLogprobs,
                 SourceModule = "batch-inference",

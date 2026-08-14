@@ -174,10 +174,8 @@ public sealed class OllamaLogprobsTests
             }
 
             string body = await tags.Content.ReadAsStringAsync();
-            string? model = JsonNode.Parse(body)?["models"]?.AsArray()
-                .FirstOrDefault()?["name"]?.GetValue<string>();
 
-            if (model is null)
+            if (JsonNode.Parse(body)?["models"]?.AsArray().Count is null or 0)
             {
                 return Unavailable("Ollama is running but has no models pulled.");
             }
@@ -189,7 +187,19 @@ public sealed class OllamaLogprobsTests
 
             await provider.CheckHealthAsync(CancellationToken.None);
 
-            return (provider, model);
+            // Asking the provider rather than taking the first tag. /api/tags is ordered
+            // newest-pulled first, so this test used to send a chat to whatever had been
+            // downloaded most recently — which after an embedding model was pulled meant
+            // `does not support chat`, a red suite reporting a fault in logprobs that was
+            // really a fault in the choosing.
+            Result<ModelInfo> modelInfo = await provider.GetModelInfoAsync(CancellationToken.None);
+
+            if (modelInfo.IsFailure)
+            {
+                return Unavailable(modelInfo.Error.Message);
+            }
+
+            return (provider, modelInfo.Value.ModelId);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

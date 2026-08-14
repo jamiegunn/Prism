@@ -188,12 +188,21 @@ start taking seconds, that is why, and no setting on this page will fix it.
 
 ---
 
-## There is no generation step in the UI
+## The generation step
 
-The tab is called **Search & RAG**. Only the retrieval half is wired up. There is no answer box,
-no model selector, and no way to send retrieved chunks to a model from this page.
+The tab is called **Search & RAG**, and both halves now work. Under the search box, **Answer
+with** picks a server and **Retrieve & answer** runs the whole pipeline: retrieve, assemble the
+context, generate. The answer appears above its sources with the model, token count and latency,
+so you can see what produced it and read the chunks it was grounded in.
 
-The end-to-end pipeline does exist in the API:
+For a long time only the retrieval half was wired up. The endpoint, the `useRagPipeline` hook and
+the `RagPipelineResult` type all existed, and nothing called them — the page retrieved chunks and
+stopped, on the tab named after doing more than that. The endpoint was also unusable without
+naming a model explicitly: it passed the request's model straight through, so leaving it out sent
+an empty one and came back as a 503 carrying Ollama's own `model is required`. It now falls back
+to the model the chosen instance runs, which is what the instance is for.
+
+The same pipeline is available directly:
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/rag/collections/<collection-id>/rag \
@@ -216,6 +225,8 @@ Points worth knowing:
 - **`instanceId` is required** and must be a real registered instance — get one from
   `GET /api/v1/models/instances`. Unlike Evaluation and Batch Inference, this endpoint lets you
   choose, and refuses if the ID does not exist.
+- **`model` is optional.** Omit it and the instance's own model is used. Naming one overrides
+  that. If neither names a model, the failure says so rather than passing a blank to the server.
 - Defaults are **temperature 0.1** and **2048 max tokens** when you pass `null`. Logprobs are
   requested with 5 alternatives per token, so the call also produces the data the
   [Playground](playground.md) analysis views use, viewable afterwards in
@@ -318,9 +329,9 @@ endpoint and looking at the generated answer.
 
 | # | Presupposition | Holds on a cold install? | Evidence |
 |---|---|---|---|
-| P1 | The seeded collection is searchable — it says Ready, 1 doc, 3 chunks | **Not by vector or hybrid.** Every seeded chunk has a null embedding while the collection reads Ready, and vector search filters nulls out | `RagSeeder.cs:80,94,108`; `QueryCollectionHandler.cs:89` |
-| P2 | Embeddings go to the server you are running | **Yes when a default instance is set** — the provider now prefers the default instance, then the oldest; with nothing registered it falls back to :8000 | `OpenAiEmbeddingProvider.ResolveBaseUrlAsync` |
-| P3 | …and the URL is right | **No.** The base already ends in `/v1` and `/v1/embeddings` is appended, giving `/v1/v1/embeddings` | `OpenAiEmbeddingProvider.cs:102` |
+| P1 | The seeded collection is searchable — it says Ready, 1 doc, 3 chunks | **Yes now.** The seeder embeds the sample, and retries shortly after startup when no server was reachable in time; when it still cannot, the document reads Pending with the reason rather than Ready. It used to write null embeddings and mark itself Completed, so vector search returned nothing on the only collection a new user has | `RagSampleEmbedder`, `RagSampleEmbeddingService`, `RagSeedEmbeddingTests` |
+| P2 | Embeddings go to the server you are running | **Yes.** Reachable first, then the default, then the oldest. "Default, then oldest" tied on the two seeded instances and picked the offline vLLM, which is how a fresh install came up unembedded with `Connection refused (…:8000)` | `An_Offline_Instance_Is_Not_Preferred_Over_A_Reachable_One` |
+| P3 | …and the URL is right | **Yes now.** An endpoint already ending in `/v1` is not given a second one. It was `/v1/v1/embeddings` before, so embeddings could never work against vLLM or LM Studio, which both publish their `/v1` | `The_Embedding_Url_Carries_Exactly_One_V1` |
 | P4 | BM25 needs no embedding server | True for BM25; **false for hybrid**, which aborts on the vector failure instead of degrading to the half it already computed | `QueryCollectionHandler.cs:137-139` |
 | P5 | The distance metric chosen for a collection is used | **No.** Cosine/Euclidean/InnerProduct are offered, stored, and never read — search is always cosine | `QueryCollectionHandler.cs:90,97` |
 | P6 | The default new-collection settings will work here | **No.** They default to OpenAI's `text-embedding-3-small` at 1536 dims, and there is no OpenAI key path | `CreateCollectionDialog.tsx:12-13` |
@@ -334,19 +345,24 @@ endpoint and looking at the generated answer.
 | R3 | A search that could not run shows an error naming the failure | browser check with a forced failure | MET |
 | R4 | A search that ran and matched nothing shows an empty state, not an error | BM25 for a nonsense term | MET |
 | R5 | With nothing configured, embedding goes to a registered instance rather than a hardcoded address | `Embeddings_Go_To_The_Registered_Instance_When_Unconfigured` | MET |
-| R6 | Vector search returns a chunk on the seeded collection when an embedding server is available | none — the seeded chunks have no embeddings | **UNMET** |
+| R6 | Vector search returns a chunk on the seeded collection when an embedding server is available | `RagSeedEmbeddingTests`; browser-verified after a full delete and fresh install — vector 3 hits, BM25 2, hybrid 3 | MET |
 | R7 | Hybrid returns its BM25 half when embedding is unavailable | none — it returns the vector failure | **UNMET** |
-| R8 | The embedding URL contains exactly one `/v1` when the endpoint already ends in `/v1` | none | **UNMET** |
+| R8 | The embedding URL contains exactly one `/v1` when the endpoint already ends in `/v1` | `The_Embedding_Url_Carries_Exactly_One_V1` (4 cases, mutation-checked) | MET |
 | R9 | A collection created with Euclidean ranks by Euclidean distance | none — always cosine | **UNMET** |
-| R10 | An unknown collection id says the collection is missing | none — "Loading collection…" forever | **UNMET** |
+| R10 | An unknown collection id says the collection is missing | the page reports it and offers the way back; 4xx responses are no longer retried, so it says so promptly | MET |
 | R11 | A document whose ingest failed appears marked Failed without a manual refresh | none — the client invalidates only on success | **UNMET** |
 | R12 | Retrieval quality is measurable against ground truth | the Evaluate tab scores vector/BM25/hybrid over a labelled query set with precision@k, recall@k, MRR and nDCG@k; metrics proved by hand-worked examples (incl. both nDCG truncation directions and duplicate-id ties), invariants (recall non-decreasing in k, ideal ranking nDCG exactly 1, bounds), and a live end-to-end test against real pgvector (`RetrievalMetricsTests`, `RetrievalEvaluationTests`, mutation-checked); browser-verified | MET |
 | R13 | Labelled query sets are validated against the collection | creating a set rejects empty items, unlabelled queries, and chunk ids from another collection (`Labels_Must_Belong_To_The_Collection`) | MET |
 | R14 | A mode that cannot run reports why instead of scoring zero | vector/hybrid on an unembedded collection return "could not be evaluated" with the reason and no metrics; BM25 still evaluates (`Unembedded_Collection_Reports_Vector_Unavailable_Not_Zero`); browser-verified on the seeded collection | MET |
 | R15 | Ground truth can be built without leaving the page | the New query set flow searches (BM25 ∪ vector, deduplicated, so labelling is not biased to one mode), ticks relevant chunks, and saves — with the vector half's absence stated when embeddings are missing | MET |
 
+| R16 | The page answers from the retrieved context, not just retrieves | Answer with → Retrieve & answer; browser-verified end to end (mistral:7b-instruct, 3 chunks, answer shown above its sources) | MET |
+| R17 | The answer step runs without naming a model explicitly | `An_Unnamed_Model_Falls_Back_To_The_Instance`; it used to send a blank model and surface Ollama's `model is required` as a 503 | MET |
+| R18 | A query set sent with no items is a 400, not a 500 | `A_Query_Set_With_No_Items_Is_A_Validation_Error`, `An_Item_With_Null_Labels_Is_A_Validation_Error` | MET |
+| R19 | The embedding model is present on a cold install | `models_test.sh` cases A/B/D — `ensure_ollama_model` used to return early if *any* model existed, so the embedding model was never pulled on a machine that already had a chat model | MET |
+
 ### Withdrawn
 
 | # | Requirement | Why withdrawn | Decided by |
 |---|---|---|---|
-| W1 | This page generates an answer from the retrieved context | The pipeline endpoint and `useRagPipeline` exist and nothing calls them. The page is retrieval, deliberately — but the unused hook and the `RagTrace` table it alone writes should be removed or documented as API-only, not left as an accident | this review |
+| W1 | ~~This page generates an answer from the retrieved context~~ | **Reinstated and now MET.** It was withdrawn on the reasoning that the page is retrieval-only by design, with the note that the dangling hook should be "removed or documented as API-only, not left as an accident". Resolved the other way: the tab is called Search & RAG, the endpoint was fixed (it could not run without an explicit model), and Retrieve & answer now calls it. Recorded here rather than quietly deleted, because reversing an earlier decision is worth being able to see | reinstated when Prompt Lab and RAG were gone through end to end |

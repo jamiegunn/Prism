@@ -128,8 +128,11 @@ export function useVersionDiff(templateId: string, v1: number, v2: number) {
   return useQuery({
     queryKey: [...versionsKey(templateId), 'diff', v1, v2],
     queryFn: () =>
+      // `/diff`, not `/versions/diff` — the latter is not a route, so every diff was a 404 and
+      // the panel showed its "select two versions" placeholder rather than an error, which made
+      // a broken call look like a control nobody had used yet.
       apiClient<VersionDiff>(
-        `/prompts/${templateId}/versions/diff?v1=${v1}&v2=${v2}`
+        `/prompts/${templateId}/diff?v1=${v1}&v2=${v2}`
       ),
     enabled: !!templateId && v1 > 0 && v2 > 0 && v1 !== v2,
   })

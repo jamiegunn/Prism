@@ -127,20 +127,51 @@ host_ollama_store() {
   printf '%s' "$store"
 }
 
-# Pulls a model when the server has none, because a running Ollama with an
-# empty model list produces exactly the same empty screens as no Ollama at all.
+# Whether a specific model is on the server. Ollama writes an untagged pull as
+# `name:latest`, so `nomic-embed-text` and `nomic-embed-text:latest` are the same
+# model under two spellings and both have to match.
+_prism_has_model() {
+  local prefix="$1" model="$2" bare="${2%:latest}"
+
+  ${prefix}ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' \
+    | grep -qxE "$(printf '%s' "$bare" | sed 's/[.[\*^$]/\\&/g')(:latest)?"
+}
+
+# Pulls the models Prism needs, one purpose at a time.
+#
+# This used to ask whether the server had *any* model and stop there. Two
+# different things are needed — something that can hold a conversation and
+# something that can embed — and one of them being present says nothing about
+# the other. On every machine that already had a chat model, the embedding model
+# was therefore never fetched, and RAG could not answer a single semantic query
+# on any install, ever: `Embedding request failed: NotFound`, or worse, a search
+# that returned nothing at all and looked like bad relevance.
+ensure_ollama_models() {
+  local prefix="$1"
+
+  ensure_ollama_model "$prefix" "${2:-$PRISM_MODEL}" "chat"
+  ensure_ollama_model "$prefix" "${3:-$PRISM_EMBED_MODEL}" "embedding"
+  warn_if_ollama_lacks_logprobs "$prefix"
+}
+
+# Pulls one model when the server does not have it.
 # The prefix lets the same logic drive the host binary and the container.
 ensure_ollama_model() {
-  local prefix="$1" model="$2"
+  local prefix="$1" model="$2" purpose="${3:-chat}"
 
-  if ${prefix}ollama list 2>/dev/null | tail -n +2 | grep -qE '\S'; then
-    ok "A model is already available."
+  if [ -z "$model" ]; then
+    case "$purpose" in
+      embedding) model="nomic-embed-text" ;;
+      *)         model="mistral:7b-instruct" ;;
+    esac
+  fi
+
+  if _prism_has_model "$prefix" "$model"; then
+    ok "$model is already available."
     return 0
   fi
 
-  [ -n "$model" ] || model="mistral:7b-instruct"
-
-  step "Pulling $model (first run only — this downloads a few GB)..."
+  step "Pulling $model for $purpose (first run only)..."
   if ${prefix}ollama pull "$model"; then
     ok "$model is ready."
   else
@@ -162,14 +193,21 @@ ensure_ollama_model() {
     else
       warn "Do it yourself with:  ${prefix}ollama pull $model"
     fi
-  fi
 
-  # Ollama gained logprobs in 0.12.11. Before that Prism told everyone here that
-  # token-level views needed vLLM — which on an Apple Silicon Mac was advice to
-  # run something that cannot run there at all.
+    if [ "$purpose" = "embedding" ]; then
+      warn "Without it, RAG Workbench can search by keyword but not by meaning."
+    fi
+  fi
+}
+
+# Ollama gained logprobs in 0.12.11. Before that Prism told everyone here that
+# token-level views needed vLLM — which on an Apple Silicon Mac was advice to
+# run something that cannot run there at all.
+warn_if_ollama_lacks_logprobs() {
+  local prefix="$1" version
+
   # `|| true` is load-bearing: with `set -o pipefail`, a grep that matches nothing
   # fails the whole pipeline and would take the launcher down with it.
-  local version
   version="$(${prefix}ollama --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
 
   if [ -n "$version" ] && ! prism_version_at_least "$version" 0.12.11; then
@@ -214,7 +252,7 @@ start_native_ollama() {
   if _prism_port_open localhost 11434; then
     ok "Ollama is listening on 11434."
     PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-    ensure_ollama_model "" "$PRISM_MODEL"
+    ensure_ollama_models ""
     return 0
   fi
 
@@ -253,7 +291,7 @@ start_container_ollama() {
   if _prism_port_open localhost 11434; then
     ok "Ollama is listening on 11434."
     PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-    ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+    ensure_ollama_models "docker exec prism-ollama "
     return 0
   fi
 
@@ -303,6 +341,10 @@ PRISM_APP_RUNTIME="${PRISM_APP_RUNTIME:-containers}"
 PRISM_PROVIDER="${PRISM_PROVIDER:-later}"
 PRISM_API_PORT_PREF="${PRISM_API_PORT_PREF:-5000}"
 PRISM_MODEL="${PRISM_MODEL:-}"
+# Retrieval needs a model that embeds, which is a different model from the one that
+# chats. Left configurable, but it has a default because a blank here means RAG
+# silently cannot answer anything.
+PRISM_EMBED_MODEL="${PRISM_EMBED_MODEL:-nomic-embed-text}"
 PRISM_OLLAMA_MEMORY_GIB="${PRISM_OLLAMA_MEMORY_GIB:-}"
 PRISM_REMOTE_URL="${PRISM_REMOTE_URL:-}"
 
@@ -543,6 +585,7 @@ PRISM_APP_RUNTIME=$PRISM_APP_RUNTIME
 PRISM_PROVIDER=$PRISM_PROVIDER
 PRISM_API_PORT_PREF=$PRISM_API_PORT_PREF
 PRISM_MODEL=$PRISM_MODEL
+PRISM_EMBED_MODEL=$PRISM_EMBED_MODEL
 PRISM_OLLAMA_MEMORY_GIB=${PRISM_OLLAMA_MEMORY_GIB:-$memory_default}
 PRISM_REMOTE_URL=$PRISM_REMOTE_URL
 EOF
@@ -635,7 +678,7 @@ run_self_checks() {
   local out rc
 
   step "Checking the launcher itself..."
-  for suite in menu provider; do
+  for suite in menu provider models; do
     out="$("$ROOT/scripts/tests/${suite}_test.sh" 2>&1)"; rc=$?
     if [ $rc -eq 0 ]; then
       ok "$(printf '%s' "$out" | grep -E "^  ${suite}:" | sed 's/^ *//')"
@@ -906,7 +949,7 @@ if ! $FRONTEND_ONLY; then
           # A server with no model is the same empty Playground as no server,
           # and "already running" is exactly the case where nobody checked.
           if [ "$ctype" = "Ollama" ]; then
-            ensure_ollama_model "$(ollama_command_prefix)" "$PRISM_MODEL"
+            ensure_ollama_models "$(ollama_command_prefix)"
           fi
         else
           # Saved from a previous run, but gone now. Saying so and carrying on
@@ -941,7 +984,7 @@ if ! $FRONTEND_ONLY; then
         warn "The container still holds port 11434, so this is the container, not Metal."
         warn "Stop it yourself and run again:  docker compose --profile ollama stop ollama"
         PROVIDER_ENDPOINT="http://localhost:11434"; PROVIDER_TYPE="Ollama"
-        ensure_ollama_model "docker exec prism-ollama " "$PRISM_MODEL"
+        ensure_ollama_models "docker exec prism-ollama "
       else
         start_native_ollama || true
       fi
@@ -959,7 +1002,7 @@ if ! $FRONTEND_ONLY; then
         # Still the native server's model list that matters, so pull into it —
         # registering an endpoint whose model is missing opens an empty
         # Playground, which is the thing this whole step exists to avoid.
-        ensure_ollama_model "" "$PRISM_MODEL"
+        ensure_ollama_models ""
       else
         start_container_ollama || true
       fi

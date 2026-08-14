@@ -138,7 +138,7 @@ public static class RagEndpoints
             id,
             request.Name,
             request.Description,
-            request.Items.Select(i => (i.QueryText, i.RelevantChunkIds)).ToList());
+            (request.Items ?? []).Select(i => (i.QueryText, i.RelevantChunkIds)).ToList());
 
         Result<RagQuerySetDto> result = await handler.HandleAsync(command, ct);
 

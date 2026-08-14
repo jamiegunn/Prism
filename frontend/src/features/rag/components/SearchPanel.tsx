@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Sparkles } from 'lucide-react'
 import { describeMutationError } from '@/services/mutationErrors'
-import { useQueryCollection } from '../api'
-import type { ChunkSearchResult } from '../types'
+import { useInstances } from '@/features/models/api'
+import { useDefaultInstance } from '@/features/models/useDefaultInstance'
+import { useQueryCollection, useRagPipeline } from '../api'
+import type { ChunkSearchResult, RagPipelineResult } from '../types'
 
 interface SearchPanelProps {
   collectionId: string
@@ -17,14 +19,41 @@ export function SearchPanel({ collectionId }: SearchPanelProps) {
   // indistinguishable from an empty corpus.
   const [results, setResults] = useState<ChunkSearchResult[] | null>(null)
 
+  // The other half of "Search & RAG". The endpoint, the client hook and the result type all
+  // existed; nothing called them, so the tab retrieved chunks and stopped — the R in RAG with
+  // no G, on the page named after it.
+  const [answer, setAnswer] = useState<RagPipelineResult | null>(null)
+  const [instanceId, setInstanceId] = useState<string | null>(null)
+
+  const { data: instances } = useInstances()
+  useDefaultInstance(instanceId, setInstanceId)
+
   const queryCollection = useQueryCollection(collectionId)
+  const ragPipeline = useRagPipeline(collectionId)
 
   const handleSearch = () => {
     if (!queryText.trim()) return
     setResults(null)
+    setAnswer(null)
     queryCollection.mutate(
       { queryText, topK, searchType },
       { onSuccess: (data) => setResults(data) }
+    )
+  }
+
+  const handleAnswer = () => {
+    if (!queryText.trim() || !instanceId) return
+    setAnswer(null)
+    ragPipeline.mutate(
+      // No model named: the instance's own is used. Sending a blank one used to reach the
+      // inference server as `model is required` and surface as a 503.
+      { query: queryText, model: '', instanceId, topK, searchType },
+      {
+        onSuccess: (data) => {
+          setAnswer(data)
+          setResults(data.retrievedChunks)
+        },
+      }
     )
   }
 
@@ -59,13 +88,63 @@ export function SearchPanel({ collectionId }: SearchPanelProps) {
           className="rounded bg-violet-600 px-4 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-50"
           onClick={handleSearch}
           disabled={queryCollection.isPending || !queryText.trim()}
+          title="Retrieve matching chunks"
         >
           <Search className="h-4 w-4" />
         </button>
       </div>
 
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-500">Answer with</span>
+        <select
+          className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-50"
+          value={instanceId ?? ''}
+          onChange={(e) => setInstanceId(e.target.value || null)}
+        >
+          <option value="">Select a server...</option>
+          {instances?.map((instance) => (
+            <option key={instance.id} value={instance.id}>
+              {instance.name}
+              {instance.modelId ? ` (${instance.modelId})` : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          className="flex items-center gap-1.5 rounded border border-violet-700 px-3 py-1 text-xs text-violet-300 hover:bg-violet-950/40 disabled:opacity-50"
+          onClick={handleAnswer}
+          disabled={ragPipeline.isPending || !queryText.trim() || !instanceId}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {ragPipeline.isPending ? 'Generating...' : 'Retrieve & answer'}
+        </button>
+      </div>
+
       {queryCollection.isPending && (
         <p className="text-sm text-zinc-500">Searching...</p>
+      )}
+
+      {ragPipeline.isError && !ragPipeline.isPending && (
+        <div className="rounded border border-red-900/60 bg-red-950/40 p-3 text-sm">
+          <p className="font-medium text-red-300">The answer could not be generated.</p>
+          <p className="mt-1 text-red-200/80">{describeMutationError(ragPipeline.error)}</p>
+        </div>
+      )}
+
+      {answer && (
+        <div className="rounded border border-violet-900/60 bg-violet-950/20 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-violet-300">Answer</span>
+            <span className="text-xs text-zinc-500">
+              {answer.model} &middot; {answer.promptTokens + answer.completionTokens} tokens
+              &middot; {Math.round(answer.latencyMs)}ms
+            </span>
+          </div>
+          <p className="whitespace-pre-wrap text-sm text-zinc-200">{answer.generatedResponse}</p>
+          <p className="mt-2 text-xs text-zinc-500">
+            Grounded in the {answer.retrievedChunks.length} chunk
+            {answer.retrievedChunks.length === 1 ? '' : 's'} below.
+          </p>
+        </div>
       )}
 
       {queryCollection.isError && !queryCollection.isPending && (

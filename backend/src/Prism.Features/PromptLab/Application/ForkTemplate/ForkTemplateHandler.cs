@@ -36,15 +36,23 @@ public sealed class ForkTemplateHandler
     /// <returns>A result containing the new template with version DTO.</returns>
     public async Task<Result<PromptTemplateWithVersionDto>> HandleAsync(ForkTemplateCommand command, CancellationToken ct)
     {
-        PromptVersion? sourceVersion = await _db.Set<PromptVersion>()
+        IQueryable<PromptVersion> versions = _db.Set<PromptVersion>()
             .AsNoTracking()
             .Include(v => v.Template)
-            .FirstOrDefaultAsync(v => v.TemplateId == command.SourceTemplateId && v.Version == command.SourceVersion, ct);
+            .Where(v => v.TemplateId == command.SourceTemplateId);
+
+        // "Fork this template" with no version named means the latest one. Taking the number
+        // literally meant looking for version 0, which has never existed for any template, and
+        // reporting it missing — an error naming a version the caller had not asked for.
+        PromptVersion? sourceVersion = command.SourceVersion > 0
+            ? await versions.FirstOrDefaultAsync(v => v.Version == command.SourceVersion, ct)
+            : await versions.OrderByDescending(v => v.Version).FirstOrDefaultAsync(ct);
 
         if (sourceVersion is null)
         {
-            return Result<PromptTemplateWithVersionDto>.Failure(
-                Error.NotFound($"Version {command.SourceVersion} of template {command.SourceTemplateId} not found."));
+            return Result<PromptTemplateWithVersionDto>.Failure(command.SourceVersion > 0
+                ? Error.NotFound($"Version {command.SourceVersion} of template {command.SourceTemplateId} not found.")
+                : Error.NotFound($"Template {command.SourceTemplateId} has no versions to fork."));
         }
 
         PromptTemplate sourceTemplate = sourceVersion.Template!;

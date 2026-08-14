@@ -13,7 +13,7 @@ namespace Prism.Common.Inference.Providers;
 /// the OpenAI-compatible format. Implements <see cref="IHotReloadableProvider"/> for model
 /// loading and unloading support.
 /// </summary>
-public sealed class OllamaProvider : IHotReloadableProvider
+public sealed class OllamaProvider : IHotReloadableProvider, IModelPurposeProbe
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<OllamaProvider> _logger;
@@ -451,12 +451,44 @@ public sealed class OllamaProvider : IHotReloadableProvider
                 return Error.NotFound("No models available on Ollama.");
             }
 
-            AvailableModel firstModel = models[0];
-            return new ModelInfo(
-                ModelId: firstModel.ModelId,
-                OwnedBy: "ollama",
-                MaxContextLength: 4096,
-                Capabilities: Capabilities);
+            // Ollama lists newest-pulled first, so models[0] is "whatever was downloaded last".
+            // Taking it unconditionally meant one unrelated pull could repoint every instance at
+            // an embedding model, and an embedding model cannot hold a conversation at all: the
+            // failure surfaced far away, as `does not support chat`, on every generative screen.
+            //
+            // Largest first among the rest. This only ever settles the case where no model has
+            // been chosen, and there download order says nothing while size says something: a
+            // 4.4GB pull is deliberate in a way a 400MB one is not. Ordering is stable, so a
+            // server that reports no sizes keeps the order it gave.
+            List<AvailableModel> candidates = [.. models.OrderByDescending(m => m.Size ?? 0)];
+
+            foreach (AvailableModel candidate in candidates)
+            {
+                IReadOnlyList<string>? capabilities = await ReadCapabilitiesAsync(candidate.ModelId, ct);
+
+                // No answer is not a "no". Older servers have no capabilities field and some have
+                // no /api/show at all; treating silence as disqualifying would take working setups
+                // offline over a missing field, so an unreadable model is used as before.
+                if (capabilities is null || !IsEmbeddingOnly(capabilities))
+                {
+                    return new ModelInfo(
+                        ModelId: candidate.ModelId,
+                        OwnedBy: "ollama",
+                        MaxContextLength: 4096,
+                        Capabilities: Capabilities);
+                }
+
+                _logger.LogDebug(
+                    "Skipping {ModelId} at {Endpoint}: it is an embedding model",
+                    candidate.ModelId, Endpoint);
+            }
+
+            _logger.LogWarning(
+                "Ollama at {Endpoint} has only embedding models installed", Endpoint);
+
+            return Error.NotFound(
+                "This Ollama server has only embedding models installed, which cannot generate " +
+                "text. Pull a chat model — for example `ollama pull mistral:7b-instruct`.");
         }
         catch (Exception ex)
         {
@@ -464,6 +496,77 @@ public sealed class OllamaProvider : IHotReloadableProvider
             return Error.Unavailable($"Failed to get model info: {ex.Message}");
         }
     }
+
+    /// <inheritdoc />
+    public async Task<bool?> CanGenerateTextAsync(string modelId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return null;
+        }
+
+        IReadOnlyList<string>? capabilities = await ReadCapabilitiesAsync(modelId, ct);
+
+        return capabilities is null ? null : !IsEmbeddingOnly(capabilities);
+    }
+
+    /// <summary>
+    /// Reads what a model is capable of, as the server reports it.
+    /// </summary>
+    /// <param name="modelId">The model to ask about.</param>
+    /// <param name="ct">A token to cancel the operation.</param>
+    /// <returns>
+    /// The capability names, or <see langword="null"/> when the server does not say — an older
+    /// Ollama, a server without <c>/api/show</c>, or any failure reaching it.
+    /// </returns>
+    private async Task<IReadOnlyList<string>?> ReadCapabilitiesAsync(string modelId, CancellationToken ct)
+    {
+        try
+        {
+            string requestJson = JsonSerializer.Serialize(new { model = modelId });
+            using StringContent content = new(requestJson, Encoding.UTF8, "application/json");
+            using HttpResponseMessage response = await _httpClient.PostAsync(
+                $"{Endpoint}/api/show", content, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            string json = await response.Content.ReadAsStringAsync(ct);
+            JsonArray? capabilities = JsonNode.Parse(json)?["capabilities"]?.AsArray();
+
+            if (capabilities is null)
+            {
+                return null;
+            }
+
+            return [.. capabilities
+                .Select(node => node?.GetValue<string>())
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Select(name => name!)];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Could not read capabilities for {ModelId} at {Endpoint}", modelId, Endpoint);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Decides whether a model can only produce embeddings.
+    /// </summary>
+    /// <param name="capabilities">The capability names the server reported.</param>
+    /// <returns><see langword="true"/> when the model cannot generate text.</returns>
+    /// <remarks>
+    /// Deliberately narrow: a model is ruled out only when the server both calls it an embedding
+    /// model and does not call it a completion model. An unfamiliar capability name is not a
+    /// reason to reject a model Prism could have used.
+    /// </remarks>
+    private static bool IsEmbeddingOnly(IReadOnlyList<string> capabilities)
+        => capabilities.Count > 0
+           && capabilities.Contains("embedding", StringComparer.OrdinalIgnoreCase)
+           && !capabilities.Contains("completion", StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Checks the health of the Ollama server by calling the root endpoint.

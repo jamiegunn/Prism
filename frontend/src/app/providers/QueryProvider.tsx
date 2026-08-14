@@ -1,5 +1,6 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ApiError } from '@/services/apiClient'
 import { describeMutationError } from '@/services/mutationErrors'
 
 /**
@@ -25,7 +26,18 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30 * 1000,
-      retry: 1,
+
+      // A 404 does not become a 200 by being asked twice. Retrying client errors only delays the
+      // screen that has to be shown anyway — most visibly when a remembered id no longer exists,
+      // where the page sat on a spinner before it could recover. Server and network failures are
+      // still worth one more try, because those do come back.
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+          return false
+        }
+
+        return failureCount < 1
+      },
     },
   },
 })

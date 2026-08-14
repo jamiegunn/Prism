@@ -65,13 +65,19 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
 
         if (_db is not null)
         {
-            // The default instance first, then the oldest: "oldest" alone routed embedding
-            // calls to a dead seeded endpoint while the instance the user actually marked
-            // default sat unused — the same arbitrary-instance failure the evaluation
-            // runner had.
+            // Reachable first, then the default, then the oldest.
+            //
+            // "Default, then oldest" still sent embeddings to a server that was not running. The
+            // seeder registers a vLLM and an Ollama with the same timestamp and neither marked
+            // default, so the tie broke arbitrarily and landed on the vLLM: on a fresh install
+            // the sample collection came up unembedded with `Connection refused
+            // (host.docker.internal:8000)` while a healthy Ollama sat one row away. An endpoint
+            // that does not answer cannot serve any request, so that is the first question —
+            // ahead of a preference that can only be honoured by a server that is up.
             string? endpoint = await _db.Set<InferenceInstance>()
                 .AsNoTracking()
-                .OrderByDescending(i => i.IsDefault)
+                .OrderByDescending(i => i.Status == InstanceStatus.Online)
+                .ThenByDescending(i => i.IsDefault)
                 .ThenBy(i => i.CreatedAt)
                 .Select(i => i.Endpoint)
                 .FirstOrDefaultAsync(ct);
@@ -104,7 +110,7 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
         {
             var request = new EmbeddingRequest(model, texts.ToList());
             HttpResponseMessage response = await _httpClient.PostAsJsonAsync(
-                $"{baseUrl.TrimEnd('/')}/v1/embeddings", request, ct);
+                EmbeddingsUrl(baseUrl), request, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -129,6 +135,27 @@ public sealed class OpenAiEmbeddingProvider : IEmbeddingProvider
             _logger.LogError(ex, "Embedding request failed for model {Model}", model);
             return Error.Unavailable($"Embedding request failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Builds the embeddings URL for a base address that may or may not already name <c>/v1</c>.
+    /// </summary>
+    /// <param name="baseUrl">The instance endpoint.</param>
+    /// <returns>The absolute URL to POST to.</returns>
+    /// <remarks>
+    /// vLLM and LM Studio publish their address with the <c>/v1</c> included, and that is how
+    /// they get registered. Appending another produced <c>/v1/v1/embeddings</c> and a 404 on
+    /// every request, so embeddings could not work against either of them at all. Ollama's
+    /// endpoint carries no <c>/v1</c>, which is why the fault survived: it never showed up on
+    /// the setup most people run.
+    /// </remarks>
+    private static string EmbeddingsUrl(string baseUrl)
+    {
+        string trimmed = baseUrl.TrimEnd('/');
+
+        return trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)
+            ? $"{trimmed}/embeddings"
+            : $"{trimmed}/v1/embeddings";
     }
 
     private sealed record EmbeddingRequest(

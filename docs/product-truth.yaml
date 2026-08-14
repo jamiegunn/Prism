@@ -166,13 +166,23 @@ modules:
     backend_status: implemented
     backend_notes: >
       Prompt templates, versions, variants, multimodal support. Handlers for CRUD.
+      A fork that names no version takes the latest rather than reporting version 0
+      missing; a version whose template uses undeclared variables is refused at
+      creation rather than saved and rejected at every run. The model to test with is
+      resolved through the shared ModelSelection, so an instance with none recorded
+      says so instead of sending a blank model.
       Missing: few-shot block support, A/B test harness, experiment/evaluation linking.
     frontend_status: implemented
     frontend_notes: >
-      Template list, version management, variable editor, test panel.
+      Template list, version management, variable editor, test panel. Test results sit
+      directly under the controls that produce them and are scrolled to on arrival —
+      they used to render several hundred pixels below the fold, so running a test
+      looked like nothing happening. A remembered template that no longer exists (after
+      a reinstall or a reset database) returns the page to its empty state rather than
+      opening on "Template not found".
       Missing: few-shot block editor, A/B comparison UI, experiment linking.
     provider_limitations: none
-    tests_present: false
+    tests_present: true
     release_blockers:
       - Workspace/Project organization (P2-01)
       - Few-shot blocks (P2-02)
@@ -323,17 +333,27 @@ modules:
       Collection/document/chunk entities with pgvector embeddings; vector, BM25 and
       hybrid search; labelled query sets and a retrieval evaluation endpoint scoring
       all modes with precision@k/recall@k/MRR/nDCG@k (hand-proved, mutation-checked).
-      Embeddings prefer the default instance. Missing: chunking strategy preview,
-      citation mapping, query rewrite visibility.
+      Embeddings go to a reachable instance first, then the default — "default, then
+      oldest" sent them to an offline seeded vLLM on a fresh install. The sample
+      collection is seeded with real embeddings, and retried shortly after startup when
+      no server was up in time; it used to be written with null vectors and marked
+      Completed, so vector search returned nothing on the only collection a new user
+      has. The answer step falls back to the instance's model rather than sending a
+      blank one. Missing: chunking strategy preview, citation mapping, query rewrite
+      visibility.
     frontend_status: implemented
     frontend_notes: >
       Collection list, document upload, search panel, and an Evaluate tab that builds
       labelled query sets from search results and compares the three modes on rank
       metrics — with per-mode unavailability stated (e.g. null embeddings) instead of
-      zero scores. Missing: chunking inspector, citation view.
+      zero scores. Search & RAG now generates the grounded answer it is named for,
+      showing the model, token count and latency above its sources; the endpoint and
+      client hook existed but nothing called them, so the tab retrieved and stopped.
+      Missing: chunking inspector, citation view.
     provider_limitations: >
-      Requires pgvector extension. Embedding model must be available via provider.
-    tests_present: false
+      Requires pgvector extension. Embedding model must be available via provider;
+      dev.sh provisions it alongside the chat model, which it previously did not.
+    tests_present: true
     release_blockers:
       - Chunking preview (P4-02)
       - Retrieval debugger (P4-03)

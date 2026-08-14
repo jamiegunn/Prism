@@ -23,7 +23,18 @@ import { TestPanel } from './TestPanel'
 export function TemplateEditor() {
   const { selectedTemplateId, selectedVersionNumber, setSelectedVersionNumber, setSelectedTemplateId } =
     usePromptLabStore()
-  const { data: templateData, isLoading } = useTemplate(selectedTemplateId)
+  const { data: templateData, isLoading, isError } = useTemplate(selectedTemplateId)
+
+  // The selected template is remembered across sessions, and the id outlives the template it
+  // names — after a reinstall, a reset database, or someone else deleting it. The page then
+  // opened on "Template not found" with a populated list beside it, which reads as the feature
+  // being broken rather than as one stale pointer. Letting the selection go returns the page to
+  // its ordinary empty state, where the list is the obvious next thing to click.
+  useEffect(() => {
+    if (isError && selectedTemplateId) {
+      setSelectedTemplateId(null)
+    }
+  }, [isError, selectedTemplateId, setSelectedTemplateId])
   const { data: versions } = useVersions(selectedTemplateId ?? '')
   const forkMutation = useForkTemplate()
   const [showDiff, setShowDiff] = useState(false)

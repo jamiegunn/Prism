@@ -171,6 +171,48 @@ public sealed class RetrievalEvaluationTests
     }
 
     /// <summary>
+    /// A set sent with no items at all is the caller's mistake, not the server's.
+    /// </summary>
+    /// <remarks>
+    /// Omitting <c>items</c> — or sending <c>"items": null</c> — reached
+    /// <c>request.Items.Select(...)</c> and came back as a 500 reading
+    /// <c>Value cannot be null. (Parameter 'source')</c>, which tells the caller nothing about
+    /// the field they left out. An empty array was already a clean 400; null was not.
+    /// </remarks>
+    [Fact]
+    public async Task A_Query_Set_With_No_Items_Is_A_Validation_Error()
+    {
+        await using AppDbContext db = _fixture.CreateContext();
+        (Guid collectionId, Guid[] _) = await SeedEmbeddedCollectionAsync(db);
+
+        var createHandler = new CreateQuerySetHandler(db);
+
+        Result<RagQuerySetDto> nullItems = await createHandler.HandleAsync(
+            new CreateQuerySetCommand(collectionId, "no items", null, null!),
+            CancellationToken.None);
+
+        Assert.True(nullItems.IsFailure);
+        Assert.Equal(ErrorType.Validation, nullItems.Error.Type);
+    }
+
+    /// <summary>
+    /// An item whose labelled-chunk list is null is rejected the way an empty one is.
+    /// </summary>
+    [Fact]
+    public async Task An_Item_With_Null_Labels_Is_A_Validation_Error()
+    {
+        await using AppDbContext db = _fixture.CreateContext();
+        (Guid collectionId, Guid[] _) = await SeedEmbeddedCollectionAsync(db);
+
+        Result<RagQuerySetDto> result = await new CreateQuerySetHandler(db).HandleAsync(
+            new CreateQuerySetCommand(collectionId, "null labels", null, [("query", null!)]),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+    }
+
+    /// <summary>
     /// Seeds a collection with three chunks whose contents are lexically distinct (for BM25)
     /// and whose embeddings produce the deterministic ranking A, B, C for query [1,0,0,0].
     /// </summary>

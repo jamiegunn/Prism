@@ -41,13 +41,8 @@ public sealed partial class TemplateRenderer
         }
 
         // Detect undeclared variables in template
-        HashSet<string> declaredNames = version.Variables.Select(v => v.Name).ToHashSet();
-        MatchCollection templateMatches = VariablePattern().Matches(version.UserTemplate);
-        List<string> undeclared = templateMatches
-            .Select(m => m.Groups[1].Value)
-            .Where(name => !declaredNames.Contains(name))
-            .Distinct()
-            .ToList();
+        List<string> undeclared = FindUndeclared(
+            version.UserTemplate, version.Variables.Select(v => v.Name));
 
         if (undeclared.Count > 0)
         {
@@ -78,6 +73,34 @@ public sealed partial class TemplateRenderer
         messages.Add(ChatMessage.User(renderedUser));
 
         return new RenderResult(messages, renderedUser);
+    }
+
+    /// <summary>
+    /// Finds the placeholders a template uses that are not in the declared set.
+    /// </summary>
+    /// <param name="userTemplate">The template text.</param>
+    /// <param name="declaredNames">The variable names the version declares.</param>
+    /// <returns>The undeclared placeholder names, in order of first appearance, without repeats.</returns>
+    /// <remarks>
+    /// Shared with version creation so that both places agree on what a placeholder is. They did
+    /// not have to before, and the result was a version that could be saved and never run: the
+    /// check existed only at render time, so <c>{{code}}</c> without a declaration was a 201
+    /// followed by a permanent validation error on every attempt to use it.
+    /// </remarks>
+    public static List<string> FindUndeclared(string userTemplate, IEnumerable<string> declaredNames)
+    {
+        if (string.IsNullOrEmpty(userTemplate))
+        {
+            return [];
+        }
+
+        HashSet<string> declared = [.. declaredNames];
+
+        return [.. VariablePattern()
+            .Matches(userTemplate)
+            .Select(m => m.Groups[1].Value)
+            .Where(name => !declared.Contains(name))
+            .Distinct()];
     }
 
     [GeneratedRegex(@"\{\{(\w+)\}\}")]

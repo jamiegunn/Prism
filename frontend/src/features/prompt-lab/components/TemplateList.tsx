@@ -21,10 +21,20 @@ export function TemplateList({ search, onSearchChange }: TemplateListProps) {
     search || undefined
   )
 
-  // Extract unique categories
-  const categories = templates
+  // Extract unique categories.
+  //
+  // The selected one is folded in even when nothing matches it. The list is fetched *already
+  // filtered*, so a category that matches nothing returns no templates, which yielded no
+  // categories, which hid the whole row — including the "All" badge that clears the filter. A
+  // filter remembered from a previous database therefore emptied the list and removed the only
+  // control that could undo it.
+  const discovered = templates
     ? [...new Set(templates.map((t) => t.category).filter(Boolean))]
     : []
+
+  const categories = selectedCategory && !discovered.includes(selectedCategory)
+    ? [selectedCategory, ...discovered]
+    : discovered
 
   return (
     <div className="flex flex-col h-full">

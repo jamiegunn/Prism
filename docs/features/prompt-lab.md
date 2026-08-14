@@ -284,10 +284,14 @@ P2 and P3 together mean the variables feature is reachable only by forking somet
 | R4 | A failed test states why | select an offline instance and run | MET |
 | R5 | Input Sets survive a reload and reload values in one click | save a set, reload, apply | MET |
 | R6 | Fork produces a template that is immediately testable | fork a seeded template and test it | MET |
-| R7 | A template created with `{{variable}}` in its body can be tested | none — "Undeclared variables in template" | **UNMET** |
-| R8 | Creating a new version leaves a parameterised template testable | none — variables are not carried forward | **UNMET** |
-| R9 | Diff shows the differences between two versions | none — the client calls `/versions/diff`, the route is `/diff`; 404, and the panel shows its placeholder rather than an error | **UNMET** |
-| R10 | A persisted category filter can always be cleared | none — the "All" badge only renders when the filtered result yields categories, so a stale category strands the list | **UNMET** |
+| R7 | A template created with `{{variable}}` in its body can be tested | `deriveVariables` declares one variable per placeholder from the body, which is where the declaration is actually made (`variables.test.ts`, 6 cases); creating a version whose placeholders are undeclared is now refused server-side too (`A_Version_Cannot_Use_Variables_It_Does_Not_Declare`) | MET |
+| R8 | Creating a new version leaves a parameterised template testable | the new-version form carries the current version's definitions forward and re-derives from the new body, so a type or default set earlier survives an edit (`keeps the definition an earlier version gave a variable`) | MET |
+| R9 | Diff shows the differences between two versions | the client calls `/diff`, which is the route; verified against the seeded two-version template (HTTP 200, `version1`/`version2`) | MET |
+| R10 | A persisted category filter can always be cleared | the selected category is folded into the badge row even when it matches nothing, so "All" is always present to clear it | MET |
+
+| R11 | A remembered template that no longer exists does not break the page | the selection is released and the ordinary empty state shown, rather than "Template not found" beside a full list (`TemplateEditor.test.tsx`, mutation-checked) | MET |
+| R12 | A test result is visible without hunting for it | results sit directly under the controls that produce them and are scrolled to on arrival; browser-verified — header and output both on screen | MET |
+| R13 | A fork with no version named forks the latest | `A_Fork_With_No_Version_Named_Takes_The_Latest` — it used to report "Version 0 … not found" | MET |
 
 ### Withdrawn
 

@@ -8,15 +8,31 @@ namespace Prism.Features.Rag.Infrastructure;
 /// Seeds a sample RAG collection with a document and chunks to demonstrate
 /// the RAG Workbench feature on first launch.
 /// </summary>
+/// <remarks>
+/// The sample used to be written with <c>Embedding = null</c> on every chunk and a
+/// <c>Completed</c> badge on the document. Vector search skips chunks without embeddings, so the
+/// one collection a new user has answered every semantic query with nothing while presenting
+/// itself as ready — and because BM25 still worked, it read as bad relevance rather than an
+/// empty index. The chunks are now embedded for real, and when that is not possible the sample
+/// says so instead of pretending.
+/// </remarks>
 public sealed class RagSeeder : IDataSeeder
 {
+    private readonly RagSampleEmbedder _embedder;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RagSeeder"/> class.
+    /// </summary>
+    /// <param name="embedder">Embeds the sample chunks once a provider can be reached.</param>
+    public RagSeeder(RagSampleEmbedder embedder) => _embedder = embedder;
+
     /// <summary>
     /// Gets the execution order. RAG seeds at order 150, after datasets.
     /// </summary>
     public int Order => 150;
 
     /// <summary>
-    /// Seeds a sample RAG collection if none exist.
+    /// Seeds a sample RAG collection if none exist, and embeds the sample if it is not embedded.
     /// Creates an "AI Research Papers" collection with one document and three text chunks
     /// summarizing the Transformer architecture paper.
     /// </summary>
@@ -29,6 +45,10 @@ public sealed class RagSeeder : IDataSeeder
 
         if (hasCollections)
         {
+            // Every install that first started without a reachable embedding model is sitting on
+            // an unsearchable sample, and the guard above means the seeder would never look at it
+            // again. Repairing on a later run is what gets those installs working without a wipe.
+            await _embedder.EmbedIfNeededAsync(context, ct);
             return;
         }
 
@@ -55,7 +75,7 @@ public sealed class RagSeeder : IDataSeeder
                 {
                     Id = documentId,
                     CollectionId = collectionId,
-                    Filename = "attention-is-all-you-need-summary.txt",
+                    Filename = RagSampleEmbedder.SampleFilename,
                     ContentType = "text/plain",
                     SizeBytes = 1850,
                     ChunkCount = 3,
@@ -118,5 +138,8 @@ public sealed class RagSeeder : IDataSeeder
 
         context.Set<RagCollection>().Add(collection);
         await context.SaveChangesAsync(ct);
+
+        await _embedder.EmbedIfNeededAsync(context, ct);
     }
+
 }

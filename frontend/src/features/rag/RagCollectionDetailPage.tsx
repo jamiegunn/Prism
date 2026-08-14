@@ -14,9 +14,27 @@ export function RagCollectionDetailPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('documents')
 
-  const { data: collection } = useCollection(id!)
+  const { data: collection, isError } = useCollection(id!)
   const { data: documents } = useDocuments(id!)
   const { data: stats } = useCollectionStats(id!)
+
+  // A collection that is gone — a stale bookmark, or one deleted in another tab — used to sit on
+  // "Loading collection..." indefinitely, because the only state distinguished was "have data"
+  // from "don't". Waiting forever for something that will never arrive is the worst of the
+  // available answers: it looks like slowness rather than absence, so nobody thinks to leave.
+  if (isError) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-zinc-300">That collection no longer exists.</p>
+        <button
+          className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+          onClick={() => navigate('/rag')}
+        >
+          Back to collections
+        </button>
+      </div>
+    )
+  }
 
   if (!collection) {
     return <p className="text-sm text-zinc-500">Loading collection...</p>

@@ -136,6 +136,12 @@ public sealed class AbTestHandler
                 IInferenceProvider provider = _providerFactory.CreateProvider(
                     instance.Name, instance.Endpoint, instance.ProviderType);
 
+                Result<string> model = ModelSelection.Resolve(instance);
+                if (model.IsFailure)
+                {
+                    return Result<AbTestResultDto>.Failure(model.Error);
+                }
+
                 foreach (AbTestParameterSet paramSet in command.ParameterSets)
                 {
                     for (int i = 0; i < command.RunsPerCombo; i++)
@@ -146,7 +152,7 @@ public sealed class AbTestHandler
                         {
                             ExperimentId = experiment.Id,
                             Name = $"v{variation.VersionNumber} | {instance.Name} | T={paramSet.Temperature} | #{i + 1}",
-                            Model = instance.ModelId ?? "",
+                            Model = model.Value,
                             InstanceId = instance.Id,
                             Parameters = new RunParameters
                             {
@@ -164,7 +170,7 @@ public sealed class AbTestHandler
                         {
                             var chatRequest = new ChatRequest
                             {
-                                Model = instance.ModelId ?? "",
+                                Model = model.Value,
                                 Messages = rendered.Messages,
                                 Temperature = paramSet.Temperature,
                                 TopP = paramSet.TopP,
