@@ -148,11 +148,17 @@ recorded in a checked-in baseline file. Going from 2% to 90% in one commit is im
 never going backwards is enforceable from day one.
 
 **0.6 Repair CI's escape hatch.** In `.github/workflows/ci.yml`:
-- `ci-summary` currently `exit 1`s on only 4 of 8 upstream jobs. Make it gate **all** of them.
-- Actually install `@playwright/test` and the Storybook framework packages — both jobs are
-  guaranteed-red today and deliberately un-gated.
-- Implement `--export-openapi` in the API so `openapi-drift` stops being a permanent no-op;
-  commit `frontend/openapi.json`; make drift a hard failure.
+- ~~`ci-summary` currently `exit 1`s on only 4 of 8 upstream jobs. Make it gate **all** of
+  them.~~ Done — it gates every remaining job.
+- Actually install `@playwright/test` and the Storybook framework packages. Both jobs skip with
+  a stated reason rather than failing now, so CI is green, but neither can catch anything until
+  the packages are added; the guards activate on their own when they are.
+- ~~Implement `--export-openapi` in the API so `openapi-drift` stops being a permanent no-op.~~
+  The job was removed instead. It was not merely a no-op: the unimplemented flag left the API
+  running as a web server that never exits, which hung CI until GitHub's six-hour job ceiling.
+  If the drift check is wanted, implement the export first, commit `frontend/openapi.json`, and
+  add the job back as a hard failure — a check that cannot check anything is not worth two
+  minutes a push.
 - Run `npm run api:generate` for real, commit `src/services/generated/`, and make `orval-drift`
   meaningful. (Decide deliberately: adopt the generated client and delete the ~15 hand-written
   `api.ts` files, or delete the orval config and stop claiming a generated client. Half-and-half

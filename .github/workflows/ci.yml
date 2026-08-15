@@ -131,55 +131,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-  openapi-drift:
-    name: OpenAPI Drift Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [backend-build]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore and build backend
-        working-directory: backend
-        run: dotnet build Prism.sln --configuration Release
-
-      # `--export-openapi` is not implemented, and an unrecognised argument does not make the API
-      # exit — it starts the web server, which then waits for requests forever. With stdout
-      # redirected to a file nothing was ever printed to say so, so this step ran until GitHub
-      # killed the job at its six-hour ceiling. That is what made every run take hours, and what
-      # left the two runs that were not superseded showing as failures.
-      #
-      # `timeout` makes the wait bounded whatever the API does with the argument. When the export
-      # is implemented it will finish in seconds and the check below starts working on its own.
-      - name: Generate OpenAPI spec
-        working-directory: backend
-        run: |
-          timeout 60 dotnet run --project src/Prism.Api --no-build --configuration Release \
-            -- --export-openapi > /tmp/openapi-current.json 2>/dev/null || true
-
-          if [ ! -s /tmp/openapi-current.json ] || ! jq -e . /tmp/openapi-current.json > /dev/null 2>&1; then
-            echo "::warning::The API does not implement --export-openapi, so there is no spec to compare. Implement it to activate this check."
-            rm -f /tmp/openapi-current.json
-          fi
-
-      - name: Check for drift
-        run: |
-          if [ -f /tmp/openapi-current.json ] && [ -f frontend/openapi.json ]; then
-            if ! diff -q /tmp/openapi-current.json frontend/openapi.json > /dev/null 2>&1; then
-              echo "::error::OpenAPI spec has drifted. Run 'dotnet run --project backend/src/Prism.Api -- --export-openapi > frontend/openapi.json' and commit the result."
-              diff /tmp/openapi-current.json frontend/openapi.json || true
-              exit 1
-            fi
-            echo "OpenAPI spec is up to date."
-          else
-            echo "::warning::OpenAPI drift check skipped — spec files not found. This check will activate once OpenAPI export is configured."
-          fi
-
   orval-drift:
     name: Orval Client Drift Check
     runs-on: ubuntu-latest
@@ -302,7 +253,6 @@ jobs:
       - frontend-build
       - frontend-test
       - frontend-lint
-      - openapi-drift
       - orval-drift
       - storybook-build
       - playwright-smoke
@@ -318,21 +268,22 @@ jobs:
           echo "| Frontend Build & Typecheck | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Tests | ${{ needs.frontend-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Lint | ${{ needs.frontend-lint.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| OpenAPI Drift | ${{ needs.openapi-drift.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Orval Drift | ${{ needs.orval-drift.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Storybook Build | ${{ needs.storybook-build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Playwright Smoke | ${{ needs.playwright-smoke.result }} |" >> $GITHUB_STEP_SUMMARY
 
-          # Every job gates. A job that cannot fail the build is not a check, it is decoration -
-          # openapi-drift and orval-drift were permanent no-ops and storybook-build and
-          # playwright-smoke were permanently red, all four excluded from this condition.
+          # Every job gates. A job that cannot fail the build is not a check, it is decoration.
+          # openapi-drift was removed for exactly that reason: --export-openapi is not
+          # implemented, so it spent two minutes a push building the API and waiting on a server
+          # that never exits, to compare nothing. orval-drift, storybook-build and
+          # playwright-smoke can still only warn, but each says so on every run and switches
+          # itself on the moment its tooling arrives.
           FAILED=""
           for job in "backend-build:${{ needs.backend-build.result }}" \
                      "backend-format:${{ needs.backend-format.result }}" \
                      "frontend-build:${{ needs.frontend-build.result }}" \
                      "frontend-test:${{ needs.frontend-test.result }}" \
                      "frontend-lint:${{ needs.frontend-lint.result }}" \
-                     "openapi-drift:${{ needs.openapi-drift.result }}" \
                      "orval-drift:${{ needs.orval-drift.result }}" \
                      "storybook-build:${{ needs.storybook-build.result }}" \
                      "playwright-smoke:${{ needs.playwright-smoke.result }}"; do
