@@ -742,12 +742,59 @@ public sealed class OllamaProvider : IHotReloadableProvider, IModelPurposeProbe
                 return Result.Failure(Error.Unavailable($"Failed to pull model: {errorBody}"));
             }
 
-            // Read through the streaming pull response to completion
+            // The pull streams NDJSON, and this is where its failures live: Ollama answers 200
+            // and then writes {"error":"pull model manifest: file does not exist"} into the body.
+            // Reading the lines and discarding them — which is what this did — reported every
+            // failed pull as a success, so an instance could be swapped to a model that does not
+            // exist and be recorded as running it.
             using Stream responseStream = await httpResponse.Content.ReadAsStreamAsync(ct);
             using StreamReader reader = new(responseStream);
-            while (!reader.EndOfStream)
+
+            bool completed = false;
+
+            while (await reader.ReadLineAsync(ct) is { } line)
             {
-                await reader.ReadLineAsync(ct);
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                JsonNode? node;
+
+                try
+                {
+                    node = JsonNode.Parse(line);
+                }
+                catch (JsonException)
+                {
+                    // A line that is not JSON is not a verdict either way; the terminal status
+                    // is what decides, and its absence is already treated as a failure.
+                    continue;
+                }
+
+                string? error = node?["error"]?.GetValue<string>();
+
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    _logger.LogWarning("Pull of {ModelId} failed on Ollama: {Error}", modelId, error);
+                    return Result.Failure(Error.Unavailable($"Failed to pull model: {error}"));
+                }
+
+                if (node?["status"]?.GetValue<string>() == "success")
+                {
+                    completed = true;
+                }
+            }
+
+            // A stream that stopped early leaves the model incomplete, and saying nothing is not
+            // the same as saying it worked.
+            if (!completed)
+            {
+                _logger.LogWarning("Pull of {ModelId} on Ollama ended without reporting success", modelId);
+
+                return Result.Failure(Error.Unavailable(
+                    $"The pull of '{modelId}' ended without completing. The model may be " +
+                    "partially downloaded; try again."));
             }
 
             _logger.LogInformation("Successfully pulled model {ModelId} on Ollama", modelId);

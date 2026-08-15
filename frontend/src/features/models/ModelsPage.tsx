@@ -63,7 +63,12 @@ export function ModelsPage() {
         </div>
       )}
 
-      <div className="flex gap-6">
+      {/* Side by side when there is room; stacked when there is not.
+          The detail panel used to be `hidden lg:block`, so below 1024px selecting an instance
+          did nothing visible at all — no model swap, no default, no removal, no metrics. A
+          control that disappears is worse than a cramped one: nothing on screen suggests the
+          window is the problem. */}
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Left: Instance Grid */}
         <div className="flex-1 min-w-0">
           {isLoading ? (
@@ -89,7 +94,7 @@ export function ModelsPage() {
         </div>
 
         {/* Right: Detail Panel */}
-        <div data-tour="models-detail" className="hidden w-96 shrink-0 lg:block">
+        <div data-tour="models-detail" className="w-full shrink-0 lg:w-96">
           {selectedInstance ? (
             <InstanceDetailPanel
               instance={selectedInstance}

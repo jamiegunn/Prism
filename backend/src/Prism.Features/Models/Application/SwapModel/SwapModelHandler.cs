@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prism.Common.Database;
 using Prism.Common.Inference;
+using Prism.Common.Inference.Models;
 using Prism.Common.Results;
 using Prism.Features.Models.Application.Dtos;
 using Prism.Features.Models.Domain;
@@ -42,6 +43,14 @@ public sealed class SwapModelHandler
     /// <returns>A result containing the updated instance DTO on success.</returns>
     public async Task<Result<InferenceInstanceDto>> HandleAsync(SwapModelCommand command, CancellationToken ct)
     {
+        // Checked before anything is contacted. An empty field used to reach Ollama and come back
+        // as a 503 quoting its `invalid model name`, which reads as the server being unwell
+        // rather than as a box nobody filled in.
+        if (string.IsNullOrWhiteSpace(command.ModelId))
+        {
+            return Error.Validation("Name the model to switch to.");
+        }
+
         InferenceInstance? instance = await _db.Set<InferenceInstance>()
             .FirstOrDefaultAsync(i => i.Id == command.InstanceId, ct);
 
@@ -61,6 +70,38 @@ public sealed class SwapModelHandler
         {
             return Error.Unavailable(
                 $"Provider type '{instance.ProviderType}' does not support hot-swapping models.");
+        }
+
+        // What the server actually has, so a typo is caught here rather than by every request
+        // made afterwards. A pull of a model that does not exist streams its error inside a 200,
+        // and while that is now read properly, being told "this server has no such model" is a
+        // better answer than a pull failure — and it is the only way to offer the alternatives.
+        Result<IReadOnlyList<AvailableModel>> available = await hotReloadable.ListAvailableModelsAsync(ct);
+
+        if (available.IsSuccess && available.Value.Count > 0)
+        {
+            bool present = available.Value.Any(m =>
+                string.Equals(m.ModelId, command.ModelId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(m.Name, command.ModelId, StringComparison.OrdinalIgnoreCase));
+
+            if (!present)
+            {
+                return Error.Validation(
+                    $"'{instance.Name}' has no model called '{command.ModelId}'. " +
+                    $"It has: {string.Join(", ", available.Value.Select(m => m.ModelId))}.");
+            }
+        }
+
+        // An instance is asked to hold conversations, so a model that only embeds can never
+        // serve one. Allowing it produced exactly the breakage the health check now repairs.
+        bool? canChat = await (provider.As<IModelPurposeProbe>()?.CanGenerateTextAsync(command.ModelId, ct)
+                               ?? Task.FromResult<bool?>(null));
+
+        if (canChat is false)
+        {
+            return Error.Validation(
+                $"'{command.ModelId}' is an embedding model and cannot generate text, so an " +
+                "instance cannot run it. Choose a chat model.");
         }
 
         _logger.LogInformation("Swapping model on instance {InstanceName} ({InstanceId}) to {ModelId}",

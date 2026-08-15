@@ -17,6 +17,7 @@ using Prism.Features.Models.Application.ListInstances;
 using Prism.Features.Models.Application.RegisterInstance;
 using Prism.Features.Models.Application.SwapModel;
 using Prism.Features.Models.Application.GetTokenizerInfo;
+using Prism.Features.Models.Application.SetDefaultInstance;
 using Prism.Features.Models.Application.UnregisterInstance;
 using Prism.Features.Models.Application.GetCapabilities;
 using Prism.Features.Models.Application.ProbeCapabilities;
@@ -60,6 +61,12 @@ public static class ModelEndpoints
         group.MapGet("/{id:guid}", GetInstance)
             .WithName("GetInstance")
             .WithSummary("Gets a specific inference instance by ID")
+            .Produces<InferenceInstanceDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/default", SetDefaultInstance)
+            .WithName("SetDefaultInstance")
+            .WithSummary("Makes this the default instance, demoting whichever was")
             .Produces<InferenceInstanceDto>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -202,6 +209,19 @@ public static class ModelEndpoints
         }
 
         return TypedResults.Ok(InferenceInstanceDto.FromEntity(instance));
+    }
+
+    private static async Task<IResult> SetDefaultInstance(
+        Guid id,
+        SetDefaultInstanceHandler handler,
+        CancellationToken ct)
+    {
+        Result<InferenceInstanceDto> result = await handler.HandleAsync(
+            new SetDefaultInstanceCommand(id), ct);
+
+        return result.Match(
+            dto => TypedResults.Ok(dto),
+            error => error.ToHttpResult());
     }
 
     private static async Task<IResult> UnregisterInstance(

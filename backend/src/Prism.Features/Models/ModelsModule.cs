@@ -8,6 +8,7 @@ using Prism.Features.Models.Application.ListInstances;
 using Prism.Features.Models.Application.RegisterInstance;
 using Prism.Features.Models.Application.SwapModel;
 using Prism.Features.Models.Application.GetTokenizerInfo;
+using Prism.Features.Models.Application.SetDefaultInstance;
 using Prism.Features.Models.Application.UnregisterInstance;
 using Prism.Features.Models.Application.GetCapabilities;
 using Prism.Features.Models.Application.ProbeCapabilities;
@@ -38,6 +39,7 @@ public static class ModelsModule
         services.AddScoped<DiscoverProvidersHandler>();
         services.AddScoped<RegisterInstanceHandler>();
         services.AddScoped<UnregisterInstanceHandler>();
+        services.AddScoped<SetDefaultInstanceHandler>();
         services.AddScoped<ListInstancesHandler>();
         services.AddScoped<GetInstanceMetricsHandler>();
         services.AddScoped<SwapModelHandler>();

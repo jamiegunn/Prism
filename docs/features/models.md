@@ -252,7 +252,12 @@ was registered until something asks again.
 | R5 | A background health check keeps capabilities current without user action | 30s loop writes them; `HealthCheckBackgroundService.cs:18` | MET |
 | R6 | Two Prism APIs cannot silently disagree about one instance's capabilities | `dev.sh` stops other Prism APIs before starting; launcher tests | MET |
 | R7 | Selecting a server shows live metrics where the provider reports them | manual: select a card; `InstanceDetailPanel.tsx:163` states when unavailable | MET |
-| R8 | The detail panel is reachable on a narrow window | none — it is `lg:block` and vanishes below that breakpoint | **UNMET** |
+| R8 | The detail panel is reachable on a narrow window | it stacks below the grid instead of being hidden; browser-verified at 900px wide | MET |
+| R9 | A model can be chosen from what the server actually has | the swap control is a picker over `GET /instances/{id}/models`, falling back to free text only for a server that cannot enumerate (`InstanceDetailPanel.test.tsx`) | MET |
+| R10 | A model that cannot chat cannot be chosen | embedding-only models are disabled in the picker and refused by the endpoint (`An_Embedding_Model_Is_Refused`) | MET |
+| R11 | A model the server does not have is refused, not stored | `A_Model_The_Server_Does_Not_Have_Is_Refused`; a failed pull streams its error inside a 200, which used to be read as success (`OllamaModelLoadTests`) | MET |
+| R12 | There is always a default while there is any instance | deleting the default promotes a reachable one (`Deleting_The_Default_Promotes_Another`) | MET |
+| R13 | The default can be changed without deleting anything | `POST /instances/{id}/default` and a Make Default control (`The_Default_Can_Be_Moved_To_Another_Instance`) | MET |
 
 R6 exists because it failed: four stale APIs each ran the R5 loop against one database and
 overwrote each other for an afternoon.

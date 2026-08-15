@@ -40,8 +40,33 @@ public sealed class UnregisterInstanceHandler
             return Error.NotFound($"Inference instance with ID '{command.Id}' was not found.");
         }
 
+        bool wasDefault = instance.IsDefault;
+
         _db.Set<InferenceInstance>().Remove(instance);
         await _db.SaveChangesAsync(ct);
+
+        // Deleting the default used to leave no default at all, and several features choose their
+        // server by "the default first, then …" — with none, they fall through to a tiebreak that
+        // was never meant to decide anything. Promoting a reachable one keeps that choice
+        // meaningful; if nothing is left there is nothing to promote, which is honest.
+        if (wasDefault)
+        {
+            InferenceInstance? successor = await _db.Set<InferenceInstance>()
+                .OrderByDescending(i => i.Status == InstanceStatus.Online)
+                .ThenBy(i => i.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (successor is not null)
+            {
+                successor.IsDefault = true;
+                successor.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+
+                _logger.LogInformation(
+                    "{SuccessorName} is now the default, replacing the deleted {InstanceName}",
+                    successor.Name, instance.Name);
+            }
+        }
 
         _logger.LogInformation("Unregistered inference instance {InstanceName} ({InstanceId})",
             instance.Name, instance.Id);

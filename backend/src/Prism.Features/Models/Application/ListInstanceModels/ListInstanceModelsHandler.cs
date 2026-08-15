@@ -23,10 +23,17 @@ public sealed record ListInstanceModelsQuery(Guid InstanceId);
 /// rather than an empty menu.
 /// </param>
 /// <param name="Reason">Why the list is empty or unavailable, when it is; otherwise null.</param>
+/// <param name="EmbeddingOnly">
+/// The subset of <paramref name="Models"/> that can only produce embeddings, so a picker can
+/// keep them out of reach. An instance is asked to hold conversations, and choosing one of these
+/// leaves it unable to answer anything — the state the health check spends its time repairing.
+/// Empty when the server does not say what its models are for.
+/// </param>
 public sealed record InstanceModelsDto(
     IReadOnlyList<string> Models,
     bool CanList,
-    string? Reason);
+    string? Reason,
+    IReadOnlyList<string> EmbeddingOnly);
 
 /// <summary>
 /// Asks an instance which models it can serve.
@@ -88,7 +95,8 @@ public sealed class ListInstanceModelsHandler
             return new InstanceModelsDto(
                 instance.ModelId is { Length: > 0 } single ? [single] : [],
                 CanList: false,
-                Reason: $"A {instance.ProviderType} server serves the model it was started with; it cannot list others.");
+                Reason: $"A {instance.ProviderType} server serves the model it was started with; it cannot list others.",
+                EmbeddingOnly: []);
         }
 
         Result<IReadOnlyList<AvailableModel>> models = await hotReloadable.ListAvailableModelsAsync(ct);
@@ -99,12 +107,30 @@ public sealed class ListInstanceModelsHandler
                 "Could not list models on instance {InstanceId}: {Error}",
                 query.InstanceId, models.Error.Message);
 
-            return new InstanceModelsDto([], CanList: true, Reason: models.Error.Message);
+            return new InstanceModelsDto([], CanList: true, Reason: models.Error.Message, EmbeddingOnly: []);
+        }
+
+        // Asked once, when the picker opens, against a server that is almost always local. A
+        // provider that cannot say returns null and the model is offered as usual — silence is
+        // not evidence that a model is embedding-only.
+        IModelPurposeProbe? probe = provider.As<IModelPurposeProbe>();
+        List<string> embeddingOnly = [];
+
+        if (probe is not null)
+        {
+            foreach (AvailableModel model in models.Value)
+            {
+                if (await probe.CanGenerateTextAsync(model.ModelId, ct) is false)
+                {
+                    embeddingOnly.Add(model.ModelId);
+                }
+            }
         }
 
         return new InstanceModelsDto(
             [.. models.Value.Select(m => m.ModelId)],
             CanList: true,
-            Reason: models.Value.Count == 0 ? "This server has no models pulled yet." : null);
+            Reason: models.Value.Count == 0 ? "This server has no models pulled yet." : null,
+            EmbeddingOnly: embeddingOnly);
     }
 }

@@ -15,11 +15,12 @@ import {
   Trash2,
   X,
   Repeat,
+  Star,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatusIndicator } from './StatusIndicator'
 import { KvCacheGauge } from './KvCacheGauge'
-import { useInstanceMetrics, useTriggerHealthCheck, useUnregisterInstance, useSwapModel, useProbeCapabilities } from '../api'
+import { useInstanceMetrics, useTriggerHealthCheck, useUnregisterInstance, useSwapModel, useProbeCapabilities, useInstanceModels, useSetDefaultInstance } from '../api'
 import type { InferenceInstance } from '../types'
 
 interface InstanceDetailPanelProps {
@@ -75,9 +76,17 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
   const probeMutation = useProbeCapabilities(instance.id)
   const unregisterMutation = useUnregisterInstance()
   const swapModelMutation = useSwapModel(instance.id)
+  const setDefaultMutation = useSetDefaultInstance(instance.id)
+
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [swapModelId, setSwapModelId] = useState('')
   const [showSwapInput, setShowSwapInput] = useState(false)
+
+  // What this server actually has, fetched only once the picker is open. The box used to be free
+  // text with a vLLM-shaped placeholder, so choosing a model on an Ollama meant recalling an
+  // exact tag from memory — and a typo was accepted with a success toast, because a failed pull
+  // streams its error inside a 200.
+  const { data: instanceModels } = useInstanceModels(showSwapInput ? instance.id : null)
 
   function handleHealthCheck() {
     healthCheckMutation.mutate(undefined, {
@@ -106,8 +115,10 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
   function handleSwapModel() {
     if (!swapModelId.trim()) return
     swapModelMutation.mutate(swapModelId.trim(), {
-      onSuccess: () => {
-        toast.success('Model swap initiated')
+      onSuccess: (updated) => {
+        // Named, and in the past tense. "Initiated" described something still in progress for a
+        // call that had already finished — and said the same thing whether it had worked or not.
+        toast.success(`${instance.name} is now running ${updated.modelId ?? swapModelId.trim()}`)
         setSwapModelId('')
         setShowSwapInput(false)
       },
@@ -297,6 +308,23 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
               Probe Capabilities
             </Button>
 
+            {!instance.isDefault && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setDefaultMutation.mutate(undefined, {
+                    onSuccess: () => toast.success(`${instance.name} is now the default`),
+                    onError: (error) => toast.error(`Could not set default: ${error.message}`),
+                  })
+                }
+                disabled={setDefaultMutation.isPending}
+              >
+                <Star className="mr-1.5 h-3.5 w-3.5" />
+                {setDefaultMutation.isPending ? 'Setting...' : 'Make Default'}
+              </Button>
+            )}
+
             {instance.supportsModelSwap && (
               <Button
                 variant="outline"
@@ -339,20 +367,48 @@ export function InstanceDetailPanel({ instance, onRemoved }: InstanceDetailPanel
           </div>
 
           {showSwapInput && (
-            <div className="flex items-center gap-2 pt-2">
-              <Input
-                placeholder="Model ID (e.g. meta-llama/Llama-3-8B)"
-                value={swapModelId}
-                onChange={(e) => setSwapModelId(e.target.value)}
-                className="flex-1"
-              />
-              <Button
-                size="sm"
-                onClick={handleSwapModel}
-                disabled={swapModelMutation.isPending || !swapModelId.trim()}
-              >
-                {swapModelMutation.isPending ? 'Swapping...' : 'Swap'}
-              </Button>
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center gap-2">
+                {instanceModels?.canList && instanceModels.models.length > 0 ? (
+                  <select
+                    value={swapModelId}
+                    onChange={(e) => setSwapModelId(e.target.value)}
+                    className="flex-1 rounded border border-border bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200"
+                  >
+                    <option value="">Choose a model...</option>
+                    {instanceModels.models.map((model) => {
+                      const embeddingOnly = instanceModels.embeddingOnly.includes(model)
+                      return (
+                        <option key={model} value={model} disabled={embeddingOnly}>
+                          {model}
+                          {embeddingOnly ? ' — embeddings only, cannot chat' : ''}
+                          {model === instance.modelId ? ' (current)' : ''}
+                        </option>
+                      )
+                    })}
+                  </select>
+                ) : (
+                  // A server that cannot enumerate its models — vLLM serves the one it was
+                  // started with — leaves nothing to choose from, so typing is the only option.
+                  <Input
+                    placeholder="Model ID"
+                    value={swapModelId}
+                    onChange={(e) => setSwapModelId(e.target.value)}
+                    className="flex-1"
+                  />
+                )}
+                <Button
+                  size="sm"
+                  onClick={handleSwapModel}
+                  disabled={swapModelMutation.isPending || !swapModelId.trim()}
+                >
+                  {swapModelMutation.isPending ? 'Swapping...' : 'Swap'}
+                </Button>
+              </div>
+
+              {instanceModels?.reason && (
+                <p className="text-xs text-zinc-500">{instanceModels.reason}</p>
+              )}
             </div>
           )}
         </div>

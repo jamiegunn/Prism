@@ -38,6 +38,14 @@ export interface InstanceModels {
   canList: boolean
   /** Why the list is empty or unavailable; null when it is neither. */
   reason: string | null
+  /**
+   * The subset of `models` that can only produce embeddings.
+   *
+   * An instance is asked to hold conversations, so choosing one of these leaves it unable to
+   * answer anything. Empty when the server does not say what its models are for, in which case
+   * every model is offered as usual — silence is not evidence.
+   */
+  embeddingOnly: string[]
 }
 
 /**
@@ -89,6 +97,23 @@ export function useSwapModel(id: string) {
         method: 'POST',
         body: { modelId },
       }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: MODELS_KEY }),
+  })
+}
+
+/**
+ * Makes an instance the default one.
+ *
+ * The default could only be chosen when registering — there was no endpoint to change it and
+ * nothing in the UI that asked. It decides which server embeddings, batch inference and the
+ * evaluation runner use, so being unable to move it meant deleting an instance and adding it
+ * again to change your mind.
+ */
+export function useSetDefaultInstance(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiClient<InferenceInstance>(`/models/instances/${id}/default`, { method: 'POST' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: MODELS_KEY }),
   })
 }
