@@ -1,7 +1,14 @@
 # ADR-009: Vector Store Abstraction for RAG
 
 **Date:** 2026-03-05
-**Status:** Accepted
+**Status:** Accepted, NOT IMPLEMENTED
+
+> This decision was recorded but never built. No `IVectorStore` implementation and no
+> DI registration exist in the solution. RAG instead stores embeddings as `Pgvector`
+> columns on its own entities (`Features/Rag/Infrastructure/RagChunkConfiguration.cs`)
+> and queries them through `AppDbContext`. Treat everything below as a proposal.
+> Reconciled 2026-08-15.
+
 **Deciders:** Project team
 
 ## Context

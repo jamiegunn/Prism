@@ -7,7 +7,12 @@
 1. **Vertical Slice Architecture** — Code is organized by feature, not by technical layer. Each feature is a self-contained slice that owns its endpoints, use cases, domain models, and data access.
 2. **Clean Architecture per Slice** — Within each feature slice, code follows Clean Architecture conventions: Domain (entities, value objects) -> Application (use cases, DTOs, validators) -> Infrastructure (data access, external services) -> Api (endpoints, request/response contracts).
 3. **Result Pattern** — All application-layer operations return `Result<T>` instead of throwing exceptions. Errors are values, not control flow.
-4. **Provider Abstraction** — Every external dependency is behind an interface: inference (`IInferenceProvider`), database (`DbContext` via EF Core), vector store (`IVectorStore`), cache (`ICacheService`), storage (`IFileStorage`), auth (`IAuthProvider`), logging (`ILogger` via Serilog). Swap any implementation without touching feature code.
+4. **Provider Abstraction** — External dependencies are behind interfaces: inference (`IInferenceProvider`), database (`DbContext` via EF Core), cache (`ICacheService`), storage (`IFileStorage`), auth (`ICurrentUser`), logging (`ILogger` via Serilog). Swap any implementation without touching feature code.
+
+   > **Not implemented.** `IVectorStore`, `IGlobalSearch` and `IExportService` appear throughout
+   > this document as though they exist. They do not: each is an interface file with no
+   > implementation and no DI registration. Vectors are pgvector columns on RAG entities
+   > queried via `AppDbContext`; search and export are per-feature handlers. See CLAUDE.md.
 5. **XML Documentation** — All public types, methods, and interfaces carry `<summary>`, `<param>`, `<returns>`, and `<example>` XML doc comments. No exceptions.
 6. **Observable by Default** — Structured logging, correlation IDs, and performance metrics on every request. You should never have to guess what happened.
 
@@ -1618,7 +1623,10 @@ EF Core IS the database abstraction. No custom `IDatabase` interface — EF Core
 2. **Single `AppDbContext`** in `Common/Database/`. Multiple DbContexts fragment the connection pool.
 3. **Features register entity configs** via `IEntityTypeConfiguration<T>` in their own `Infrastructure/` folder. Auto-discovered by assembly scanning.
 4. **Feature tables use a prefix:** `playground_sessions`, `experiments_runs`, `history_records`.
-5. **Migrations live in `Common/Database/Migrations/`** — single linear history.
+5. ~~**Migrations live in `Common/Database/Migrations/`** — single linear history.~~
+   **Superseded 2026-08-15: there are no migrations.** The entity configurations are the
+   schema; `Common/Database/SchemaBootstrapper.cs` creates it and refuses to run against a
+   database that no longer matches. The Migration Strategy table below is historical.
 
 ### AppDbContext
 
@@ -1665,7 +1673,14 @@ services.AddCommonDatabase(config);
 
 ## Vector Store Abstraction
 
-RAG vector search is behind `IVectorStore`. Default implementation uses pgvector (no extra infrastructure). See ADR-009.
+> **Status: not implemented — this section describes an intended design.** No `IVectorStore`
+> implementation exists and nothing registers one. What RAG actually does: embeddings are
+> `Pgvector` columns on `RagChunk`, configured in
+> `Features/Rag/Infrastructure/RagChunkConfiguration.cs` and queried through `AppDbContext`
+> with LINQ; BM25 lexical scoring uses one `SqlQueryRaw` call in `QueryCollectionHandler.cs`.
+> ADR-009 records the decision, not the state of the code.
+
+The intended design was: RAG vector search behind `IVectorStore`, with a pgvector default (no extra infrastructure). See ADR-009.
 
 ```csharp
 /// <summary>
@@ -2361,9 +2376,11 @@ public static IServiceCollection AddApplication(this IServiceCollection services
     services.AddCommonStorage(config);        // IFileStorage (ADR-004)
     services.AddCommonAuth(config);           // IAuthProvider + ICurrentUser (ADR-005)
     services.AddCommonInference(config);      // IInferenceProvider + decorators (ADR-006)
-    services.AddCommonVectorStore(config);    // IVectorStore (ADR-009)
-    services.AddCommonSearch();               // IGlobalSearch (tsvector)
-    services.AddCommonExport();               // IExportService
+    // NOT IMPLEMENTED - these three extension methods do not exist. Listed here as
+    // intended design only. Do not copy them into Program.cs; they will not compile.
+    //   services.AddCommonVectorStore(config); // IVectorStore (ADR-009)
+    //   services.AddCommonSearch();            // IGlobalSearch (tsvector)
+    //   services.AddCommonExport();            // IExportService
     services.AddCommonLogging(config);        // Serilog + OTel
     services.AddCommonJobs();
 

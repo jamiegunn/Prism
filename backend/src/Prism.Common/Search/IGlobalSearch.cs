@@ -3,6 +3,16 @@ using Prism.Common.Results;
 
 namespace Prism.Common.Search;
 
+// ---------------------------------------------------------------------------
+// NOT IMPLEMENTED.
+//
+// This interface has no implementation and no DI registration anywhere in the
+// solution. Injecting it throws at container resolution time. It documents an
+// intended design (ARCHITECTURE.md, Global Search) that was never built.
+//
+// Do not code against it. See CLAUDE.md, "Provider abstractions", for what the
+// codebase actually does for search (per-feature handlers; RAG chunks carry a tsvector column).
+// ---------------------------------------------------------------------------
 /// <summary>
 /// Defines the global search contract for full-text search across all entities in the application.
 /// Backed by PostgreSQL tsvector for efficient text search.

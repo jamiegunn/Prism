@@ -242,6 +242,51 @@ jobs:
           path: frontend/playwright-report/
           if-no-files-found: ignore
 
+  openapi-drift:
+    name: OpenAPI Drift Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [backend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Export the OpenAPI document
+        # --export-openapi starts the app with a null server, writes the document and exits.
+        # It binds no port and needs no database, so this runs on a bare runner. The
+        # step timeout is a backstop only: if the export ever fails to exit, this job
+        # must die in seconds rather than run to GitHub's six-hour ceiling, which is what
+        # the previous version of this check did on every push.
+        timeout-minutes: 5
+        run: |
+          dotnet run --project backend/src/Prism.Api --configuration Release \
+            -- --export-openapi "$GITHUB_WORKSPACE/frontend/openapi.json"
+
+      - name: Fail if the committed document is out of date
+        run: |
+          if git diff --quiet -- frontend/openapi.json; then
+            echo "frontend/openapi.json matches the API."
+            exit 0
+          fi
+
+          echo "::error::The API surface changed but frontend/openapi.json was not updated."
+          echo ""
+          echo "The frontend client is hand-written, so nothing else in this build notices"
+          echo "when an endpoint stops matching the TypeScript that calls it."
+          echo ""
+          echo "To fix, from the repository root:"
+          echo "  dotnet run --project backend/src/Prism.Api -- --export-openapi \"\$PWD/frontend/openapi.json\""
+          echo "then update the affected types in frontend/src/services/types/ and the call"
+          echo "sites in frontend/src/features/, and commit all of it together."
+          echo ""
+          echo "Diff:"
+          git --no-pager diff -- frontend/openapi.json
+          exit 1
+
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
@@ -253,6 +298,7 @@ jobs:
       - frontend-build
       - frontend-test
       - frontend-lint
+      - openapi-drift
       - orval-drift
       - storybook-build
       - playwright-smoke
@@ -268,22 +314,23 @@ jobs:
           echo "| Frontend Build & Typecheck | ${{ needs.frontend-build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Tests | ${{ needs.frontend-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Lint | ${{ needs.frontend-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OpenAPI Drift | ${{ needs.openapi-drift.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Orval Drift | ${{ needs.orval-drift.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Storybook Build | ${{ needs.storybook-build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Playwright Smoke | ${{ needs.playwright-smoke.result }} |" >> $GITHUB_STEP_SUMMARY
 
           # Every job gates. A job that cannot fail the build is not a check, it is decoration.
-          # openapi-drift was removed for exactly that reason: --export-openapi is not
-          # implemented, so it spent two minutes a push building the API and waiting on a server
-          # that never exits, to compare nothing. orval-drift, storybook-build and
-          # playwright-smoke can still only warn, but each says so on every run and switches
-          # itself on the moment its tooling arrives.
+          # openapi-drift is back and real: --export-openapi is implemented, frontend/openapi.json
+          # is committed, and the job fails the build when they disagree. orval-drift,
+          # storybook-build and playwright-smoke can still only warn, but each says so on every
+          # run and switches itself on the moment its tooling arrives.
           FAILED=""
           for job in "backend-build:${{ needs.backend-build.result }}" \
                      "backend-format:${{ needs.backend-format.result }}" \
                      "frontend-build:${{ needs.frontend-build.result }}" \
                      "frontend-test:${{ needs.frontend-test.result }}" \
                      "frontend-lint:${{ needs.frontend-lint.result }}" \
+                     "openapi-drift:${{ needs.openapi-drift.result }}" \
                      "orval-drift:${{ needs.orval-drift.result }}" \
                      "storybook-build:${{ needs.storybook-build.result }}" \
                      "playwright-smoke:${{ needs.playwright-smoke.result }}"; do

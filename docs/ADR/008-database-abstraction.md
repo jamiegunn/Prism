@@ -1,7 +1,12 @@
 # ADR-008: Database Abstraction via EF Core
 
 **Date:** 2026-03-05
-**Status:** Accepted
+**Status:** Accepted; migration strategy superseded 2026-08-15
+
+> The single-DbContext and provider decisions still hold. The migration sections do not:
+> this project keeps no migrations. The entity configurations are the schema, created by
+> `SchemaBootstrapper.EnsureSchemaAsync` and guarded by a recorded schema hash. Changing the
+> schema means changing the configuration and reinitialising the database.
 **Deciders:** Project team
 
 ## Context

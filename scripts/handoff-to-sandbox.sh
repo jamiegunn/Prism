@@ -5,15 +5,20 @@
 # Microsoft and NuGet host is blocked, and Ubuntu only ships .NET SDK 8 while
 # Prism targets net9.0. So the bits have to travel through the connected folder.
 #
-# Run this on your Mac from anywhere. It writes into <repo>/_handoff/.
+# BOTH Linux architectures are produced, because there are two sandboxes and they
+# do not match: the cloud container is x86_64, while the workspace VM that mounts
+# your folders is aarch64. An x64 SDK in the VM fails with "cannot execute binary
+# file", which reads like a corrupt download rather than an architecture mismatch.
+#
+# Run this on your Mac from anywhere. It writes into <repo>/toolchain/.
 # Requires: .NET 9 SDK on your Mac (which you need for local dev anyway).
 
 set -euo pipefail
 
 REPO="${1:-$HOME/dev/Prism}"
-OUT="$REPO/_handoff"
+OUT="$REPO/toolchain"
 TMPPKG="$(mktemp -d)"
-RID="linux-x64"   # the sandbox is x86_64 Linux — NOT your Mac's arch. Intentional.
+RIDS=(linux-x64 linux-arm64)   # both sandboxes; NOT your Mac's arch. Intentional.
 
 step() { printf "\n\033[1;36m==> %s\033[0m\n" "$1"; }
 fail() { printf "\n\033[1;31mFAIL: %s\033[0m\n" "$1" >&2; exit 1; }
@@ -44,12 +49,12 @@ mkdir -p "$OUT"
 # ---------------------------------------------------------------------------
 curl -sSL https://dot.net/v1/dotnet-install.sh -o "$TMPPKG/dotnet-install.sh"
 
-fetch() {  # fetch <channel> <sdk|runtime> <outfile> <label>
-  local channel="$1" kind="$2" out="$3" label="$4" url
-  local args=(--channel "$channel" --os linux --arch x64 --dry-run)
+fetch() {  # fetch <channel> <sdk|runtime> <outfile> <label> <arch>
+  local channel="$1" kind="$2" out="$3" label="$4" arch="$5" url
+  local args=(--channel "$channel" --os linux --arch "$arch" --dry-run)
   [ "$kind" = "runtime" ] && args+=(--runtime dotnet)
   url="$(bash "$TMPPKG/dotnet-install.sh" "${args[@]}" 2>/dev/null \
-        | grep -oE "https://[^ ]*dotnet-${kind}-[^ ]*linux-x64\.tar\.gz" | head -1)"
+        | grep -oE "https://[^ ]*dotnet-${kind}-[^ ]*linux-${arch}\.tar\.gz" | head -1)"
   [ -n "$url" ] || fail "Could not resolve the $label URL. Grab 'Linux x64 Binaries' from https://dotnet.microsoft.com/download/dotnet/$channel"
   if [ -f "$out" ]; then
     echo "$label already downloaded — skipping."
@@ -64,15 +69,19 @@ fetch() {  # fetch <channel> <sdk|runtime> <outfile> <label>
 # The SDK: match this machine's major version so restore behaviour is identical
 # on both sides — no version skew between what downloaded the packages and what
 # consumes them.
-step "Resolving the .NET $SDK_MAJOR.0 SDK for $RID"
-fetch "$SDK_MAJOR.0" sdk "$OUT/dotnet-sdk-linux-x64.tar.gz" ".NET $SDK_MAJOR.0 SDK (~210 MB)"
+for ARCH in x64 arm64; do
+  step "Resolving the .NET $SDK_MAJOR.0 SDK for linux-$ARCH"
+  fetch "$SDK_MAJOR.0" sdk "$OUT/dotnet-sdk-linux-$ARCH.tar.gz" ".NET $SDK_MAJOR.0 SDK linux-$ARCH (~210 MB)" "$ARCH"
+done
 
 # The runtime: SDK 10 can *build* net9.0, but running a net9.0 test assembly
 # needs the 9.0 runtime present. Skip when the SDK major already matches the TFM.
 RT_MAJOR="${TFM%%.*}"
 if [ "$SDK_MAJOR" != "$RT_MAJOR" ]; then
-  step "SDK is $SDK_MAJOR.x but the project targets net$TFM — also fetching the $TFM runtime"
-  fetch "$TFM" runtime "$OUT/dotnet-runtime-linux-x64.tar.gz" ".NET $TFM runtime (~32 MB)"
+  for ARCH in x64 arm64; do
+    step "SDK is $SDK_MAJOR.x but the project targets net$TFM — also fetching the $TFM runtime for linux-$ARCH"
+    fetch "$TFM" runtime "$OUT/dotnet-runtime-linux-$ARCH.tar.gz" ".NET $TFM runtime linux-$ARCH (~32 MB)" "$ARCH"
+  done
 else
   echo "SDK major matches the target framework — no separate runtime needed."
 fi
@@ -81,15 +90,18 @@ echo "SHA512s recorded (verify against the checksums on Microsoft's download pag
 # ---------------------------------------------------------------------------
 # 2. The NuGet package graph, restored for linux-x64
 # ---------------------------------------------------------------------------
-step "Restoring NuGet packages for $RID (this pulls Linux-specific runtime packs)"
+step "Restoring NuGet packages for ${RIDS[*]} (this pulls Linux-specific runtime packs)"
 # There is a solution file — restore it once rather than walking projects.
 TARGET="$(find "$REPO/backend" -maxdepth 1 -name '*.sln' | head -1)"
 [ -n "$TARGET" ] || TARGET="$(find "$REPO/backend/src" -name '*.csproj' | head -1)"
 [ -n "$TARGET" ] || fail "No .sln or .csproj found under $REPO/backend"
 echo "  target: $(basename "$TARGET")"
 
-dotnet restore "$TARGET" --runtime "$RID" --packages "$TMPPKG/pkgs" \
-  || fail "restore failed — fix this locally first; it is assumption A0 in the plan"
+for RID in "${RIDS[@]}"; do
+  echo "  restoring for $RID"
+  dotnet restore "$TARGET" --runtime "$RID" --packages "$TMPPKG/pkgs" \
+    || fail "restore failed for $RID — fix this locally first; it is assumption A0 in the plan"
+done
 # Again RID-agnostic, so both asset sets land in the feed.
 dotnet restore "$TARGET" --packages "$TMPPKG/pkgs" >/dev/null || true
 
@@ -127,8 +139,10 @@ split_if_big() {
   fi
 }
 split_if_big "$OUT/nuget-feed.tgz"
-split_if_big "$OUT/dotnet-sdk-linux-x64.tar.gz"
-[ -f "$OUT/dotnet-runtime-linux-x64.tar.gz" ] && split_if_big "$OUT/dotnet-runtime-linux-x64.tar.gz"
+for ARCH in x64 arm64; do
+  split_if_big "$OUT/dotnet-sdk-linux-$ARCH.tar.gz"
+  [ -f "$OUT/dotnet-runtime-linux-$ARCH.tar.gz" ] && split_if_big "$OUT/dotnet-runtime-linux-$ARCH.tar.gz"
+done
 
 TOTAL=$(du -sh "$OUT" | awk '{print $1}')
 rm -rf "$TMPPKG"
@@ -138,11 +152,11 @@ cat <<EOF
 ──────────────────────────────────────────────────────────────
 Done. $TOTAL in $OUT
 
-Tell Claude: "the handoff files are in _handoff" and it will stage
+Tell Claude: "the toolchain is in toolchain/" and it will stage
 them, extract the SDK, restore offline against the local feed, and
 run dotnet build / dotnet test in the sandbox against the native
 PostgreSQL 16 + pgvector already running there on port 5438.
 
-Note: _handoff/ should be gitignored — add it before committing.
+Note: toolchain/ is gitignored already.
 ──────────────────────────────────────────────────────────────
 EOF

@@ -2,6 +2,16 @@ using Prism.Common.Results;
 
 namespace Prism.Common.VectorStore;
 
+// ---------------------------------------------------------------------------
+// NOT IMPLEMENTED.
+//
+// This interface has no implementation and no DI registration anywhere in the
+// solution. Injecting it throws at container resolution time. It documents an
+// intended design (ADR-009 / ARCHITECTURE.md) that was never built.
+//
+// Do not code against it. See CLAUDE.md, "Provider abstractions", for what the
+// codebase actually does for vectors (pgvector columns on RAG entities, queried via AppDbContext).
+// ---------------------------------------------------------------------------
 /// <summary>
 /// Defines the vector store contract for embedding storage and similarity search.
 /// Implementations provide different backends (pgvector, Qdrant, Pinecone).

@@ -612,9 +612,16 @@ the files; setting `PRISM_HOOK_STRICT=1` turns that warning into a refusal.
 # Generate the TypeScript API client (after changing backend endpoints)
 cd frontend && npm run api:generate
 
+# Change the database schema
+#
+# There are no migrations: edit the IEntityTypeConfiguration<T> for the entity, then
+# reinitialise the database. ./dev.sh asks whether to do this on every run; answering
+# yes drops every table and reloads the seeders.
+#
+# The former migration command, kept only as a record of what used to be done:
 # Add a database migration
 cd backend
-dotnet ef migrations add MigrationName \
+# dotnet ef migrations add MigrationName \
   --project src/Prism.Common \
   --startup-project src/Prism.Api
 

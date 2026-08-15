@@ -87,7 +87,11 @@ public sealed class DatabaseFixture : IAsyncLifetime
         }
 
         await using AppDbContext context = CreateContext();
-        await context.Database.MigrateAsync();
+        // resetIfStale: the suite owns this database - GuardAgainstApplicationDatabase above
+        // refuses to run against the application's - so a schema left over from an earlier
+        // model (or from the migrations era) is rebuilt rather than reported. A test run that
+        // demands a human drop a database by hand is a test run nobody will do twice.
+        await SchemaBootstrapper.EnsureSchemaAsync(context, CancellationToken.None, resetIfStale: true);
 
         if (isExternal)
         {
@@ -101,7 +105,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     /// <param name="connectionString">The externally supplied connection string.</param>
     /// <remarks>
     /// <para>
-    /// EF's <c>MigrateAsync</c> creates the schema but not the database, so pointing
+    /// <c>EnsureCreated</c> creates the schema but not the database, so pointing
     /// <c>PRISM_TEST_DB</c> at a server that has never seen this project fails with
     /// <c>3D000: database "prism_test" does not exist</c> — a message that reads like a
     /// misconfiguration rather than a one-line fix.

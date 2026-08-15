@@ -919,6 +919,42 @@ if ! $FRONTEND_ONLY && [ -z "${NO_DOCKER:-}" ]; then
     sleep 1
   done
   $ready || warn " Postgres did not report ready. Check:  docker compose logs postgres"
+
+  # ── Initialise the database ─────────────────────────────────────────
+  #
+  # This project has no migrations: the EF entity configurations are the schema, and
+  # the API creates it with EnsureCreated on first start. EnsureCreated does nothing
+  # when tables already exist, so after a schema change the API refuses to start and
+  # says the database is stale (see SchemaBootstrapper). This is the way out.
+  #
+  # Deliberately asked every run and never remembered, unlike every other question
+  # here. The answer destroys data, and a remembered "yes" would quietly wipe the
+  # database on every launch from then on. Default is no; --yes keeps the data.
+  if $ready && interactive; then
+    if _prism_db_has_tables; then
+      echo ""
+      echo -e "${CYAN}Initialise the database?${NC}"
+      echo "   Drops every table and reloads the seed data. Do this after changing an"
+      echo "   entity configuration, or when the API says the schema is stale."
+      echo -e "   All data is reproducible from the seeders. ${GREEN}[default: no]${NC}"
+      printf '   y/N > '
+      read -r db_init_answer || db_init_answer=""
+
+      case "$db_init_answer" in
+        [yY]|[yY][eE][sS])
+          echo -n "   Dropping the schema..."
+          if _prism_db_reset; then
+            ok " Done. The API will recreate it and run the seeders on start."
+          else
+            warn " Could not drop the schema. Check:  docker compose logs postgres"
+          fi
+          ;;
+        *)
+          echo "   Keeping the existing data."
+          ;;
+      esac
+    fi
+  fi
 fi
 
 # ── 1b. Inference provider ───────────────────────────────────────────
@@ -1149,9 +1185,9 @@ if ! $FRONTEND_ONLY && ! $USE_CONTAINERS; then
   fi
 
   # --no-launch-profile keeps launchSettings.json from overriding the URL, but it also
-  # drops ASPNETCORE_ENVIRONMENT to Production. Migrations, seeding, Swagger and the DI
-  # scope validation are all gated on Development, so without this the API starts, applies
-  # no migrations, and the first request fails with 'relation "jobs" does not exist'.
+  # drops ASPNETCORE_ENVIRONMENT to Production. Schema creation, seeding, Swagger and the DI
+  # scope validation are all gated on Development, so without this the API starts, creates
+  # no schema, and the first request fails with 'relation "jobs" does not exist'.
   export ASPNETCORE_ENVIRONMENT="${ASPNETCORE_ENVIRONMENT:-Development}"
 
   dotnet run --project "$ROOT/backend/src/Prism.Api" --no-launch-profile --urls "$PRISM_API_URL" \

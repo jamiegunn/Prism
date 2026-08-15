@@ -557,3 +557,34 @@ prism_env_explain() {
     esac
   done
 }
+
+# ── Database initialisation helpers ───────────────────────────────────
+#
+# This project keeps no migrations. The entity configurations are the schema and the
+# API builds it with EnsureCreated, which is a no-op once tables exist — so changing
+# an entity means dropping the schema and letting the API rebuild and reseed it.
+#
+# `DROP SCHEMA public CASCADE` is used rather than `DROP DATABASE` because it works
+# while connected to the database it is clearing. Dropping the database itself needs
+# every other session disconnected first, which on a dev box means racing whatever
+# still holds a pooled connection.
+
+# _prism_db_psql <sql> — run SQL in the Postgres container as the app user.
+_prism_db_psql() {
+  docker exec -i prism-postgres psql -U postgres -d prism -v ON_ERROR_STOP=1 -tAc "$1" 2>/dev/null
+}
+
+# _prism_db_has_tables — true when the public schema contains at least one table.
+# A brand-new database has nothing to lose, so the prompt is skipped entirely.
+_prism_db_has_tables() {
+  local count
+  count=$(_prism_db_psql "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'") || return 1
+  [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null
+}
+
+# _prism_db_reset — drop every object in the public schema and restore the extension.
+# pgvector is recreated here because the schema drop takes it with it, and the API's
+# schema creation expects to find it available.
+_prism_db_reset() {
+  _prism_db_psql "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+}

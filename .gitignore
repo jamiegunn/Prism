@@ -35,8 +35,9 @@ desktop.ini
 # Generated
 frontend/src/services/generated/
 
-# Local scratch: offline toolchain transfer, and files staged for deletion.
-# Both get large and neither belongs in history.
+# Vendored offline toolchain (built by scripts/handoff-to-sandbox.sh), and files staged
+# for deletion. Both get large and neither belongs in history.
+toolchain/
 _handoff/
 _to_delete/
 

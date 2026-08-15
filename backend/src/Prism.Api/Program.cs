@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using Npgsql;
 using OpenTelemetry.Trace;
+using Prism.Api;
 using Prism.Api.Extensions;
 using Prism.Api.Middleware;
 using Prism.Common.Database;
@@ -13,9 +14,15 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateBootstrapLogger();
 
+// `--export-openapi <path>` writes the OpenAPI document and exits. It is read before the
+// host is built so that the database and seeding work below can be skipped: CI runs this on
+// a runner with no PostgreSQL, and an export that needed one would not be runnable there.
+string? openApiExportPath = OpenApiExport.TryGetExportPath(args);
+
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
 
     builder.Host.UseSerilog((context, config) => config
         .ReadFrom.Configuration(context.Configuration)
@@ -74,6 +81,13 @@ try
         });
     });
 
+    if (openApiExportPath is not null)
+    {
+        // After every feature has registered, so that the background workers they add are
+        // removed too. See OpenApiExport.PrepareForExport.
+        OpenApiExport.PrepareForExport(builder.Services);
+    }
+
     var app = builder.Build();
 
     // Middleware pipeline — order matters
@@ -82,7 +96,7 @@ try
     app.UseMiddleware<RequestLoggingMiddleware>();
     app.UseCors();
 
-    if (app.Environment.IsDevelopment())
+    if (app.Environment.IsDevelopment() && openApiExportPath is null)
     {
         app.UseSwagger();
         app.UseSwaggerUI();
@@ -91,8 +105,7 @@ try
         {
             using var scope = app.Services.CreateScope();
             AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await db.Database.MigrateAsync();
-            Log.Information("Database migration completed successfully");
+            await SchemaBootstrapper.EnsureSchemaAsync(db, CancellationToken.None);
 
             SeedDataRunner seeder = app.Services.GetRequiredService<SeedDataRunner>();
             await seeder.SeedAsync(CancellationToken.None);
@@ -106,9 +119,9 @@ try
         }
         catch (Exception ex)
         {
-            // Anything else means the schema itself is wrong - a pending model change, a failed
-            // migration, a seeding bug. Serving traffic against a schema that does not match the
-            // model corrupts data silently, so this is fatal rather than a warning.
+            // Anything else means the schema itself is wrong - a stale database, a bad entity
+            // configuration, a seeding bug. Serving traffic against a schema that does not match
+            // the model corrupts data silently, so this is fatal rather than a warning.
             Log.Fatal(ex, "Database schema is invalid. Refusing to start. This is NOT a connectivity problem");
             throw;
         }
@@ -116,6 +129,13 @@ try
 
     app.MapHealthChecks("/health");
     app.MapFeatureEndpoints();
+
+    if (openApiExportPath is not null)
+    {
+        int pathCount = await OpenApiExport.WriteAsync(app, openApiExportPath, CancellationToken.None);
+        Log.Information("Wrote {PathCount} paths to {ExportPath}", pathCount, openApiExportPath);
+        return;
+    }
 
     Log.Information("Starting Prism API");
     await app.RunAsync();

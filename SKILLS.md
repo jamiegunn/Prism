@@ -118,9 +118,10 @@ public static class {FeatureName}Module
    - `Program.cs` → `services.Add{FeatureName}Feature();`
    - `WebApplicationExtensions.cs` → `app.Map{FeatureName}Endpoints();`
 
-9. **Generate migration:**
+9. **Reinitialise the database** (there are no migrations — the entity configurations are
+   the schema; `./dev.sh` offers to drop and reseed). The former command, for the record:
    ```bash
-   dotnet ef migrations add Add{FeatureName}Tables --project src/Prism.Common --startup-project src/Prism.Api
+   # dotnet ef migrations add Add{FeatureName}Tables --project src/Prism.Common --startup-project src/Prism.Api   # superseded: no migrations
    ```
 
 10. **Regenerate frontend API client:**
@@ -169,11 +170,13 @@ public static class {FeatureName}Module
 1. **Create entity** in `Features/{Feature}/Domain/{Entity}.cs` — extend `BaseEntity`
 2. **Create EF configuration** in `Features/{Feature}/Infrastructure/{Entity}Configuration.cs`
    - Table name: `{feature}_{entities}` (feature prefix, snake_case, plural)
-3. **Generate migration:**
+3. **Reinitialise the database** — no migration is generated; the model is the schema.
+   The former command, for the record:
    ```bash
-   dotnet ef migrations add Add{Entity}To{Feature} --project src/Prism.Common --startup-project src/Prism.Api
+   # dotnet ef migrations add Add{Entity}To{Feature} --project src/Prism.Common --startup-project src/Prism.Api   # superseded: no migrations
    ```
-4. **Review the generated migration** for data loss, missing indexes, correct nullability
+4. **Review the entity configuration** for missing indexes and correct nullability. There is
+   no generated migration to review, and no data to lose — the seeders rebuild everything.
 5. **Create DTO** in `Application/Dtos/{Entity}Dto.cs` if entity is exposed via API
 
 ---
@@ -197,7 +200,14 @@ public static class {FeatureName}Module
 
 ---
 
-## Skill: Create a Database Migration
+## Skill: Change the Database Schema
+
+> **Superseded 2026-08-15: this project has no migrations.** The entity configurations are
+> the schema. `SchemaBootstrapper.EnsureSchemaAsync` creates it from the model on start and
+> refuses to run against a database that no longer matches. To change the schema, change the
+> `IEntityTypeConfiguration<T>` and reinitialise the database (`./dev.sh` offers to). The
+> commands below are kept only as a record of what used to be done.
+
 
 **When:** Schema changes (new tables, columns, indexes).
 
@@ -206,7 +216,7 @@ public static class {FeatureName}Module
 1. **Make entity/configuration changes** first
 2. **Generate migration:**
    ```bash
-   dotnet ef migrations add {DescriptiveName} --project src/Prism.Common --startup-project src/Prism.Api
+   # dotnet ef migrations add {DescriptiveName} --project src/Prism.Common --startup-project src/Prism.Api   # superseded: no migrations
    ```
 3. **Review the generated migration** — check for data loss, verify UP and DOWN
 4. **Test:** migration applies cleanly on empty DB and existing DB
