@@ -175,7 +175,13 @@
       "Bash(awk '{print \"  .git dir:\", $1}')",
       "Bash(awk '{print \" \", $5, $9}')",
       "Bash(./scripts/tests/models_test.sh)",
-      "Bash(echo \"dev.sh exit=$?\")"
+      "Bash(echo \"dev.sh exit=$?\")",
+      "Bash(echo \"exit=$? \\(nonzero means not found\\)\")",
+      "Bash(npx storybook *)",
+      "Bash(timeout 25 dotnet run --project src/Prism.Api -- --export-openapi)",
+      "Bash(pkill -f \"Prism.Api\")",
+      "Bash(pip install *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
